@@ -137,7 +137,7 @@ When the engine leaves cues out, or when drawing them fails, it warns once with
 Multiplatform shares no test code between modules, so change every copy in the same commit. Each
 renderer and view runs the contract through a subclass of its own:
 
-- the AWT renderer, in `kiteplayer-output` `jvmTest`
+- the AWT renderer, in the JVM tests of `kiteplayer-output` (`test@jvm`)
 - the web canvas renderer, through a canvas that records each draw, in `kiteplayer-output`
   `wasmJsTest`, in Node and in a browser
 - the Core Graphics renderer and the placement function of the Metal renderer, in

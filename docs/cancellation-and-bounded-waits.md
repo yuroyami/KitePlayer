@@ -194,9 +194,9 @@ only while it waits. `NetworkRecovery.status` takes the place of that, for a tes
 with its own. The network module gives one for each platform:
 
 - Android: a `ConnectivityManager` callback on the default network. The module keeps the
-  application context through a provider in its manifest, as `kiteplayer-io` does (#457), and its
-  manifest adds the `ACCESS_NETWORK_STATE` permission, which Android grants at install. An app that
-  removes either gets the timer alone.
+  application context through a provider, as `kiteplayer-io` does (#457). The app declares that
+  provider and the `ACCESS_NETWORK_STATE` permission, which Android grants at install. An app
+  without either gets the timer alone.
 - JVM: a look at the network interfaces every 2 seconds while the player waits. A network is an
   interface that is up, is not the loopback, and has an address.
 - Web: the `online` and `offline` events of the page or the worker.

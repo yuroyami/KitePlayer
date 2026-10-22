@@ -1,0 +1,151 @@
+# The standard runtime: the engine plus the default FFmpeg playback, the output, the native views,
+# libass and, where the platform has one, the HTTP and HTTPS transport.
+product:
+  type: kmp/lib
+  platforms: [ jvm, android, iosArm64, iosSimulatorArm64, macosArm64, linuxX64, linuxArm64, mingwX64, js, wasmJs ]
+
+aliases:
+  - jvmAndAndroid: [ jvm, android ]
+  # Every platform with a network transport. Linux and Windows have none yet.
+  - network: [ android, iosArm64, iosSimulatorArm64, macosArm64, jvm, js, wasmJs ]
+
+apply:
+  - //kiteplayer.module-template.yaml
+  - //android.module-template.yaml
+  - //library.module-template.yaml
+
+dependencies:
+  - //kiteplayer-core: exported
+  - //kiteplayer-libass: exported
+  - //kiteplayer-io: exported
+
+dependencies@network:
+  - //kiteplayer-network: exported
+
+dependencies@android:
+  - //kiteplayer-ffmpeg: exported
+  - //kiteplayer-output: exported
+  - //kiteplayer-view-bindings: exported
+
+dependencies@native:
+  - //kiteplayer-ffmpeg: exported
+  - //kiteplayer-output: exported
+
+dependencies@apple:
+  - //kiteplayer-view: exported
+
+dependencies@ios:
+  - //kiteplayer-view-bindings: exported
+
+dependencies@jvm:
+  - //kiteplayer-ffmpeg: exported
+  - //kiteplayer-output: exported
+  - //kiteplayer-view-bindings: exported
+
+dependencies@wasmJs:
+  - //kiteplayer-adaptive
+  - //kiteplayer-ffmpeg: exported
+  - //kiteplayer-output: exported
+  - //kiteplayer-view: exported
+
+settings:
+  kotlin:
+    freeCompilerArgs: [ -Xexpect-actual-classes ]
+  android:
+    namespace: io.github.yuroyami.kiteplayer.runtime
+  publishing:
+    pom:
+      name: kiteplayer
+      description: >-
+        KitePlayer: a Kotlin Multiplatform media player with a common Kotlin engine, default FFmpeg playback
+        and HTTP/HTTPS transport, native views, and optional Compose presentation.
+
+plugins:
+  publication-check:
+    enabled: true
+  abi-check:
+    enabled: true
+    androidDumpDir: api/android
+    klibPlatforms: [ iosArm64, iosSimulatorArm64, js, linuxArm64, linuxX64, macosArm64, mingwX64, wasmJs ]
+  dokka:
+    enabled: true
+    moduleName: kiteplayer
+
+
+# The JVM tests run in the module folder. They read the clips of scripts/testmedia.sh from here.
+test-settings@jvm:
+  # JUnit 4: some suites use org.junit.Assume and JUnit 4 rules.
+  junit: junit-4
+  jvm:
+    test:
+      extraEnvironment:
+        KITEPLAYER_TESTMEDIA: ../testmedia
+
+# Gradle named the klib "io.github.yuroyami:kiteplayer". Keep that name, or libraries built against earlier
+# releases fail to link on Kotlin/Native. Set it per platform: on @native, it also renames the
+# klibs of shared native code, which must keep their own names.
+settings@iosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer, -Xshort-module-name=kiteplayer ]
+
+settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer, -Xshort-module-name=kiteplayer ]
+
+settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer, -Xshort-module-name=kiteplayer ]
+
+settings@linuxX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer, -Xshort-module-name=kiteplayer ]
+
+settings@linuxArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer, -Xshort-module-name=kiteplayer ]
+
+settings@mingwX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer, -Xshort-module-name=kiteplayer ]
+
+settings@js:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer ]
+
+settings@wasmJs:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer ]
+
+# Tests compile into their own klib, which needs a different name. The test blocks name the
+# same platforms as the blocks above, so the toolchain applies them last.
+test-settings@iosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer_test, -Xshort-module-name=kiteplayer_test ]
+
+test-settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer_test, -Xshort-module-name=kiteplayer_test ]
+
+test-settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer_test, -Xshort-module-name=kiteplayer_test ]
+
+test-settings@linuxX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer_test, -Xshort-module-name=kiteplayer_test ]
+
+test-settings@linuxArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer_test, -Xshort-module-name=kiteplayer_test ]
+
+test-settings@mingwX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer_test, -Xshort-module-name=kiteplayer_test ]
+
+test-settings@js:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=kiteplayer_test ]
+
+test-settings@wasmJs:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=kiteplayer_test ]

@@ -70,7 +70,7 @@ kprt_ring *kprt_ring_create(int32_t sample_rate, int32_t channels, int32_t capac
      * and the first ordinary fill writes past the allocation. The PRODUCT bound below is the
      * memory safety; the three _Static_asserts after it prove the arithmetic at every target's
      * own pointer width at compile time, in the build itself. A new target's pointer width must
-     * be checked against this guard; CompileKiteRtTask.specFor's comment says so. */
+     * be checked against this guard; CompileKiteRt.specFor's comment says so. */
     if (capacity_frames > (1 << 27) || channels > 64)
         return NULL;
 

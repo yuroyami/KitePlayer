@@ -1,0 +1,34 @@
+# The Android sample. It compares the three Android video paths: an XML-inflated native view, that
+# view hosted by Compose, and true Compose video. It opens on the shared visualiser screen.
+# Not published.
+product: android/app
+
+apply:
+  - //kiteplayer.module-template.yaml
+  - //android.module-template.yaml
+  - //compose.module-template.yaml
+
+dependencies:
+  - //kiteplayer-compose
+  - //kiteplayer-compose-interop
+  - //kiteplayer-compose-video
+  - //kiteplayer-sample-shared
+  - $compose.runtime
+  - $compose.ui
+  - $compose.foundation
+  - $libs.androidx.activity.compose
+  - $libs.kotlinx.coroutines.android
+
+settings:
+  android:
+    namespace: io.github.yuroyami.kiteplayer.sample.android
+    applicationId: io.github.yuroyami.kiteplayer.sample.android
+    targetSdk: 37
+    versionCode: 1
+    versionName: 0.0.1
+    abiFilters: [ arm64-v8a, armeabi-v7a, x86_64 ]
+
+plugins:
+  # Copies the test clip and the sample songs into assets/.
+  sample-media:
+    enabled: true

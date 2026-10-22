@@ -528,7 +528,7 @@ slow fade halfway, which is worse than the flash it was built to prevent.
 the finishing pass on, and counts the flashes in the composed frames. The fixture is 200 beats a
 minute with hits on the half beat, plus the ordinary drum loop, and each drawing is rendered again
 with reduced motion on, which must bring it inside the policy and add at most one flash. It renders
-for minutes, so it runs in `./gradlew :kiteplayer-audioviz:audiovizSurvey` and not in `jvmTest`.
+for minutes, so it runs in `./scripts/audioviz-tests.sh survey` and not in the gate's JVM tests.
 `FlashGuardTest` fixes the runtime guard's own counter against known pass and fail signals.
 
 It counts by area, the way a flash analyser does. Each frame is compared with the picture 0.3

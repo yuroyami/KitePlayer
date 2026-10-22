@@ -1,0 +1,13 @@
+product: jvm/amper-plugin
+
+description: Links the Android JNI library of kiteplayer-libass for each ABI, as lib/<abi>/ resources of a plain jar.
+
+dependencies:
+  - //build-plugins/build-support
+
+settings:
+  kotlin:
+    version: 2.4.21
+  jvm:
+    jdk:
+      version: 21

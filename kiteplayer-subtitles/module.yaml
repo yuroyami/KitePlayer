@@ -1,0 +1,215 @@
+# Subtitle parsers in pure Kotlin: SubRip, WebVTT and the ASS dialogue tier. Cue timing, layout and
+# rasterisation live in the engine and in kiteplayer-output.
+product:
+  type: kmp/lib
+  platforms:
+    - jvm
+    - android
+    - iosArm64
+    - iosSimulatorArm64
+    - iosX64
+    - macosArm64
+    - tvosArm64
+    - tvosSimulatorArm64
+    - watchosArm32
+    - watchosArm64
+    - watchosDeviceArm64
+    - watchosSimulatorArm64
+    - androidNativeArm32
+    - androidNativeArm64
+    - androidNativeX64
+    - androidNativeX86
+    - linuxX64
+    - linuxArm64
+    - mingwX64
+    - js
+    - wasmJs
+
+apply:
+  - //kiteplayer.module-template.yaml
+  - //android.module-template.yaml
+  - //library.module-template.yaml
+
+dependencies:
+  - //kiteplayer-core: exported
+
+settings:
+  kotlin:
+    optIns: [ io.github.yuroyami.kiteplayer.KitePlayerInternalApi ]
+  android:
+    namespace: io.github.yuroyami.kiteplayer.subtitles
+  publishing:
+    pom:
+      name: kiteplayer-subtitles
+      description: SubRip, WebVTT and ASS dialogue parsers for KitePlayer, in Kotlin.
+      licenses:
+        - name: BSD 3-Clause License (bundled WHATWG encoding tables)
+          url: https://encoding.spec.whatwg.org/
+
+plugins:
+  publication-check:
+    enabled: true
+  abi-check:
+    enabled: true
+    androidDumpDir: api/android
+    klibPlatforms: [ androidNativeArm32, androidNativeArm64, androidNativeX64, androidNativeX86, iosArm64, iosSimulatorArm64, iosX64, js, linuxArm64, linuxX64, macosArm64, mingwX64, tvosArm64, tvosSimulatorArm64, wasmJs, watchosArm32, watchosArm64, watchosDeviceArm64, watchosSimulatorArm64 ]
+  dokka:
+    enabled: true
+    moduleName: kiteplayer-subtitles
+
+# Gradle named the klib "io.github.yuroyami:kiteplayer-subtitles". Keep that name, or libraries built against earlier
+# releases fail to link on Kotlin/Native. Set it per platform: on @native, it also renames the
+# klibs of shared native code, which must keep their own names.
+settings@iosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-subtitles, -Xshort-module-name=kiteplayer-subtitles ]
+
+settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-subtitles, -Xshort-module-name=kiteplayer-subtitles ]
+
+settings@iosX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-subtitles, -Xshort-module-name=kiteplayer-subtitles ]
+
+settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-subtitles, -Xshort-module-name=kiteplayer-subtitles ]
+
+settings@tvosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-subtitles, -Xshort-module-name=kiteplayer-subtitles ]
+
+settings@tvosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-subtitles, -Xshort-module-name=kiteplayer-subtitles ]
+
+settings@watchosArm32:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-subtitles, -Xshort-module-name=kiteplayer-subtitles ]
+
+settings@watchosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-subtitles, -Xshort-module-name=kiteplayer-subtitles ]
+
+settings@watchosDeviceArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-subtitles, -Xshort-module-name=kiteplayer-subtitles ]
+
+settings@watchosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-subtitles, -Xshort-module-name=kiteplayer-subtitles ]
+
+settings@androidNativeArm32:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-subtitles, -Xshort-module-name=kiteplayer-subtitles ]
+
+settings@androidNativeArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-subtitles, -Xshort-module-name=kiteplayer-subtitles ]
+
+settings@androidNativeX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-subtitles, -Xshort-module-name=kiteplayer-subtitles ]
+
+settings@androidNativeX86:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-subtitles, -Xshort-module-name=kiteplayer-subtitles ]
+
+settings@linuxX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-subtitles, -Xshort-module-name=kiteplayer-subtitles ]
+
+settings@linuxArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-subtitles, -Xshort-module-name=kiteplayer-subtitles ]
+
+settings@mingwX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-subtitles, -Xshort-module-name=kiteplayer-subtitles ]
+
+settings@js:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-subtitles ]
+
+settings@wasmJs:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-subtitles ]
+
+# Tests compile into their own klib, which needs a different name. The test blocks name the
+# same platforms as the blocks above, so the toolchain applies them last.
+test-settings@iosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-subtitles_test, -Xshort-module-name=kiteplayer-subtitles_test ]
+
+test-settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-subtitles_test, -Xshort-module-name=kiteplayer-subtitles_test ]
+
+test-settings@iosX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-subtitles_test, -Xshort-module-name=kiteplayer-subtitles_test ]
+
+test-settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-subtitles_test, -Xshort-module-name=kiteplayer-subtitles_test ]
+
+test-settings@tvosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-subtitles_test, -Xshort-module-name=kiteplayer-subtitles_test ]
+
+test-settings@tvosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-subtitles_test, -Xshort-module-name=kiteplayer-subtitles_test ]
+
+test-settings@watchosArm32:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-subtitles_test, -Xshort-module-name=kiteplayer-subtitles_test ]
+
+test-settings@watchosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-subtitles_test, -Xshort-module-name=kiteplayer-subtitles_test ]
+
+test-settings@watchosDeviceArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-subtitles_test, -Xshort-module-name=kiteplayer-subtitles_test ]
+
+test-settings@watchosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-subtitles_test, -Xshort-module-name=kiteplayer-subtitles_test ]
+
+test-settings@androidNativeArm32:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-subtitles_test, -Xshort-module-name=kiteplayer-subtitles_test ]
+
+test-settings@androidNativeArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-subtitles_test, -Xshort-module-name=kiteplayer-subtitles_test ]
+
+test-settings@androidNativeX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-subtitles_test, -Xshort-module-name=kiteplayer-subtitles_test ]
+
+test-settings@androidNativeX86:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-subtitles_test, -Xshort-module-name=kiteplayer-subtitles_test ]
+
+test-settings@linuxX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-subtitles_test, -Xshort-module-name=kiteplayer-subtitles_test ]
+
+test-settings@linuxArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-subtitles_test, -Xshort-module-name=kiteplayer-subtitles_test ]
+
+test-settings@mingwX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-subtitles_test, -Xshort-module-name=kiteplayer-subtitles_test ]
+
+test-settings@js:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=kiteplayer-subtitles_test ]
+
+test-settings@wasmJs:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=kiteplayer-subtitles_test ]

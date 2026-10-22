@@ -1,0 +1,55 @@
+# The Android JNI library of kiteplayer-libass, as lib/<abi>/libkiteplayer_libass_jni.so in a plain
+# jar. AGP unpacks lib/<abi>/ of a jar dependency into the APK's native libraries, which a library
+# AAR built by the Kotlin Toolchain cannot carry itself. kiteplayer-libass depends on it for Android
+# only, so apps never add it themselves. The jar also carries libass's R8 keep rules in
+# META-INF/proguard/, which AGP reads from jar dependencies.
+product: jvm/lib
+
+apply:
+  - //kiteplayer.module-template.yaml
+
+# `./kotlin publish mavenLocal -m kiteplayer-libass-android-natives` puts a build into ~/.m2.
+repositories:
+  - url: mavenLocal
+    publish: true
+    resolve: false
+
+settings:
+  publishing:
+    enabled: true
+    group: io.github.yuroyami
+    version: 0.3.0
+    pom:
+      name: kiteplayer-libass-android-natives
+      description: The Android JNI library of kiteplayer-libass. It comes with kiteplayer-libass on Android; never add it yourself.
+      url: https://github.com/yuroyami/KitePlayer
+      licenses:
+        - name: Apache License 2.0
+          url: https://www.apache.org/licenses/LICENSE-2.0.txt
+        - name: ISC License (bundled libass)
+          url: https://github.com/libass/libass/blob/master/COPYING
+        - name: MIT License (bundled HarfBuzz)
+          url: https://github.com/harfbuzz/harfbuzz/blob/main/COPYING
+        - name: The FreeType License (bundled FreeType)
+          url: https://gitlab.freedesktop.org/freetype/freetype/-/blob/master/docs/FTL.TXT
+        - name: GNU Lesser General Public License, Version 2.1 or later (bundled FriBidi)
+          url: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt
+      developers:
+        - id: yuroyami
+          name: yuroyami
+          url: https://github.com/yuroyami
+      scm:
+        url: https://github.com/yuroyami/KitePlayer
+        connection: scm:git:https://github.com/yuroyami/KitePlayer.git
+        developerConnection: scm:git:ssh://git@github.com/yuroyami/KitePlayer.git
+    signArtifacts: true
+    publishSources: true
+    # The same release mode as library.module-template.yaml.
+    mavenCentral:
+      enabled: true
+      publishingMode: manual
+
+plugins:
+  publication-check:
+    enabled: true
+  libass-android-natives: enabled

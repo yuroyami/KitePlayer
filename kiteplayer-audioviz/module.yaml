@@ -1,0 +1,90 @@
+# The optional audio visualiser for media with no picture: independent drawings in one catalogue,
+# palettes, and a director that changes drawings with the music.
+product:
+  type: kmp/lib
+  platforms: [ jvm, android, iosArm64, iosSimulatorArm64 ]
+
+aliases:
+  # Platforms where Compose draws with Skiko.
+  - skiko: [ jvm, iosArm64, iosSimulatorArm64 ]
+
+apply:
+  - //kiteplayer.module-template.yaml
+  - //android.module-template.yaml
+  - //library.module-template.yaml
+  - //compose.module-template.yaml
+
+dependencies:
+  - //kiteplayer-core: exported
+  - $compose.runtime: exported
+  - $compose.ui: exported
+  - $compose.foundation
+  - $libs.kite3d
+
+test-dependencies@jvm:
+  - $compose.desktop.currentOs
+  - //kiteplayer
+
+settings:
+  kotlin:
+    optIns: [ io.github.yuroyami.kiteplayer.audioviz.AudioVizAuthoringApi ]
+    freeCompilerArgs: [ -Xexpect-actual-classes ]
+  android:
+    namespace: io.github.yuroyami.kiteplayer.audioviz
+  publishing:
+    pom:
+      name: kiteplayer-audioviz
+      description: >-
+        An audio visualiser for KitePlayer: independent drawings in one catalogue, palettes, and a director
+        that changes drawings with the music.
+      licenses:
+        - name: MIT License (ported drawings and shader code; see NOTICE)
+          url: https://opensource.org/license/mit
+        - name: ISC License (the Lines drawing)
+          url: https://opensource.org/license/isc-license-txt
+
+plugins:
+  publication-check:
+    enabled: true
+  abi-check:
+    enabled: true
+    androidDumpDir: api/android
+    klibPlatforms: [ iosArm64, iosSimulatorArm64 ]
+  dokka:
+    enabled: true
+    moduleName: kiteplayer-audioviz
+
+
+# The JVM tests run in the module folder. They read the clips of scripts/testmedia.sh from here.
+test-settings@android:
+  # JUnit 4: some suites use org.junit.Assume and JUnit 4 rules.
+  junit: junit-4
+
+test-settings@jvm:
+  # JUnit 4: some suites use org.junit.Assume and JUnit 4 rules.
+  junit: junit-4
+  jvm:
+    test:
+      extraEnvironment:
+        KITEPLAYER_TESTMEDIA: ../testmedia
+
+# Gradle named the klib "io.github.yuroyami:kiteplayer-audioviz". Keep that name, or libraries built against earlier
+# releases fail to link on Kotlin/Native. Set it per platform: on @native, it also renames the
+# klibs of shared native code, which must keep their own names.
+settings@iosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-audioviz, -Xshort-module-name=kiteplayer-audioviz ]
+
+settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-audioviz, -Xshort-module-name=kiteplayer-audioviz ]
+
+# Tests compile into their own klib, which needs a different name. The test blocks name the
+# same platforms as the blocks above, so the toolchain applies them last.
+test-settings@iosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-audioviz_test, -Xshort-module-name=kiteplayer-audioviz_test ]
+
+test-settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-audioviz_test, -Xshort-module-name=kiteplayer-audioviz_test ]

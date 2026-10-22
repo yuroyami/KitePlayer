@@ -76,7 +76,7 @@ echo
 
 consumer_gradle() {
     # No daemon and an in-process compiler, so nothing keeps running on the temporary Gradle home.
-    "$ROOT/gradlew" -p "$CONSUMER" --no-daemon --console=plain \
+    "$ROOT/verification/gradlew" -p "$CONSUMER" --no-daemon --console=plain \
         -Pkotlin.compiler.execution.strategy=in-process \
         -PinstallLines="$(echo $coordinates)" "$@"
 }

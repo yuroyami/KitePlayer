@@ -1,0 +1,136 @@
+# The media source and the decoders over KiteFFmpeg, with snapshots, thumbnails and waveforms.
+product:
+  type: kmp/lib
+  platforms:
+    - jvm
+    - android
+    - macosArm64
+    - iosArm64
+    - iosSimulatorArm64
+    - linuxX64
+    - linuxArm64
+    - mingwX64
+    - wasmJs
+
+aliases:
+  # Code that runs over the FFmpeg C API in-process: every platform but the web one.
+  - jvmAndNative: [ jvm, android, macosArm64, iosArm64, iosSimulatorArm64, linuxX64, linuxArm64, mingwX64 ]
+  - jvmAndAndroid: [ jvm, android ]
+  - posix: [ macosArm64, iosArm64, iosSimulatorArm64, linuxX64, linuxArm64 ]
+  # The tests that drive the real FFmpeg backend: the JVM and every native platform.
+  - realBackend: [ jvm, macosArm64, iosArm64, iosSimulatorArm64, linuxX64, linuxArm64, mingwX64 ]
+
+apply:
+  - //kiteplayer.module-template.yaml
+  - //android.module-template.yaml
+  - //library.module-template.yaml
+
+dependencies:
+  - //kiteplayer-core: exported
+  - //kiteplayer-subtitles
+  - $libs.kiteffmpeg: exported
+  - $libs.kotlinx.atomicfu
+
+test-dependencies:
+  - $libs.kotlinx.coroutines.test
+
+test-dependencies@apple:
+  - //kiteplayer-output
+
+settings:
+  kotlin:
+    optIns: [ io.github.yuroyami.kiteplayer.KitePlayerInternalApi ]
+    freeCompilerArgs: [ -Xexpect-actual-classes ]
+  android:
+    namespace: io.github.yuroyami.kiteplayer.ffmpeg
+  publishing:
+    pom:
+      name: kiteplayer-ffmpeg
+      description: KitePlayer's media source and decoders over KiteFFmpeg, with snapshots, thumbnails and waveforms.
+
+plugins:
+  publication-check:
+    enabled: true
+  abi-check:
+    enabled: true
+    androidDumpDir: api/android
+    klibPlatforms: [ iosArm64, iosSimulatorArm64, linuxArm64, linuxX64, macosArm64, mingwX64, wasmJs ]
+  dokka:
+    enabled: true
+    moduleName: kiteplayer-ffmpeg
+  # The browser format matrix loads the codec module. scripts/web-tests serves it beside the clips.
+  web-assets:
+    enabled: true
+    tests:
+      codec: true
+
+
+# The JVM tests run in the module folder. They read the clips of scripts/testmedia.sh from here.
+test-settings@jvm:
+  # JUnit 4: some suites use org.junit.Assume and JUnit 4 rules.
+  junit: junit-4
+  jvm:
+    test:
+      extraEnvironment:
+        KITEPLAYER_TESTMEDIA: ../testmedia
+
+# Gradle named the klib "io.github.yuroyami:kiteplayer-ffmpeg". Keep that name, or libraries built against earlier
+# releases fail to link on Kotlin/Native. Set it per platform: on @native, it also renames the
+# klibs of shared native code, which must keep their own names.
+settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-ffmpeg, -Xshort-module-name=kiteplayer-ffmpeg ]
+
+settings@iosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-ffmpeg, -Xshort-module-name=kiteplayer-ffmpeg ]
+
+settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-ffmpeg, -Xshort-module-name=kiteplayer-ffmpeg ]
+
+settings@linuxX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-ffmpeg, -Xshort-module-name=kiteplayer-ffmpeg ]
+
+settings@linuxArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-ffmpeg, -Xshort-module-name=kiteplayer-ffmpeg ]
+
+settings@mingwX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-ffmpeg, -Xshort-module-name=kiteplayer-ffmpeg ]
+
+settings@wasmJs:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-ffmpeg ]
+
+# Tests compile into their own klib, which needs a different name. The test blocks name the
+# same platforms as the blocks above, so the toolchain applies them last.
+test-settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-ffmpeg_test, -Xshort-module-name=kiteplayer-ffmpeg_test ]
+
+test-settings@iosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-ffmpeg_test, -Xshort-module-name=kiteplayer-ffmpeg_test ]
+
+test-settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-ffmpeg_test, -Xshort-module-name=kiteplayer-ffmpeg_test ]
+
+test-settings@linuxX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-ffmpeg_test, -Xshort-module-name=kiteplayer-ffmpeg_test ]
+
+test-settings@linuxArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-ffmpeg_test, -Xshort-module-name=kiteplayer-ffmpeg_test ]
+
+test-settings@mingwX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-ffmpeg_test, -Xshort-module-name=kiteplayer-ffmpeg_test ]
+
+test-settings@wasmJs:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=kiteplayer-ffmpeg_test ]

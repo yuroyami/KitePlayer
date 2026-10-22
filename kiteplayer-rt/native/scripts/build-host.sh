@@ -4,8 +4,8 @@
 #
 # There is no make, no cmake and no ninja here, and that is deliberate:
 # cmake is not installed on the proving machine, and GNU make starts a comment at an unescaped
-# '#' while both repositories live under a path containing '#Kite'. Driving clang directly is the
-# only form that is both available and safe under this path, and it is proven to work here.
+# '#', and a checkout path can contain one. Driving clang directly is the only form that is both
+# available and safe under such a path, and it is proven to work here.
 #
 # Usage:  ./scripts/build-host.sh <variant>
 #         variant is one of: plain asan tsan
@@ -57,7 +57,7 @@ AR="${KPRT_AR:-/usr/bin/ar}"
 # -ffp-contract=off keeps the gain path's multiply-add out of an FMA. The Kotlin ring is the C
 # ring's differential oracle and it compares raw bits, so one fused instruction on this side and
 # not the other is a failing row rather than a rounding difference. It must match the flag
-# CompileKiteRtTask passes for the same reason.
+# CompileKiteRt passes for the same reason.
 BASE_FLAGS="-std=c11 -ffp-contract=off -Wall -Wextra -Werror -Werror=vla -g"
 case "$VARIANT" in
     plain) VARIANT_FLAGS="-O2" ;;
@@ -80,7 +80,7 @@ INTERPOSE_LIB="$LIB/libkprt_interpose_alloc.dylib"
 # The first six cover the ring. The last two cover the device callback:
 # test_sink_callback drives the shipped callback body five million times with no device at all and
 # also compiles a host-only seam around the actual CoreAudio entry point for malformed buffer-list
-# fixtures. KPRT_TESTING is never set by CompileKiteRtTask, so that seam cannot enter a shipped
+# fixtures. KPRT_TESTING is never set by CompileKiteRt, so that seam cannot enter a shipped
 # archive. test_sink_timebase checks this library's host tick arithmetic against CoreAudio's own
 # conversion rather than trusting either.
 TESTS="test_ring_rescale test_ring_basic test_ring_silence test_ring_bounded test_ring_threads test_ring_alloc test_ring_gain_boost test_ring_hold test_ring_limit test_sink_callback test_sink_teardown test_sink_timebase test_sink_channels"
@@ -116,7 +116,7 @@ compile() {
 #    every declaration matches its definition, and -Werror makes a mismatch a hard failure rather
 #    than a warning nobody reads.
 #
-#    -fvisibility=hidden matches CompileKiteRtTask's flag set, so the host archive carries the same
+#    -fvisibility=hidden matches CompileKiteRt's flag set, so the host archive carries the same
 #    exported set as the shipped one. It does not affect static linking, so the test binaries still
 #    resolve every function they call.
 RING_SOURCES="$(find "$ROOT/src" -maxdepth 1 -name '*.c' | sort)"

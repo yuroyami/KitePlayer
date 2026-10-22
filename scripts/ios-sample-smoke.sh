@@ -16,9 +16,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROJECT="$ROOT/kiteplayer-sample/iosApp/KitePlayerSample.xcodeproj"
-DERIVED="$ROOT/kiteplayer-sample/iosApp/build/DerivedData"
-APP="$DERIVED/Build/Products/Debug-iphonesimulator/KitePlayerSample.app"
 BUNDLE_ID="io.github.yuroyami.kiteplayer.sample.ios"
 RESULT_WAIT_SECONDS=120
 
@@ -52,14 +49,13 @@ echo "== Simulator $simulator"
 xcrun simctl boot "$simulator" 2>/dev/null || true
 xcrun simctl bootstatus "$simulator" -b
 
-# The Xcode build phase runs Gradle offline, so the framework is linked here first, online.
-echo "== Linking the sample framework"
-"$ROOT/gradlew" -p "$ROOT" --console=plain :kiteplayer-sample:linkDebugFrameworkIosSimulatorArm64
-
+# The Kotlin Toolchain builds the Kotlin framework and runs xcodebuild on kiteplayer-sample-ios/module.xcodeproj.
 echo "== Building the app"
-xcodebuild -project "$PROJECT" -scheme KitePlayerSample -configuration Debug \
-    -destination "platform=iOS Simulator,id=$simulator" -derivedDataPath "$DERIVED" \
-    CODE_SIGNING_ALLOWED=NO build -quiet
+(cd "$ROOT" && KOTLIN_CLI_NO_WELCOME_BANNER=1 ./kotlin build -m kiteplayer-sample-ios -p iosSimulatorArm64)
+# The toolchain's xcodebuild run writes the app to bin/<configuration>-<sdk>/ of its task folder.
+APP=$(find "$ROOT/build/tasks" -maxdepth 5 -path '*_kiteplayer-sample-ios_*IosSimulatorArm64*/bin/Debug-iphonesimulator/*.app' -type d | head -1)
+[ -n "$APP" ] || { echo "FAIL: the build produced no .app under build/tasks" >&2; exit 1; }
+echo "== $APP"
 
 # Uninstalling first also removes the result of an earlier run from the app's data container.
 echo "== Installing and launching with --s1b-smoke"

@@ -1,0 +1,95 @@
+# One merge task per Kotlin/Native target, so a build of one platform merges only that platform's chain.
+tasks:
+  mergeMacosArm64:
+    action: !io.github.yuroyami.kiteplayer.build.libass.mergeAssChain
+      konanTarget: macos_arm64
+      kotlinVersion: ${module.settings.kotlin.version}
+      repoRoot: ${project.rootDir}
+      pinFile: ${module.rootDir}/ass-chain.sha256
+      defTemplate: ${module.rootDir}/native/libass.def
+      driverDir: ${module.rootDir}/native/src
+      workDir: ${taskOutputDir}/work
+      defFile: ${taskOutputDir}/libass.def
+
+  mergeIosArm64:
+    action: !io.github.yuroyami.kiteplayer.build.libass.mergeAssChain
+      konanTarget: ios_arm64
+      kotlinVersion: ${module.settings.kotlin.version}
+      repoRoot: ${project.rootDir}
+      pinFile: ${module.rootDir}/ass-chain.sha256
+      defTemplate: ${module.rootDir}/native/libass.def
+      driverDir: ${module.rootDir}/native/src
+      workDir: ${taskOutputDir}/work
+      defFile: ${taskOutputDir}/libass.def
+
+  mergeIosSimulatorArm64:
+    action: !io.github.yuroyami.kiteplayer.build.libass.mergeAssChain
+      konanTarget: ios_simulator_arm64
+      kotlinVersion: ${module.settings.kotlin.version}
+      repoRoot: ${project.rootDir}
+      pinFile: ${module.rootDir}/ass-chain.sha256
+      defTemplate: ${module.rootDir}/native/libass.def
+      driverDir: ${module.rootDir}/native/src
+      workDir: ${taskOutputDir}/work
+      defFile: ${taskOutputDir}/libass.def
+
+  mergeLinuxX64:
+    action: !io.github.yuroyami.kiteplayer.build.libass.mergeAssChain
+      konanTarget: linux_x64
+      kotlinVersion: ${module.settings.kotlin.version}
+      repoRoot: ${project.rootDir}
+      pinFile: ${module.rootDir}/ass-chain.sha256
+      defTemplate: ${module.rootDir}/native/libass.def
+      driverDir: ${module.rootDir}/native/src
+      workDir: ${taskOutputDir}/work
+      defFile: ${taskOutputDir}/libass.def
+
+  mergeLinuxArm64:
+    action: !io.github.yuroyami.kiteplayer.build.libass.mergeAssChain
+      konanTarget: linux_arm64
+      kotlinVersion: ${module.settings.kotlin.version}
+      repoRoot: ${project.rootDir}
+      pinFile: ${module.rootDir}/ass-chain.sha256
+      defTemplate: ${module.rootDir}/native/libass.def
+      driverDir: ${module.rootDir}/native/src
+      workDir: ${taskOutputDir}/work
+      defFile: ${taskOutputDir}/libass.def
+
+  mergeMingwX64:
+    action: !io.github.yuroyami.kiteplayer.build.libass.mergeAssChain
+      konanTarget: mingw_x64
+      kotlinVersion: ${module.settings.kotlin.version}
+      repoRoot: ${project.rootDir}
+      pinFile: ${module.rootDir}/ass-chain.sha256
+      defTemplate: ${module.rootDir}/native/libass.def
+      driverDir: ${module.rootDir}/native/src
+      workDir: ${taskOutputDir}/work
+      defFile: ${taskOutputDir}/libass.def
+
+  hostJni:
+    action: !io.github.yuroyami.kiteplayer.build.libass.buildHostJni
+      kotlinVersion: ${module.settings.kotlin.version}
+      repoRoot: ${project.rootDir}
+      pinFile: ${module.rootDir}/ass-chain.sha256
+      driverDir: ${module.rootDir}/native/src
+      workDir: ${taskOutputDir}/work
+      resourcesDir: ${taskOutputDir}/resources
+
+generated:
+  cinteropDefinitions:
+    - defFile: ${tasks.mergeMacosArm64.action.defFile}
+      fragment: "@macosArm64"
+    - defFile: ${tasks.mergeIosArm64.action.defFile}
+      fragment: "@iosArm64"
+    - defFile: ${tasks.mergeIosSimulatorArm64.action.defFile}
+      fragment: "@iosSimulatorArm64"
+    - defFile: ${tasks.mergeLinuxX64.action.defFile}
+      fragment: "@linuxX64"
+    - defFile: ${tasks.mergeLinuxArm64.action.defFile}
+      fragment: "@linuxArm64"
+    - defFile: ${tasks.mergeMingwX64.action.defFile}
+      fragment: "@mingwX64"
+  # The desktop JNI libraries go into the JVM jar only.
+  resources:
+    - directory: ${tasks.hostJni.action.resourcesDir}
+      fragment: "@jvm"

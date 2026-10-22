@@ -1,0 +1,72 @@
+# Native video views, free of Compose: an Android View, an iOS and macOS view and a desktop JVM
+# component. The FFmpeg adapters that the views need live in kiteplayer-view-bindings.
+product:
+  type: kmp/lib
+  platforms: [ jvm, android, iosArm64, iosSimulatorArm64, macosArm64, wasmJs ]
+
+apply:
+  - //kiteplayer.module-template.yaml
+  - //android.module-template.yaml
+  - //library.module-template.yaml
+
+dependencies:
+  - //kiteplayer-core: exported
+
+test-dependencies:
+  - $libs.kotlinx.coroutines.test
+
+settings:
+  android:
+    namespace: io.github.yuroyami.kiteplayer.view
+  publishing:
+    pom:
+      name: kiteplayer-view
+      description: KitePlayer's native video views for Android, iOS and the desktop JVM.
+
+plugins:
+  publication-check:
+    enabled: true
+  abi-check:
+    enabled: true
+    androidDumpDir: api/android
+    klibPlatforms: [ iosArm64, iosSimulatorArm64, macosArm64, wasmJs ]
+  dokka:
+    enabled: true
+    moduleName: kiteplayer-view
+
+# Gradle named the klib "io.github.yuroyami:kiteplayer-view". Keep that name, or libraries built against earlier
+# releases fail to link on Kotlin/Native. Set it per platform: on @native, it also renames the
+# klibs of shared native code, which must keep their own names.
+settings@iosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-view, -Xshort-module-name=kiteplayer-view ]
+
+settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-view, -Xshort-module-name=kiteplayer-view ]
+
+settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-view, -Xshort-module-name=kiteplayer-view ]
+
+settings@wasmJs:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-view ]
+
+# Tests compile into their own klib, which needs a different name. The test blocks name the
+# same platforms as the blocks above, so the toolchain applies them last.
+test-settings@iosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-view_test, -Xshort-module-name=kiteplayer-view_test ]
+
+test-settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-view_test, -Xshort-module-name=kiteplayer-view_test ]
+
+test-settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-view_test, -Xshort-module-name=kiteplayer-view_test ]
+
+test-settings@wasmJs:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=kiteplayer-view_test ]

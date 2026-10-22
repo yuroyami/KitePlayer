@@ -33,6 +33,8 @@ android {
     }
     // AGP 9 tracks Kotlin directories separately from its Java-only source filter.
     sourceSets.getByName("main").kotlin.srcDir(rootProject.layout.projectDirectory.dir("src/commonMain/kotlin"))
+    // The network build adds the manifest entries of kiteplayer-network, which its Android archive does not carry.
+    if (withNetwork.get()) sourceSets.getByName("release").manifest.srcFile("src/network/AndroidManifest.xml")
 }
 
 dependencies {

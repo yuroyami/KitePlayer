@@ -8,10 +8,11 @@ reads HTTP, HLS, DASH and radio streams, and how it recovers when the network dr
 
 - Android and the JVM use OkHttp with the platform trust store, and Apple uses NSURLSession.
 - `MediaItem.headers` reach whichever transport the player selects.
-- The Android artifact declares the `INTERNET` permission for you. Your app's own policy decides
-  about cleartext HTTP. The artifact also declares `ACCESS_NETWORK_STATE`, which Android grants at
-  install, and a provider that keeps the application context. With these, a player that waits for
-  the network hears at once when the network comes back.
+- Your app declares the `INTERNET` permission. Your app's own policy decides about cleartext
+  HTTP. Also declare `ACCESS_NETWORK_STATE`, which Android grants at install, and the provider of
+  `kiteplayer-network` that keeps the application context. The
+  [module contract](module-contract.md) shows the manifest lines. With these, a player that waits
+  for the network hears at once when the network comes back.
 - When the network stays down longer than the reader's reconnects, the item fails. With
   `NetworkConfig.recovery = NetworkRecovery()`, the player waits for the network instead, for up to
   `maxWait`, and `PlayerSnapshot.reconnecting` says so. When the network comes back, the player

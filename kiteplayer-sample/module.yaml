@@ -1,0 +1,19 @@
+# The macOS command-line player. It plays a file with the real FFmpeg backend and the Metal
+# output, and checks that playback works instead of assuming it.
+# Run: ./kotlin run -m kiteplayer-sample -- <file> [flags]
+product: macos/app
+
+apply:
+  - //kiteplayer.module-template.yaml
+
+dependencies:
+  - //kiteplayer-ffmpeg
+  - //kiteplayer-output
+  # The picture in picture class, for the --pip window.
+  - //kiteplayer-view
+  # The media session, for Now Playing and the media keys in the --window mode.
+  - //kiteplayer
+
+settings:
+  native:
+    entryPoint: io.github.yuroyami.kiteplayer.sample.main

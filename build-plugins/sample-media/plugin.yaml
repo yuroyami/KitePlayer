@@ -1,0 +1,12 @@
+tasks:
+  assets:
+    action: !io.github.yuroyami.kiteplayer.build.media.copySampleMedia
+      repoRoot: ${project.rootDir}
+      assetsDir: ${module.rootDir}/assets
+      marker: ${taskOutputDir}/marker
+
+generated:
+  # An empty folder: it only orders the compile after the copy.
+  sources:
+    - language: kotlin
+      directory: ${tasks.assets.action.marker}

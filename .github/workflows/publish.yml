@@ -1,37 +1,40 @@
-# Publishes every KitePlayer library module to Maven Central (Central Portal, vanniktech plugin).
+# Publishes every KitePlayer library module to Maven Central (Central Portal) with the Kotlin
+# Toolchain: `./kotlin publish mavenCentral`.
 #
 # ON DEMAND ONLY. workflow_dispatch is the single trigger; pushing a tag publishes nothing by
-# itself. Publishing from the maintainer's machine stays equally valid with the same credentials in
-# ~/.gradle/gradle.properties:
-#   ./gradlew publishAllPublicationsToMavenCentralRepository --no-configuration-cache
+# itself. Publishing from the maintainer's machine is equally valid with the same credentials in the
+# KOTLIN_TOOLCHAIN_* environment variables listed below:
+#   ./kotlin publish mavenCentral
 #
-# Either path leaves the deployment staged as USER_MANAGED on the Central Portal. The final Publish
-# click is human, deliberately: Central is immutable and a version cannot be withdrawn.
+# By default the deployment waits on the Central Portal after validation (publishingMode manual in
+# library.module-template.yaml). The final Publish click is human, deliberately: Central is
+# immutable and a version cannot be withdrawn. The release input switches this run to auto.
 #
 # THE ONE STEP THAT IS NOT ATOMIC is the release itself: the upload stages a deployment, and a
 # person releases it. Nothing in a deployment is public until the Publish click releases all of it
 # together, so drop a failed or wrong deployment on the portal instead of releasing it.
 #
 # TESTS FIRST. The whole of CI runs on the commit being published, and the upload waits for it. A
-# red test stops the run before anything reaches the portal, and a release run takes as long as CI
-# plus the upload.
+# red test stops the run before anything reaches the portal.
 #
 # BILL OF MATERIALS. Before the upload, the run writes an SPDX document of the native code that
 # kiteplayer-libass bundles (scripts/native-sbom.sh), and keeps it as the native-sbom-<version>
-# artifact of the run. Attach that file to the GitHub release page. A pin that does not match its
-# archive, or a NOTICE that does not name a version inside the artifacts, stops the run before the
-# upload. A publish from the maintainer's machine gets no document; run the script by hand there.
+# artifact of the run. Attach that file to the GitHub release page.
+#
+# WEB ZIPS. A Kotlin Toolchain publication carries no extra files, so the two web zips of KitePlayer
+# (the worker binary and the libass web module) are not on Maven Central. The run builds them with
+# scripts/web-zips.sh and keeps them as the web-zips-<version> artifact. Attach them to the GitHub
+# release page, where the README's web setup points.
 #
 # PREREQUISITES
-#   Repository secrets, the same five KiteFFmpeg uses:
+#   Repository secrets:
 #     MAVEN_CENTRAL_USERNAME / MAVEN_CENTRAL_PASSWORD   Central Portal user token
-#     SIGNING_IN_MEMORY_KEY / SIGNING_IN_MEMORY_KEY_ID / SIGNING_IN_MEMORY_KEY_PASSWORD
-#       ASCII-armored GPG key, its id, and the passphrase
+#     SIGNING_IN_MEMORY_KEY / SIGNING_IN_MEMORY_KEY_PASSWORD   ASCII-armored GPG key and its passphrase
+#   SIGNING_IN_MEMORY_KEY_ID is no longer read: the toolchain takes the key id from the key.
 #
-# WHAT IS PUBLISHED. Every library module that applies the publish plugin. FFmpeg is NOT built here:
-# KitePlayer resolves io.github.yuroyami:kiteffmpeg from Central and that artifact carries FFmpeg
-# inside it, so this workflow needs no vendored FFmpeg tree. It installs emscripten only for the
-# libass web module.
+# WHAT IS PUBLISHED. Every module whose publishing settings enable Maven Central. FFmpeg is NOT
+# built here: KitePlayer resolves io.github.yuroyami:kiteffmpeg from Central and that artifact
+# carries FFmpeg inside it. emscripten is installed only for the libass web module.
 #
 # WHY macOS. Apple klibs can only be produced on a macOS host, and the publication covers them.
 name: Publish release
@@ -40,10 +43,10 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to publish (must match VERSION in gradle.properties), e.g. 0.0.21"
+        description: "Version to publish (must match settings.publishing.version in library.module-template.yaml), e.g. 0.3.0"
         required: true
       release:
-        description: "Also press Publish on the Central Portal. Off leaves the deployment staged for a human to finish."
+        description: "Also release the deployment on the Central Portal. Off leaves it validated for a human to publish."
         type: boolean
         default: false
 
@@ -54,33 +57,40 @@ concurrency:
   group: publish-${{ github.event.inputs.version }}
   cancel-in-progress: false
 
+env:
+  KOTLIN_CLI_NO_WELCOME_BANNER: "1"
+
 jobs:
   check-version:
-    name: input matches gradle.properties
+    name: input matches the publishing version
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      # A stale gradle.properties must never publish under the version someone asked for. This is
-      # the whole reason the version is an input rather than being read from the file: the two are
-      # compared, so a mismatch is a failure instead of a surprise on the portal.
+      # A stale version must never publish under the version someone asked for. The version is an
+      # input so that the two are compared, and a mismatch is a failure instead of a surprise.
       - name: Assert version match
         run: |
-          gradle_version="$(grep '^VERSION=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')"
+          template_version="$(sed -n 's/^    version:[[:space:]]*//p' library.module-template.yaml | tr -d '[:space:]')"
           expected="${{ github.event.inputs.version }}"
-          if [ "${gradle_version}" != "${expected}" ]; then
-            echo "::error::version mismatch: gradle.properties has VERSION=${gradle_version} but the run asked for ${expected}" >&2
+          if [ "${template_version}" != "${expected}" ]; then
+            echo "::error::version mismatch: library.module-template.yaml has version ${template_version} but the run asked for ${expected}" >&2
             exit 1
           fi
-          # A version with no changelog section has no release notes, and a release with no notes
-          # is a number nobody can read. scripts/release-notes.sh drafts the section from the commits.
+          for module in $(scripts/published-modules.sh); do
+            module_version="$(sed -n 's/^    version:[[:space:]]*//p' "$module/module.yaml" | tr -d '[:space:]')"
+            if [ -n "${module_version}" ] && [ "${module_version}" != "${expected}" ]; then
+              echo "::error::$module/module.yaml sets version ${module_version}, not ${expected}" >&2
+              exit 1
+            fi
+          done
+          # A version with no changelog section has no release notes.
           if ! grep -q "^## \[${expected}\]" CHANGELOG.md; then
             echo "::error::CHANGELOG.md has no '## [${expected}]' section; write the notes before publishing (scripts/release-notes.sh drafts them)" >&2
             exit 1
           fi
-          echo "Publishing version ${gradle_version}"
+          echo "Publishing version ${template_version}"
 
-  # ci.yml, called on this commit. Its jobs appear in this run under this job's name.
   tests:
     name: CI on the commit being published
     needs: check-version
@@ -90,52 +100,22 @@ jobs:
     name: every publishing module → Maven Central
     needs: [check-version, tests]
     runs-on: macos-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 21
-      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
-
-      # The Kotlin/Native toolchain and its per-target sysroots, several GB and the single largest
-      # cost of a cold run. Keyed on the version catalog because that is what pins the Kotlin
-      # version that decides which toolchain is fetched.
-      - uses: actions/cache@v4
-        with:
-          path: ~/.konan
-          key: konan-publish-${{ hashFiles('gradle/libs.versions.toml') }}
-          restore-keys: |
-            konan-publish-
-            konan-macos-arm64-
-
-      # Kotlin/JS and Kotlin/Wasm fetch their own node and yarn into ~/.gradle, then populate
-      # node_modules from the committed lockfile. Uncached that is a download and an install on
-      # every run, for publications that are placeholder variants.
       - uses: actions/cache@v4
         with:
           path: |
-            ~/.gradle/nodejs
-            ~/.gradle/yarn
-            build/js/node_modules
-          key: kotlin-js-${{ hashFiles('kotlin-js-store/yarn.lock', 'gradle/libs.versions.toml') }}
+            ~/Library/Caches/JetBrains/Kotlin
+            ~/.konan
+          key: kotlin-publish-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
           restore-keys: |
-            kotlin-js-
+            kotlin-publish-
+            kotlin-macos-host-
 
-      # konan's LLVM only lands in ~/.konan/dependencies once a Kotlin/Native compile has run. The
-      # C tasks in kiteplayer-rt compile with that same LLVM, so on a cold runner they can get
-      # there first and die with "No LLVM package with a usable clang". One warmup provisions it.
-      # `|| true` because this exists for its side effect; the publish below reports the real result.
-      # kiteplayer-libass links its web module with emscripten; without it the publish below fails
-      # on purpose (requireAllHostJni) rather than shipping a wasmJs artifact with no module.
       - name: Install emscripten
         run: brew install emscripten
-      - name: Warm the Kotlin/Native toolchain
-        run: ./gradlew :kiteplayer-core:compileKotlinMacosArm64 --stacktrace || true
 
-      # The SPDX document of the native code that kiteplayer-libass bundles. It exports the same NDK
-      # as the publish step below, so the document names the NDK that the build uses.
       - name: Bill of materials for bundled native code
         run: |
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
@@ -147,30 +127,39 @@ jobs:
           path: build/sbom/
           if-no-files-found: error
 
-      # Refuses before any repository work if the POMs would be rejected: missing name, description,
-      # url, licence, developer or scm, an unsigned publication, or a published module depending on
-      # an unpublished one. Cheaper to fail here than to have the portal fail the upload.
+      # Every host JNI library and the libass web module must link here: a publish never ships a
+      # module with a missing half.
       - name: Publication readiness
-        run: ./gradlew checkPublicationReadiness --stacktrace
+        env:
+          KITEPLAYER_LIBASS_REQUIRE_ALL_HOST_JNI: "true"
+        run: |
+          . scripts/test-signing-key.sh
+          flags=()
+          for module in $(scripts/published-modules.sh); do flags+=(-m "$module"); done
+          ./kotlin publish mavenLocal --non-transitive "${flags[@]}"
+          ./kotlin check publication
 
-      # Uploads to the Central Portal. By default it stops there: the deployment lands as
-      # USER_MANAGED and a human presses Publish. With the release input on, the plugin presses it,
-      # which is the same click made by the run rather than by a person. Central is immutable
-      # either way, so the version gate above is what protects a wrong number, not this switch.
+      - name: The web zips for the release page
+        run: ./scripts/web-zips.sh
+      - name: Keep the web zips
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-zips-${{ inputs.version }}
+          path: build/web-zips/*.zip
+          if-no-files-found: error
+
       - name: Publish to Maven Central
         env:
-          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
-          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
-          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
-          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_IN_MEMORY_KEY_ID }}
-          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
+          KITEPLAYER_LIBASS_REQUIRE_ALL_HOST_JNI: "true"
+          KOTLIN_TOOLCHAIN_MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          KOTLIN_TOOLCHAIN_MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          KOTLIN_TOOLCHAIN_SIGNING_KEY: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
+          KOTLIN_TOOLCHAIN_SIGNING_KEY_PASSPHRASE: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
         run: |
-          # The Android AAR's JNI libraries link with the NDK.
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
-          task=publishToMavenCentral
-          if [ "${{ inputs.release }}" = "true" ]; then task=publishAndReleaseToMavenCentral; fi
-          # A libass adapter this runner cannot link is a failure, never a jar quietly missing a desktop.
-          ./gradlew "$task" \
-            -Pkiteplayer.libass.requireAllHostJni=true \
-            --no-configuration-cache \
-            --stacktrace
+          if [ "${{ inputs.release }}" = "true" ]; then
+            # Only in this runner's checkout: the committed default stays manual.
+            sed -i '' 's/publishingMode: manual/publishingMode: auto/' \
+              library.module-template.yaml kiteplayer-libass-android-natives/module.yaml
+          fi
+          ./kotlin publish mavenCentral

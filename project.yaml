@@ -1,0 +1,50 @@
+# The library modules, the samples and the local build plugins of KitePlayer.
+modules:
+  - build-plugins/abi-check
+  - build-plugins/build-support
+  - build-plugins/dokka
+  - build-plugins/kitert-c
+  - build-plugins/klib-abi-check
+  - build-plugins/libass-android-natives
+  - build-plugins/libass-native
+  - build-plugins/publication-check
+  - build-plugins/repo-checks
+  - build-plugins/sample-media
+  - build-plugins/web-assets
+  - kiteplayer
+  - kiteplayer-adaptive
+  - kiteplayer-audioviz
+  - kiteplayer-compose
+  - kiteplayer-compose-interop
+  - kiteplayer-compose-ui
+  - kiteplayer-compose-video
+  - kiteplayer-core
+  - kiteplayer-ffmpeg
+  - kiteplayer-io
+  - kiteplayer-libass
+  - kiteplayer-libass-android-natives
+  - kiteplayer-network
+  - kiteplayer-output
+  - kiteplayer-rt
+  - kiteplayer-sample
+  - kiteplayer-sample-android
+  - kiteplayer-sample-desktop
+  - kiteplayer-sample-ios
+  - kiteplayer-sample-shared
+  - kiteplayer-sample-web
+  - kiteplayer-subtitles
+  - kiteplayer-view
+  - kiteplayer-view-bindings
+  - kiteplayer-web-worker
+
+plugins:
+  - //build-plugins/abi-check
+  - //build-plugins/dokka
+  - //build-plugins/kitert-c
+  - //build-plugins/klib-abi-check
+  - //build-plugins/libass-native
+  - //build-plugins/libass-android-natives
+  - //build-plugins/publication-check
+  - //build-plugins/repo-checks
+  - //build-plugins/sample-media
+  - //build-plugins/web-assets

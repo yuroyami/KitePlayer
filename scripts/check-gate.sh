@@ -26,7 +26,7 @@ run() {
     printf '\n'
     if ! "$DRY_RUN"; then "$@"; fi
 }
-gradle() { run ./gradlew --console=plain --stacktrace "$@"; }
+kotlin() { run env KOTLIN_CLI_NO_WELCOME_BANNER=1 ./kotlin "$@"; }
 
 scan_em_dashes() {
     # git grep reads the working copies of tracked files and preserves errors separately from
@@ -42,7 +42,7 @@ scan_em_dashes() {
 }
 
 sample_smoke() {
-    local binary=kiteplayer-sample/build/bin/macosArm64/debugExecutable/kiteplayer.kexe
+    local binary=build/tasks/_kiteplayer-sample_linkMacosArm64Debug/kiteplayer-sample.kexe
     local clip log status
     mkdir -p build/reports/gate-sample
     # The four original house clips cover regular timing, variable timing, hardware decode,
@@ -75,30 +75,36 @@ if ! "$DRY_RUN"; then
 fi
 
 fixtures() { run ./scripts/testmedia.sh; }
+# The native and simulator tests read the clips from the variables that this script sets.
+. ./scripts/test-env.sh
 base() {
-    # Gradle validates declared inputs and reuses unchanged compilation outputs.
-    gradle checkKitertCoupling checkKotlinAbi \
-        :kiteplayer-core:jvmTest :kiteplayer-subtitles:jvmTest :kiteplayer-io:jvmTest
+    kotlin check kitertCoupling abi -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io
+    kotlin test -p jvm -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io
     run kiteplayer-rt/native/scripts/build-host.sh plain
     run kiteplayer-rt/native/scripts/run-c-tests.sh plain
     run kiteplayer-rt/native/scripts/render-audit.sh
     run kiteplayer-rt/native/scripts/source-discipline.sh
     run scan_em_dashes
 }
-build_logic() { gradle :buildSrc:test; }
+build_logic() { kotlin test -m build-support; }
 publication() {
-    gradle checkPublicationReadiness
+    # The POM check reads a local publish of every published module.
+    local module
+    . ./scripts/test-signing-key.sh
+    local flags=()
+    for module in $(./scripts/published-modules.sh); do flags+=(-m "$module"); done
+    kotlin publish mavenLocal --non-transitive "${flags[@]}"
+    kotlin check publication
     run ./scripts/check-dependency-hygiene.sh
 }
 macos() {
-    gradle :kiteplayer-core:macosArm64Test :kiteplayer-subtitles:macosArm64Test :kiteplayer-io:macosArm64Test \
-        :kiteplayer-output:macosArm64Test :kiteplayer-rt:macosArm64Test \
-        :kiteplayer-libass:macosArm64Test :kiteplayer-adaptive:macosArm64Test :kiteplayer-network:macosArm64Test \
-        :kiteplayer-ffmpeg:macosArm64Test :kiteplayer:macosArm64Test
+    kotlin test -p macosArm64 -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
+        -m kiteplayer-output -m kiteplayer-rt \
+        -m kiteplayer-libass -m kiteplayer-adaptive -m kiteplayer-network \
+        -m kiteplayer-ffmpeg -m kiteplayer
 }
 ios_simulator() {
-    gradle :kiteplayer-view:iosSimulatorArm64Test :kiteplayer-audioviz:iosSimulatorArm64Test \
-        :kiteplayer:iosSimulatorArm64Test
+    kotlin test -p iosSimulatorArm64 -m kiteplayer-view -m kiteplayer-audioviz -m kiteplayer
 }
 c_sanitizers() {
     # This reuses the plain build from base. When resuming here, that earlier build must exist.
@@ -115,20 +121,19 @@ c_sanitizers() {
     run kiteplayer-libass/native/scripts/run-c-tests.sh wasm32
 }
 jvm() {
-    gradle :kiteplayer-output:jvmTest :kiteplayer-view:jvmTest :kiteplayer-adaptive:jvmTest :kiteplayer-network:jvmTest \
-        :kiteplayer-ffmpeg:jvmTest :kiteplayer:jvmTest \
-        :kiteplayer-compose-video:jvmTest :kiteplayer-compose-ui:jvmTest :kiteplayer-audioviz:jvmTest \
-        :kiteplayer-sample-shared:jvmTest
+    # The audio visualiser's rendering suites take about 25 minutes, so the gate leaves them to
+    # ./scripts/audioviz-tests.sh survey.
+    kotlin test -p jvm -m kiteplayer-output -m kiteplayer-view -m kiteplayer-adaptive -m kiteplayer-network \
+        -m kiteplayer-ffmpeg -m kiteplayer \
+        -m kiteplayer-compose-video -m kiteplayer-compose-ui -m kiteplayer-sample-shared
+    run ./scripts/audioviz-tests.sh gate
 }
 web() {
-    gradle :kiteplayer-core:wasmJsNodeTest :kiteplayer-subtitles:wasmJsNodeTest \
-        :kiteplayer-output:wasmJsNodeTest :kiteplayer-ffmpeg:wasmJsNodeTest \
-        :kiteplayer-adaptive:wasmJsNodeTest :kiteplayer-network:wasmJsNodeTest :kiteplayer-libass:wasmJsNodeTest \
-        :kiteplayer:wasmJsNodeTest
-    # The Kotlin/JS half compiles the same code to a different engine, with JavaScript's own regular
-    # expressions and numbers, so the wasm run above says nothing about it (#537).
-    gradle :kiteplayer-core:jsNodeTest :kiteplayer-subtitles:jsNodeTest :kiteplayer-io:jsNodeTest \
-        :kiteplayer-adaptive:jsNodeTest :kiteplayer-network:jsNodeTest :kiteplayer:jsNodeTest :kiteplayer-libass:jsNodeTest
+    # Wasm in Node and in headless Chrome, then Kotlin/JS in Node. The JS half compiles the same code
+    # to a different engine, with JavaScript's own regular expressions and numbers, so the wasm runs
+    # say nothing about it (#537). The toolchain runs no JS tests, and it gives a wasm module only
+    # 30 seconds in the browser, so this script runs all three.
+    run python3 scripts/web-tests/run.py
 }
 linux() {
     run ./scripts/linux-tests.sh
@@ -136,20 +141,20 @@ linux() {
 }
 windows() {
     # These are link checks on a Mac. Only the Windows CI job executes Windows tests.
-    gradle :kiteplayer-core:linkDebugTestMingwX64 :kiteplayer-subtitles:linkDebugTestMingwX64 \
-        :kiteplayer-output:linkDebugTestMingwX64 :kiteplayer-rt:linkDebugTestMingwX64 \
-        :kiteplayer-ffmpeg:linkDebugTestMingwX64 :kiteplayer:linkDebugTestMingwX64
+    kotlin task :kiteplayer-core:linkMingwX64TestDebug :kiteplayer-subtitles:linkMingwX64TestDebug \
+        :kiteplayer-output:linkMingwX64TestDebug :kiteplayer-rt:linkMingwX64TestDebug \
+        :kiteplayer-ffmpeg:linkMingwX64TestDebug :kiteplayer:linkMingwX64TestDebug
 }
 cross_compile() {
     # Device builds are compile evidence only. The simulator view suite executes tests.
-    gradle :kiteplayer-core:compileKotlinIosArm64 :kiteplayer-output:compileKotlinIosArm64 \
-        :kiteplayer-view:compileKotlinIosArm64 :kiteplayer-adaptive:compileKotlinIosArm64 :kiteplayer-network:compileKotlinIosArm64 \
-        :kiteplayer:compileKotlinIosArm64 :kiteplayer-compose-ui:compileKotlinIosArm64 \
-        :kiteplayer-audioviz:compileKotlinIosArm64 :kiteplayer-audioviz:compileAndroidMain \
-        :kiteplayer-core:compileKotlinAndroidNativeArm32 :kiteplayer-sample-android:assembleDebug
+    kotlin build -p iosArm64 -m kiteplayer-core -m kiteplayer-output \
+        -m kiteplayer-view -m kiteplayer-adaptive -m kiteplayer-network \
+        -m kiteplayer -m kiteplayer-compose-ui -m kiteplayer-audioviz
+    kotlin build -p android -m kiteplayer-audioviz -m kiteplayer-sample-android
+    kotlin build -p androidNativeArm32 -m kiteplayer-core
 }
 sample() {
-    gradle :kiteplayer-sample:linkDebugExecutableMacosArm64
+    kotlin build -m kiteplayer-sample
     run sample_smoke
 }
 

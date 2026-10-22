@@ -86,6 +86,7 @@ On Android, every artifact needs `minSdk` 26. To build a smaller stack of your o
 | An iOS app with a static framework (`isStatic = true`) | Linker flags in Xcode ([iOS setup](#ios-setup)) |
 | Any iOS app | Two entries in the privacy manifest ([iOS setup](#ios-setup)) |
 | A web app (`wasmJs`) | FFmpeg and libass as WebAssembly modules next to the page, plus a third module for the worker player ([Web setup](#web-setup)) |
+| Any Android app | Two permissions and two providers in the manifest ([module contract](docs/module-contract.md#automatic-network-transport)) |
 | An Android app that plays in the background | A service and three permissions in the manifest ([Background playback](#background-playback)) |
 
 <a name="ios-setup"></a>
@@ -133,7 +134,8 @@ inside the app container, and `3B52.1` is files that the user picked.
 <br>
 
 A browser cannot link FFmpeg or libass into the Kotlin binary, so the page serves them as separate
-WebAssembly modules. Each one is published as a `web` zip next to its artifact on Maven Central:
+WebAssembly modules. Each one is a `web` zip. KiteFFmpeg publishes its zip next to its artifact on
+Maven Central. KitePlayer's two zips are assets of the KitePlayer release on GitHub:
 
 1. Unpack `kiteffmpeg-wasm-js-<version>-web.zip` next to `index.html`. Use the KiteFFmpeg version
    that KitePlayer depends on (0.5.1 for KitePlayer 0.3.0).
@@ -527,18 +529,22 @@ The desktop, Android and iOS sample apps open on the audio visualizer with five 
 (under CC BY-SA 3.0, credited in [the media folder](kiteplayer-sample-shared/media/README.md)):
 
 ```bash
-./gradlew :kiteplayer-sample-desktop:run
+./kotlin run -m kiteplayer-sample-desktop
 ```
 
 ```bash
-./gradlew :kiteplayer-sample-android:installDebug
+./kotlin run -m kiteplayer-sample-android    # with more than one device, add --device-id <serial>
 ```
 
-For iOS, open `kiteplayer-sample/iosApp/KitePlayerSample.xcodeproj`, which builds the Kotlin
-framework itself. The same module also builds a native macOS app: run
-`./gradlew :kiteplayer-sample:linkDebugExecutableMacosArm64`, then start `kiteplayer.kexe` with a
-media file and `--window`. `kiteplayer-sample-web` plays a clip through `KiteVideo` on a Compose
-web page. Open it with `?probe` to measure what a frame costs there.
+```bash
+./kotlin run -m kiteplayer-sample-ios -p iosSimulatorArm64
+```
+
+The repository builds with the Kotlin Toolchain: the `./kotlin` wrapper downloads it on first use.
+`kiteplayer-sample` is a native macOS app: `./kotlin run -m kiteplayer-sample -- <media file> --window`
+plays a file in a window. `kiteplayer-sample-web` plays a clip through `KiteVideo` on a Compose web
+page: `./kotlin run -m kiteplayer-sample-web`. Open it with `?probe` to measure what a frame costs
+there.
 
 To work on KitePlayer itself, start with [CONTRIBUTING.md](CONTRIBUTING.md).
 

@@ -17,6 +17,8 @@ on:
       - README.md
       - scripts/verify-central-consumer.sh
       - verification/central-consumer/**
+      - verification/gradle/**
+      - verification/gradlew
       - .github/workflows/central-consumer.yml
 
 permissions:

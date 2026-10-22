@@ -15,7 +15,7 @@ dependencyResolutionManagement {
     // and Android Gradle plugin as the player. No repository here can serve this checkout's bytes.
     versionCatalogs {
         create("libs") {
-            from(files("../../gradle/libs.versions.toml"))
+            from(files("../gradle/libs.versions.toml"))
         }
     }
     repositories {

@@ -1,0 +1,130 @@
+package io.github.yuroyami.kiteplayer.audioviz
+
+import java.io.File
+import kotlin.test.Test
+import kotlin.test.assertTrue
+
+/**
+ * Reads the drawings as text and refuses four mistakes that make drawings look alike.
+ *
+ * None of them is visible in a screenshot. They only show up when you play two different songs and notice the
+ * picture did not change, which is not something a normal test run does. So they are caught here,
+ * in the source, where they are obvious.
+ */
+class MappingLintTest {
+
+    private val root = File("src/io/github/yuroyami/kiteplayer/audioviz/viz/presets")
+    private val shaders = File("src/io/github/yuroyami/kiteplayer/audioviz/viz/shader")
+
+    private class Complaint(val file: String, val line: Int, val text: String, val why: String) {
+        override fun toString(): String = "$file:$line  $why\n      ${text.trim()}"
+    }
+
+    @Test
+    fun noDrawingRunsOnTheWallClock() {
+        // The strongest signal a viewer has for how busy the music is, is how fast things move.
+        // A rate built from the wall clock cannot answer that. Drawings use the music clock, which
+        // slows in quiet passages, or ask for a paced rate, or lock to the bar.
+        // Any reading of the wall clock is refused, not only a product with it: `2f * state.timeSeconds`
+        // and `sin(uTime * 3.0)` are the same mistake. The header that declares `uTime` and the code
+        // that hands it to a program are the two places that may name it.
+        val wallClock = Regex("""\bstate\.timeSeconds\b|\buTime\b""")
+        val check: (String) -> String? = { line ->
+            if (wallClock.containsMatchIn(line) && !line.contains("uniform float uTime;") && !line.contains("uniform(\"uTime\"")) {
+                "the wall clock. Use state.musicTime, state.paced(), state.stepSeconds or a MusicClock"
+            } else {
+                null
+            }
+        }
+        val complaints = scan(root, check) + scan(shaders, check)
+        assertTrue(complaints.isEmpty(), "motion that ignores the music:\n" + complaints.joinToString("\n"))
+    }
+
+    @Test
+    fun noDrawingRanksTheBarsOfOneFrame() {
+        // "Keep the loudest 30 percent of the bars" draws the same share of the picture whatever
+        // plays, so a quiet passage looks as busy as a loud one. Every bar is already a height
+        // under one shared gain, so a fixed level means the same thing in every song, and a quiet
+        // passage crosses it less often. A range a drawing learns while the song plays does the
+        // same damage and cannot be seen in the text: the loud against quiet render catches that.
+        val rank = Regex("""\b(percentile|bandPercentile)\s*\(""")
+        val check: (String) -> String? = { line ->
+            if (rank.containsMatchIn(line)) {
+                "a rank inside one frame. Compare the height with a fixed level, such as LOUD_BAND"
+            } else {
+                null
+            }
+        }
+        val complaints = scan(root, check) + scan(shaders, check)
+        assertTrue(
+            complaints.isEmpty(),
+            "ranks that make a quiet passage as busy as a loud one:\n" + complaints.joinToString("\n"),
+        )
+    }
+
+    @Test
+    fun nothingIsSpawnedPerFrameRatherThanPerSecond() {
+        // A count worked out per frame doubles on a 120 Hz display and halves on a 30 Hz one. Rates
+        // are per second, multiplied by the time the frame took.
+        val check: (String) -> String? = { line ->
+            if (!line.contains("repeat(")) {
+                null
+            } else if (!Regex("""(state\.(energy|drive|mood)|state\.frame\.\w+)""").containsMatchIn(line)) {
+                null
+            } else if (line.contains("deltaSeconds")) {
+                null
+            } else if (ALLOWED_BURSTS.any { line.contains(it) }) {
+                null
+            } else {
+                "a count taken from the music with no frame time in it. Multiply a per second rate by deltaSeconds"
+            }
+        }
+        val complaints = scan(root, check) + scan(shaders, check)
+        assertTrue(
+            complaints.isEmpty(),
+            "spawning that changes with the refresh rate:\n" + complaints.joinToString("\n"),
+        )
+    }
+
+    @Test
+    fun noPositionIsTheClockTimesAChangingSpeed() {
+        // Position equals time times speed only while the speed never changes. When the speed follows
+        // the music, every change moves the position by the change times all the time so far, and a
+        // few minutes into a song the picture lurches on every flicker of loudness. Add up speed
+        // times frame time instead.
+        val clockTimesLive = Regex(
+            """(?:musicTime|timeSeconds|uMusicTime|uTime)\s*\*\s*(?:[\d.]+f?\s*\*\s*)?\([^)]*\b(?:drive|energy|mood|uDrive|uEnergy|uMood|uBass|uLevel)\b""",
+        )
+        val check: (String) -> String? = { line ->
+            if (clockTimesLive.containsMatchIn(line)) "a clock multiplied by a speed that changes. Add up speed times frame time" else null
+        }
+        val complaints = scan(root, check) + scan(shaders, check)
+        assertTrue(complaints.isEmpty(), "positions that jump when the music changes:\n" + complaints.joinToString("\n"))
+    }
+
+    private fun scan(folder: File, check: (String) -> String?): List<Complaint> {
+        val files = folder.listFiles { file: File -> file.name.endsWith(".kt") }
+        assertTrue(files != null && files.isNotEmpty(), "no drawings found at ${folder.absolutePath}")
+        val complaints = ArrayList<Complaint>()
+        for (file in files.sortedBy { it.name }) {
+            file.readLines().forEachIndexed { index, line ->
+                val trimmed = line.trimStart()
+                // Comments explain the rules, so they are allowed to mention them.
+                if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) return@forEachIndexed
+                check(line)?.let { complaints += Complaint(file.name, index + 1, line, it) }
+            }
+        }
+        return complaints
+    }
+
+    private companion object {
+        /**
+         * Bursts allowed to be counted per frame rather than per second.
+         *
+         * These fire on a drum hit, and a drum hit is one event however often the screen redraws,
+         * so tying the size of the burst to the frame time would make a kick weaker on a fast
+         * display. The steady trickle beside them is still per second.
+         */
+        val ALLOWED_BURSTS = listOf("burst + steady")
+    }
+}

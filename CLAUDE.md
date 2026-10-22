@@ -41,9 +41,16 @@ Each line is something that bit someone. Delete a line when it stops being true.
   fragmented TTML one, which it lists as skipped in `MANIFEST.txt`; the stpp DASH test then skips
   with that reason, so one skip there is expected and not a regression. Its colour clips take their
   chroma siting from the encoder there instead of from `setparams`, and each one is read back.
-- A Gradle compile task with no sources prints `NO-SOURCE` and exits zero, so "the target compiles
-  now" can mean "there was never anything there to compile". Grep the log for that word against the
-  exact task name, or check that the run reports a test count rather than a build result.
+- `./kotlin build` and `./kotlin test` compile each platform on its own. Only `./kotlin publish`
+  compiles the shared folders such as `src@native` and `src@apple`, so an error there shows up at
+  publish time. Run them first: `./kotlin show tasks`, pick the `compileMetadata` task names, and
+  pass them to `./kotlin task`. Two known causes: a POSIX call that one platform of the folder
+  declares differently (`opendir` on Android against Linux), and kitert in a folder whose platform
+  set has no fragment in `kiteplayer-rt`. The toolchain commonizes kitert only for the platform
+  sets of kiteplayer-rt's own folders, which is why kiteplayer-rt declares a `macosAndIos` alias.
+- `./kotlin test` skips a module or platform that has no test classes and still exits zero, so
+  "the target passes" can mean "there was never anything there to run". Check that the output
+  reports a test count for that exact module and platform.
 - A Kotlin/Native test report gives every test a time near zero, so a test that returned early
   because it found no fixture reads exactly like one that ran. To prove a native test reads its
   media, hide the fixture once and watch it fail.
@@ -51,79 +58,62 @@ Each line is something that bit someone. Delete a line when it stops being true.
   each commit of a long session means no run ever finishes. Hold a push until the last run is read.
   Running an older run's failed jobs again counts as a push here: it cancels the run of a newer
   commit that is in progress. Run them again only when nothing newer is running.
-- A CI job that fails with "Could not find" for an artifact that Maven Central serves has a broken
-  Gradle cache, not a network problem. GitHub evicts cache entries once a repository holds more
-  than 10 GB, and it can evict a job's dependency bundle and keep its index. The log then says
-  "Did not restore dependencies". Delete that job's `gradle-home` entry with `gh cache delete`.
-- `./gradlew ... | tail` reports the exit code of `tail`. A background build once reported success
+- A CI job that fails with "Could not find" for an artifact that Maven Central serves may have a
+  broken toolchain cache, not a network problem. GitHub evicts cache entries once a repository
+  holds more than 10 GB. Delete that job's `kotlin-<job>-` entry with `gh cache delete`.
+- `./kotlin ... | tail` reports the exit code of `tail`. A background build once reported success
   with BUILD FAILED sitting in its own log.
 - Moving or renaming the checkout breaks the prebuilt C test binaries: they carry an absolute path
   to their interpose library from link time, so every suite aborts naming the old path, which reads
   like a broken test and is a stale binary. Rebuild them; a directory move counts as a C change.
 - Adding a dependency can poison Kotlin's incremental-compilation cache, and the failure names a
-  standard library function and reads like a compiler bug in your own code. Delete the module's
-  `build/kotlin` and build again. The same failure on the web target wants
-  `build/classes/kotlin/wasmJs` deleted and a rerun with tasks forced. A large edit across many
-  files in one module does the same in a second shape: the run fails with `NoClassDefFoundError`
-  for one of our own classes, usually a companion, because that class file was never written.
-  Delete `build/kotlin` and `build/classes/kotlin/jvm`.
-- A test task's environment is stored in the configuration cache with the rest of the task, so a
-  variable set for one run, such as `KITEPLAYER_REQUIRE_TESTMEDIA=1`, is silently missing when the
-  entry from a run without it is reused, and the run passes as if it were not set. The test results
-  come from the build cache the same way, because neither the variable nor the clips are task
-  inputs. Pass `--no-configuration-cache` and `--rerun` to the test task when the run depends on
-  either. CI starts fresh, so it is not affected.
-- A Gradle test run that is killed part way leaves its results directory unusable, and the next run
-  fails before any test with `NoSuchFileException ... in-progress-results-generic.bin`. Delete
-  `build/test-results/<task>` and run again.
-- The js browser tests cannot run in a checkout whose path contains `#`, such as one under `#Kite`.
+  standard library function and reads like a compiler bug in your own code. Run `./kotlin clean`
+  and build again. A large edit across many files in one module does the same in a second shape:
+  the run fails with `NoClassDefFoundError` for one of our own classes, usually a companion,
+  because that class file was never written. `./kotlin clean` fixes that too.
+- The js browser tests cannot run in a checkout whose path contains `#`.
   Kotlin/JS serves each test file as `/absolute/<path>`, the browser cuts that URL at the `#`, and
   the task fails with two 404 lines and no test result. The wasmJs browser tests and both Node
   runners are unaffected, and CI's path has no `#`.
-- `audiovizSurvey` takes its classpath from `jvmTest`, so it depends on it: one red fast test stops
-  the whole survey before it draws anything. The XML you then read is the previous run's, with the
-  previous numbers. Compare the file's timestamp with the source you edited before you believe it.
-- The survey takes tens of minutes and holds a test worker of its own. A second Gradle build in
-  this checkout while it runs rewrites the classes under it, and the survey dies part way with a
+- `scripts/audioviz-tests.sh survey` compiles the whole jvm test source of kiteplayer-audioviz
+  first, so one compile error stops the survey before it draws anything. The report you then read
+  is the previous run's, with the previous numbers. Compare the file's timestamp with the source you
+  edited before you believe it.
+- The survey takes tens of minutes. A second build in this checkout while it runs rewrites the
+  classes under it, and the survey dies part way with a
   socket timeout or a missing class. Wait for it, or run the second build somewhere else.
-- Scraping every Gradle configuration gives a load-dependent answer, because which configurations
-  are realised depends on the rest of the task graph. The publication readiness check passed alone
-  and failed inside a full gate run, reporting that a publishing module depended on the sample,
-  which no build file says. Only `api`, `implementation`, `compileOnly` and `runtimeOnly` can reach
-  a POM.
-- A dependency bump that changes a JavaScript package, such as Ktor's, needs `./gradlew
-  kotlinUpgradeYarnLock` in the same commit. Without it every local web test run ends in `BUILD
-  FAILED` at `:kotlinStoreYarnLock` after the tests passed, and no CI job runs that check (#150).
-- The local Maven repository is opt-in here, behind a flag, and the build says so when it is on.
-  Never re-enable it unconditionally: the same version string with different bytes is
-  indistinguishable from the published one.
-- Neither `ci.yml` nor `publish.yml` passes that flag, so both resolve kiteffmpeg from Maven
-  Central only. Raising the catalog's kiteffmpeg version to one Central does not serve yet turns
+- Maven Local is a publish target only (`resolve: false` in `library.module-template.yaml`). To
+  build against a local KiteFFmpeg, add `mavenLocal` to that file's `repositories` for the session
+  only; `scripts/check-dependency-hygiene.sh` fails while it is there. Never commit it: the same
+  version string with different bytes is indistinguishable from the published one.
+- `ci.yml` and `publish.yml` therefore resolve kiteffmpeg from Maven Central only. Raising the catalog's kiteffmpeg version to one Central does not serve yet turns
   CI red on the next push and makes the publish fail. The sibling reaches Central first, then this
   repository is pushed and published.
 - The five Actions secrets are set, so `publish.yml` can upload. Dispatch it with the version as
-  an input; it is compared against `VERSION` in `gradle.properties` and a mismatch fails before any
-  work. It then runs the whole of `ci.yml` on the same commit, and the upload waits for it, so a
+  an input; it is compared against `settings.publishing.version` in
+  `library.module-template.yaml` and a mismatch fails before any work. It then runs the whole of `ci.yml` on the same commit, and the upload waits for it, so a
   release run takes as long as CI plus the upload and one flaky test stops a release. Leave the
-  `release` input off to land the deployment as USER_MANAGED and press Publish on the portal
-  yourself. Publishing from the maintainer's machine still works the same way, with the same five
-  credentials read from `~/.gradle/gradle.properties`, and runs no tests.
+  `release` input off to leave the validated deployment on the portal and press Publish there
+  yourself. Publishing from the maintainer's machine is `./kotlin publish mavenCentral`, with the
+  credentials in the `KOTLIN_TOOLCHAIN_MAVEN_CENTRAL_USERNAME`, `KOTLIN_TOOLCHAIN_MAVEN_CENTRAL_PASSWORD`,
+  `KOTLIN_TOOLCHAIN_SIGNING_KEY` and `KOTLIN_TOOLCHAIN_SIGNING_KEY_PASSPHRASE` environment
+  variables, and runs no tests.
 
-- A published module needs at least one source file in `commonMain`. A target with no source makes
+- A published module needs at least one source file in its common `src/` folder. A target with no source makes
   no klib, and its publication then fails with `FileNotFoundException` naming the missing klib.
   Compiling and testing never notice, so only a publish finds it.
 - A test task that finds test classes but no test to run fails the build ("did not discover any
   tests"), on the Android host and on a native target alike. A module whose common tests are only
-  abstract contract classes therefore breaks `./gradlew macosArm64Test` for the whole repository.
-  Keep one concrete test in `commonTest`.
-- `updateKotlinAbi` is per module, and the module you edited is often not the only one that moved.
+  abstract contract classes therefore breaks `./kotlin test -p macosArm64` for the whole repository.
+  Keep one concrete test in the common `test/` folder.
+- `./kotlin do updateAbi -m <module>` updates one module, and the module you edited is often not
+  the only one that moved. Without `-m` it updates every module.
   Adding a member to an interface in one module changes the dump of every published module that
   implements it, because the override joins their public surface too. The host gate catches it, one
   commit later than the change.
-- One unresolved KDoc link fails the macOS CI job, because the publication build runs Dokka with
-  warnings as errors, and it stops the job before its size and conformance steps. A link to a type
-  in another package needs an import or the full name, even in an internal class. Run
-  `./gradlew :<module>:dokkaGeneratePublicationHtml` locally; it takes about a minute.
+- One unresolved KDoc link fails the macOS CI job, because the Dokka plugin in `build-plugins/dokka`
+  runs with warnings as errors. A link to a type in another package needs an import or the full
+  name, even in an internal class. Run `./kotlin do dokka -m <module>` locally.
 
 ### Tests that fail for reasons that are not bugs
 
@@ -244,32 +234,21 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - A member function named like a POSIX call hides the call inside its class on Kotlin/Native. A
   `rename` that called `rename(from, to)` called itself, and the compiler said that `!=` cannot
   compare `Unit` with `Int`. Write `platform.posix.rename` in full there.
-- The atomicfu Gradle plugin is banned in every module: its bytecode transform registers a task
-  depending on a class-compilation task the Android plugin's multiplatform library variant does not
-  create. The library dependency itself is fine. This is the trap most likely to be re-triggered by
-  tidying a build file.
-- The one remaining Gradle deprecation here belongs to Dokka: its dependency manager calls
-  `Configuration.setVisible`, which Gradle 11 removes. Dokka 2.3.0-Beta still makes that call,
-  with no version check, from the same `declarable` helper in `GradleUtilsKt` as 2.2.0. That was
-  read from the plugin jar with `javap`, not from a build. The Kotlin plugin's old one
-  (`getTaskDependencyFromProjectDependency`, from its web target wiring) is gone on Kotlin 2.4.20.
-  The warning was measured with `--warning-mode all --stacktrace` on Dokka 2.2.0, Gradle 9.8.0 and
-  AGP 9.4.1; `help` alone shows nothing, a wasmJs task must be in the graph. Nothing here is
-  workable. At the next Dokka bump, look for `setVisible` in its plugin jar first; measure again
-  only if the call is gone.
-- Dokka stays on 2.2.0 here while the sibling builds with 2.3.0-Beta. On 2.3.0-Beta the API site
-  failed in `kiteplayer-output` with 24 unresolved links, all in documentation that its Apple
-  renderers and `CoreAudioSink` inherit from interfaces in `kiteplayer-core`, such as
-  `[RendererEvent.SurfaceLost]` and `[capacityFrames]`. The same inherited links resolve on the
-  JVM, Android and the web. Only a Mac reproduces it: `./gradlew
-  :kiteplayer-output:dokkaGeneratePublicationHtml`. CI's publish check stages four other modules,
-  so CI stays green while a real publish of `kiteplayer-output` would fail on the same warnings.
-  2.3.0-Beta also analyses a source set the JVM and Android share with no classpath; the
-  `jvmAndAndroidMain` classpath lines in five modules answer that and are harmless on 2.2.0.
+- The atomicfu library is a plain dependency. The Kotlin Toolchain applies no atomicfu bytecode
+  transform, so each atomic stays a real atomicfu object at run time.
+- The API site comes from the Dokka 2.3.0-Beta command line, which `build-plugins/dokka` runs for
+  each module. `./kotlin do dokka` writes the pages of each module, and `./kotlin do dokkaSite`
+  merges them into `build/dokka/html`. The plugin documents the common `src/` folder of a module. A
+  platform folder is on the site only when the module lists it under `dokka.platformSourceDirs`.
+- Under Gradle, Dokka 2.3.0-Beta failed in `kiteplayer-output` with 24 unresolved links. All were in
+  documentation that its Apple renderers and `CoreAudioSink` inherit from interfaces in
+  `kiteplayer-core`, such as `[RendererEvent.SurfaceLost]`. Expect the same when you add an Apple
+  folder to `dokka.platformSourceDirs`.
 - From Kotlin 2.4.20, ABI validation also writes an Android dump for each module, under
   `api/android/`, so the Android public API is guarded too. A Kotlin bump can add lines to every
   dump at once: 2.4.20 adds a no-argument JVM constructor to each class whose parameters all have
-  defaults. Run `./gradlew updateKotlinAbi` and read the diff before you commit it.
+  defaults. Run `./kotlin do updateAbi`, `./kotlin do updateKlibAbi`, `./kotlin do updateKlibOnlyAbi` and
+  `./kotlin do updateAndroidAbi`, and read the diff before you commit it.
 
 - An Objective-C category member is not on the Kotlin class: it is a package-level extension and
   needs its own import. `AVSampleBufferDisplayLayer.enqueueSampleBuffer`, its `status` and `error`,
@@ -490,9 +469,9 @@ Each line is something that bit someone. Delete a line when it stops being true.
   reads on the page as "nothing" and only a new warning breaks the build. Add each new member both
   ways and set it off its default in `WorkerProtocolTest`; three fields and a warning went missing
   this way at once (#517).
-- The worker browser test's karma file serves only the folders it lists, one pattern for each, so
-  a clip in a new folder of `testmedia` answers 404 there until `karma.config.d/worker.js` names
-  the folder (#546).
+- The worker browser tests read their test server from `scripts/web-tests/probe.mjs`, and
+  `scripts/web-tests/browser.mjs` serves all of `testmedia` beside it. A new kind of request that
+  a test makes to that server goes into `probe.mjs` (#546).
 - The player in a Web Worker has one thread, and FFmpeg waits for the next segment of a live
   playlist inside the read. Until the read-ahead is full nothing else runs: the open of a live DASH
   stream answers after 26 s, and a live stream that stops growing never answers again, so a test
@@ -618,14 +597,10 @@ Do not reopen these without new evidence.
   with that upscaler's wider ecosystem of user shaders is explicitly out of scope.
 - A descriptor-backed source gets positional reads, not documentation and not an engine-side
   duplicate. A duplicate shares the file offset, which is the bug itself.
-- A composite Gradle build was declined. The twin repositories resolve through published pins, or
+- A composite build was declined. The twin repositories resolve through published pins, or
   through an explicit opt-in to the local Maven repository.
-- Gradle artifact checksum verification is off, and the reason is measured rather than assumed.
-  Generating the metadata recorded 486 components from one JVM compile and the next task failed on
-  a detached configuration that Kotlin/Native and the Node setup resolve through and the generator
-  never sees. CI also runs on three operating systems, each resolving its own toolchain artifacts,
-  so a file written on one host cannot carry the other two. A dependency hygiene script guards what
-  can be guarded instead.
+- Artifact checksum verification is off. The Kotlin Toolchain has no lock file or verification file
+  for Maven downloads. A dependency hygiene script guards what can be guarded instead.
 
 ## Facts about the pair of repositories
 
@@ -659,10 +634,11 @@ optimized consumers that reference no network symbol.
 `kiteplayer-adaptive` holds the DASH reader and the reader of TTML subtitles in HLS, with no HTTP
 client (#546). Its packages are still `network.dash`, `network.xml` and `network`, so the public
 names did not move. `kiteplayer-network` gives it Ktor's requests and keeps the `Dash` object. The
-player in a Web Worker gives it synchronous requests, and names the module itself on wasmJs,
-because the worker binary excludes `kiteplayer-network` and everything that only it brings. What
+player in a Web Worker gives it synchronous requests, and names the module itself on wasmJs. What
 the two transports call is behind `KitePlayerInternalApi`: `DashDoor`, `DashTransport`, `HlsTtml`.
-Keep Ktor out of this module, or the worker binary grows by a quarter again.
+Keep Ktor out of this module. The worker binary already links `kiteplayer-network` and Ktor,
+because the Kotlin Toolchain cannot leave out a dependency that `kiteplayer` brings, and that
+costs 119,963 bytes after gzip (`scripts/check-web-size.sh`).
 
 `kiteplayer-libass` rides `kiteplayer` the same way and is discovered the same way, through
 `SubtitleTypesetterProvider`. The engine typesets only the primary ASS/SSA track, on the raster
@@ -697,5 +673,3 @@ waiting data, hands the track to the built-in styling.
   `-Dwerror=false` can undo; `-DHB_NO_PRAGMA_GCC_DIAGNOSTIC_ERROR` is its own switch for that, and
   emscripten's newer clang needs it. Times cross the module boundary as doubles, never 64-bit
   integers, so the big-integer flag is not needed; keep it that way.
-- A `which` at Gradle configuration time breaks the configuration cache. Probe a tool through
-  `providers.exec` instead.

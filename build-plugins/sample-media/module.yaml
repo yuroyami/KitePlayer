@@ -1,0 +1,13 @@
+product: jvm/amper-plugin
+
+description: Copies the test clip and the sample songs into assets/ of the Android sample.
+
+dependencies:
+  - //build-plugins/build-support
+
+settings:
+  kotlin:
+    version: 2.4.21
+  jvm:
+    jdk:
+      version: 21

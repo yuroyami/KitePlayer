@@ -1,0 +1,20 @@
+# The worker program that KitePlayerWorker.start loads: a second wasm executable whose main only
+# calls runKitePlayerWorker(). Everything it runs lives in kiteplayer. Not published.
+product: wasm-js/app
+
+apply:
+  - //kiteplayer.module-template.yaml
+
+dependencies:
+  - //kiteplayer
+
+test-dependencies:
+  - $libs.kotlinx.coroutines.test
+
+# The browser tests start a worker player, which loads the codec module and the libass module.
+plugins:
+  web-assets:
+    enabled: true
+    tests:
+      codec: true
+      libass: true

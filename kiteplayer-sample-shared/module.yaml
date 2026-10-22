@@ -1,0 +1,22 @@
+# The one screen that the desktop, Android and iOS samples share: a song on repeat, drawn by the
+# audio visualiser, with the drawing browser, the settings and transport controls over it.
+# An application part, not a library: no explicit API mode, no ABI dump, nothing published.
+product:
+  type: kmp/lib
+  platforms: [ jvm, android, iosArm64, iosSimulatorArm64 ]
+
+apply:
+  - //kiteplayer.module-template.yaml
+  - //android.module-template.yaml
+  - //compose.module-template.yaml
+
+dependencies:
+  - //kiteplayer-compose: exported
+  - //kiteplayer-audioviz: exported
+  - $compose.runtime
+  - $compose.ui
+  - $compose.foundation
+
+settings:
+  android:
+    namespace: io.github.yuroyami.kiteplayer.sample.shared

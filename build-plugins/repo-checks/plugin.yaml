@@ -1,0 +1,17 @@
+# Repository-wide checks. Enable the plugin on one module only, so each check runs once.
+tasks:
+  kitertCoupling:
+    action: !io.github.yuroyami.kiteplayer.build.checks.checkKitertCoupling
+      repoRoot: ${project.rootDir}
+
+  duplicateClasses:
+    action: !io.github.yuroyami.kiteplayer.build.checks.checkDuplicateClasses
+      repoRoot: ${project.rootDir}
+
+checks:
+  # The kitert cinterop is named only where kitert-coupling-baseline.txt allows it.
+  - name: kitertCoupling
+    performedBy: kitertCoupling
+  # No two published modules compile a class of the same name. Run `./kotlin build -p jvm -p android` first.
+  - name: duplicateClasses
+    performedBy: duplicateClasses

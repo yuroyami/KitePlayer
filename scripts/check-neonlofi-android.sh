@@ -16,8 +16,8 @@ sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 if [[ -z "$sdk" ]]; then sdk="$(sed -n 's/^sdk.dir=//p' local.properties)"; fi
 adb="$sdk/platform-tools/adb"
 "$adb" -s "$serial" get-state
-./gradlew --no-parallel --max-workers=1 :kiteplayer-audioviz:jvmTest --rerun \
-    --tests '*NeonLoFiRenderTest.musicalRoadAtPhoneAndWideSizesWithBothBackgrounds'
+KOTLIN_CLI_NO_WELCOME_BANNER=1 ./kotlin test -m kiteplayer-audioviz -p jvm \
+    --include-test=io.github.yuroyami.kiteplayer.audioviz.NeonLoFiRenderTest.musicalRoadAtPhoneAndWideSizesWithBothBackgrounds
 build_tools="$(python3 - "$sdk" <<'PY'
 import pathlib,re,sys
 paths=[p for p in (pathlib.Path(sys.argv[1])/'build-tools').iterdir() if (p/'d8').is_file()]

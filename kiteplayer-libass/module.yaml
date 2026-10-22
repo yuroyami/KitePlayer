@@ -1,0 +1,152 @@
+# The optional full ASS renderer: the libass typesetter for ASS and SSA subtitles.
+#
+# Native platforms reach libass through cinterop. The libass-native plugin merges the libass chain
+# of each target into one archive and writes the libass definition from native/libass.def. The
+# desktop JVM loads a JNI library from this jar, and Android loads one from
+# kiteplayer-libass-android-natives. The chain comes from KiteFFmpeg: see AssChain in
+# build-plugins/build-support for the three places a build finds it.
+product:
+  type: kmp/lib
+  platforms: [ jvm, android, macosArm64, iosArm64, iosSimulatorArm64, linuxX64, linuxArm64, mingwX64, js, wasmJs ]
+
+aliases:
+  - jvmAndAndroid: [ jvm, android ]
+  # The tests that render real frames on a desktop host.
+  - hostRender: [ macosArm64, jvm ]
+  # The tests that read the host's system fonts.
+  - systemFonts: [ linuxX64, linuxArm64, jvm ]
+
+apply:
+  - //kiteplayer.module-template.yaml
+  - //android.module-template.yaml
+  - //library.module-template.yaml
+
+dependencies:
+  - //kiteplayer-core: exported
+
+# The Android JNI library ships in a plain jar, which AGP unpacks into the APK's lib/ folder.
+dependencies@android:
+  - //kiteplayer-libass-android-natives
+
+test-dependencies:
+  - $libs.kotlinx.coroutines.test
+
+test-dependencies@hostRender:
+  - //kiteplayer-ffmpeg
+  - //kiteplayer-output
+  - $libs.kotlinx.atomicfu
+
+settings:
+  kotlin:
+    freeCompilerArgs: [ -Xexpect-actual-classes ]
+  android:
+    namespace: io.github.yuroyami.kiteplayer.libass
+  publishing:
+    pom:
+      name: kiteplayer-libass
+      description: The libass typesetter for ASS and SSA subtitles in KitePlayer. It registers itself.
+      licenses:
+        - name: ISC License (bundled libass)
+          url: https://github.com/libass/libass/blob/master/COPYING
+        - name: MIT License (bundled HarfBuzz)
+          url: https://github.com/harfbuzz/harfbuzz/blob/main/COPYING
+        - name: The FreeType License (bundled FreeType)
+          url: https://gitlab.freedesktop.org/freetype/freetype/-/blob/master/docs/FTL.TXT
+        - name: GNU Lesser General Public License, Version 2.1 or later (bundled FriBidi)
+          url: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt
+        - name: GNU Lesser General Public License, Version 2.0 or later (bundled GNU libiconv, Windows JVM adapter)
+          url: https://www.gnu.org/licenses/old-licenses/lgpl-2.0.txt
+
+plugins:
+  # Puts kiteass.mjs and kiteass.wasm into testResources@wasmJs/, beside the compiled web tests.
+  web-assets:
+    enabled: true
+    tests:
+      libass: true
+  publication-check:
+    enabled: true
+  libass-native: enabled
+  abi-check:
+    enabled: true
+    androidDumpDir: api/android
+    klibPlatforms: [ iosArm64, iosSimulatorArm64, js, linuxArm64, linuxX64, macosArm64, mingwX64, wasmJs ]
+  dokka:
+    enabled: true
+    moduleName: kiteplayer-libass
+
+
+# The JVM tests run in the module folder. They read the clips of scripts/testmedia.sh from here.
+test-settings@jvm:
+  jvm:
+    test:
+      extraEnvironment:
+        KITEPLAYER_TESTMEDIA: ../testmedia
+
+# Gradle named the klib "io.github.yuroyami:kiteplayer-libass". Keep that name, or libraries built against earlier
+# releases fail to link on Kotlin/Native. Set it per platform: on @native, it also renames the
+# klibs of shared native code, which must keep their own names.
+settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-libass, -Xshort-module-name=kiteplayer-libass ]
+
+settings@iosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-libass, -Xshort-module-name=kiteplayer-libass ]
+
+settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-libass, -Xshort-module-name=kiteplayer-libass ]
+
+settings@linuxX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-libass, -Xshort-module-name=kiteplayer-libass ]
+
+settings@linuxArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-libass, -Xshort-module-name=kiteplayer-libass ]
+
+settings@mingwX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-libass, -Xshort-module-name=kiteplayer-libass ]
+
+settings@js:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-libass ]
+
+settings@wasmJs:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-libass ]
+
+# Tests compile into their own klib, which needs a different name. The test blocks name the
+# same platforms as the blocks above, so the toolchain applies them last.
+test-settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-libass_test, -Xshort-module-name=kiteplayer-libass_test ]
+
+test-settings@iosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-libass_test, -Xshort-module-name=kiteplayer-libass_test ]
+
+test-settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-libass_test, -Xshort-module-name=kiteplayer-libass_test ]
+
+test-settings@linuxX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-libass_test, -Xshort-module-name=kiteplayer-libass_test ]
+
+test-settings@linuxArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-libass_test, -Xshort-module-name=kiteplayer-libass_test ]
+
+test-settings@mingwX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-libass_test, -Xshort-module-name=kiteplayer-libass_test ]
+
+test-settings@js:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=kiteplayer-libass_test ]
+
+test-settings@wasmJs:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=kiteplayer-libass_test ]

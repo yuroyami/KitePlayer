@@ -1,0 +1,5 @@
+# The Compose Multiplatform version of every Compose module and sample. The $compose.* libraries follow it.
+settings:
+  compose:
+    enabled: true
+    version: 1.13.0-alpha02

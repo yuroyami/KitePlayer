@@ -118,9 +118,9 @@ a temporary window; keep it visible. Timing assertions do not run in the ordinar
 unit-test gate.
 
 ```sh
-./gradlew :kiteplayer-audioviz:audiovizBenchmark
-./gradlew :kiteplayer-audioviz:audiovizDesktopBenchmark
-./gradlew :kiteplayer-audioviz:audiovizSurvey --tests '*DrawCostTest' --tests '*PostSheetTest'
+./scripts/audioviz-tests.sh benchmark
+./scripts/audioviz-tests.sh desktop-benchmark
+./kotlin test -m kiteplayer-audioviz -p jvm --include-classes='*.DrawCostTest' --include-classes='*.PostSheetTest'
 ```
 
 The CPU benchmark reports minimum, median and 95th percentile. The desktop

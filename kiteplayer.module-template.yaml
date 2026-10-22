@@ -1,0 +1,17 @@
+# Settings that every KitePlayer module shares. Each module.yaml applies this file.
+
+settings:
+  kotlin:
+    # Keep kotlinAbiTools in libs.versions.toml at the same version.
+    version: 2.4.21
+  jvm:
+    jdk:
+      version: 21
+    # Java 11 bytecode and the Java 11 API, so an application on Java 11 or 17 can load the
+    # JVM and Android classes.
+    release: 11
+
+# The tests may call the Java 21 API. Only the main code must load on Java 11.
+test-settings:
+  jvm:
+    release: 21

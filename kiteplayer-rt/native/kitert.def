@@ -1,0 +1,35 @@
+# cinterop for the KitePlayer real-time audio ring.
+#
+# One module, one header, no third party header anywhere. That is the whole point of the split:
+# `kite_rt.h` includes only <stdint.h>, so this def drags in no FFmpeg type, no platform type and no
+# struct whose layout a consumer's own libraries could disagree about. Compare KiteFFmpeg's
+# `ffmpeg.def`, which emits 82 CStructVar classes because cinterop pulls in every complete type
+# reachable from a bound signature.
+#
+# `headerFilter` keeps <stdint.h>'s own declarations out of the generated bindings, so the Kotlin
+# side sees the kprt_ functions and the two small structs and nothing else.
+#
+# `staticLibraries` names the archive that the kitert-c build plugin produces. The directory it lives
+# in is NOT given here, because there is one archive directory per konan target. The plugin copies
+# this def once per target and adds that target's `libraryPaths` line to the copy.
+#
+# One linkerOpts line for each supported Apple device target. The ring needs libc and nothing else,
+# and libc is already in every link Kotlin/Native performs. The audio device's AudioUnit entry points
+# live in AudioToolbox, so both the DefaultOutput implementation on macOS and the RemoteIO
+# implementation on iOS link that framework. Unsupported targets compile the device unit to refusals
+# and reference no framework.
+#
+# `mach_absolute_time` and `mach_timebase_info` are in libSystem and need no flag. There is no
+# `-framework CoreAudio` because nothing in the shipped library calls it; the one place
+# `AudioConvertHostTimeToNanos` and `AudioGetCurrentHostTime` are used is
+# `native/tests/test_sink_timebase.c`, which is a host test binary and links its own frameworks.
+#
+# The lesson of the iOS flags that went missing from KiteFFmpeg's def is not "declare
+# every platform": it is "declare exactly what the code on that platform needs". These two flags map
+# exactly to the two active implementation arms.
+package = io.github.yuroyami.kiteplayer.rt.cinterop
+headers = kite_rt.h
+headerFilter = kite_rt.h
+staticLibraries = libkiteplayerrt.a
+linkerOpts.osx = -framework AudioToolbox
+linkerOpts.ios = -framework AudioToolbox

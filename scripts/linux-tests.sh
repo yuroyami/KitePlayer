@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # Runs KitePlayer's Kotlin/Native test binaries on real Linux, from a macOS host.
 #
-# Why this exists: Gradle creates linuxX64Test / linuxArm64Test but permanently disables them on a
-# macOS host, so a gate that names those tasks is green by definition. Kotlin/Native CROSS-LINKS the
-# binaries here; this script is what actually EXECUTES them, in a Linux container.
+# Why this exists: a macOS host can link the Linux test binaries but cannot run them. This script
+# links them with the Kotlin Toolchain and EXECUTES them in a Linux container.
 #
 #   ./scripts/linux-tests.sh                # linuxArm64, native speed on Apple silicon
 #   ./scripts/linux-tests.sh linuxX64       # linuxX64, emulated, slow
@@ -14,8 +13,8 @@ set -euo pipefail
 
 TARGET="${1:-linuxArm64}"
 case "$TARGET" in
-  linuxArm64) PLATFORM=linux/arm64; LINK_SUFFIX=LinuxArm64 ;;
-  linuxX64)   PLATFORM=linux/amd64; LINK_SUFFIX=LinuxX64 ;;
+  linuxArm64) PLATFORM=linux/arm64; LINK_TASK=linkLinuxArm64TestDebug ;;
+  linuxX64)   PLATFORM=linux/amd64; LINK_TASK=linkLinuxX64TestDebug ;;
   *) echo "usage: $0 [linuxArm64|linuxX64]" >&2; exit 2 ;;
 esac
 
@@ -29,24 +28,22 @@ DOCKER_CONFIG="${DOCKER_CONFIG:-$(mktemp -d)}"
 [ -f "$DOCKER_CONFIG/config.json" ] || echo '{}' > "$DOCKER_CONFIG/config.json"
 export DOCKER_CONFIG
 
-GRADLE_TASKS=()
-for module in "${MODULES[@]}"; do
-  GRADLE_TASKS+=(":$module:linkDebugTest$LINK_SUFFIX")
-done
 # The published kiteffmpeg klibs carry FFmpeg for both Linux targets, so the link needs nothing from
 # the sibling KiteFFmpeg checkout.
-echo "== linking ${GRADLE_TASKS[*]}"
-"$ROOT/gradlew" -p "$ROOT" "${GRADLE_TASKS[@]}"
+for module in "${MODULES[@]}"; do
+  echo "== linking :$module:$LINK_TASK"
+  (cd "$ROOT" && KOTLIN_CLI_NO_WELCOME_BANNER=1 ./kotlin task ":$module:$LINK_TASK")
+done
 
 status=0
 for module in "${MODULES[@]}"; do
-  binary="$module/build/bin/$TARGET/debugTest/test.kexe"
-  [ -f "$ROOT/$binary" ] || { echo "MISSING $binary"; status=1; continue; }
+  binary=$(cd "$ROOT" && find "build/tasks/_${module}_$LINK_TASK" -maxdepth 1 -name '*.kexe' -type f | head -1)
+  [ -n "$binary" ] || { echo "MISSING the test binary of $module"; status=1; continue; }
   echo "== running $binary on $PLATFORM"
-  # TMPDIR is unset in a bare container and the suites refuse to guess; the media path is passed
-  # explicitly for the same reason the native Gradle tasks pass it.
+  # TMPDIR is unset in a bare container and the suites refuse to guess. The media path is passed
+  # explicitly, as scripts/test-env.sh does on the host. The suites run in their module folder.
   if docker run --rm --platform "$PLATFORM" -e TMPDIR=/tmp -e KITEPLAYER_TESTMEDIA=/w/testmedia \
-      -v "$ROOT:/w" -w /w "$IMAGE" "./$binary" | tail -3; then
+      -v "$ROOT:/w" -w "/w/$module" "$IMAGE" "/w/$binary" | tail -3; then
     :
   else
     status=1

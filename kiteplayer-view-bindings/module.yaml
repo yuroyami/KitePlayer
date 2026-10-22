@@ -1,0 +1,56 @@
+# The FFmpeg adapters of the native video views. They stay below the standard runtime, so the
+# Compose modules can show a caller's player without picking a factory or a network transport.
+product:
+  type: kmp/lib
+  platforms: [ jvm, android, iosArm64, iosSimulatorArm64 ]
+
+apply:
+  - //kiteplayer.module-template.yaml
+  - //android.module-template.yaml
+  - //library.module-template.yaml
+
+dependencies:
+  - //kiteplayer-core: exported
+  - //kiteplayer-view: exported
+  - //kiteplayer-ffmpeg
+  - //kiteplayer-output
+
+settings:
+  android:
+    namespace: io.github.yuroyami.kiteplayer.view.bindings
+  publishing:
+    pom:
+      name: kiteplayer-view-bindings
+      description: The FFmpeg adapters that KitePlayer's native video views need.
+
+plugins:
+  publication-check:
+    enabled: true
+  abi-check:
+    enabled: true
+    androidDumpDir: api/android
+    klibPlatforms: [ iosArm64, iosSimulatorArm64 ]
+  dokka:
+    enabled: true
+    moduleName: kiteplayer-view-bindings
+
+# Gradle named the klib "io.github.yuroyami:kiteplayer-view-bindings". Keep that name, or libraries built against earlier
+# releases fail to link on Kotlin/Native. Set it per platform: on @native, it also renames the
+# klibs of shared native code, which must keep their own names.
+settings@iosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-view-bindings, -Xshort-module-name=kiteplayer-view-bindings ]
+
+settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-view-bindings, -Xshort-module-name=kiteplayer-view-bindings ]
+
+# Tests compile into their own klib, which needs a different name. The test blocks name the
+# same platforms as the blocks above, so the toolchain applies them last.
+test-settings@iosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-view-bindings_test, -Xshort-module-name=kiteplayer-view-bindings_test ]
+
+test-settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-view-bindings_test, -Xshort-module-name=kiteplayer-view-bindings_test ]

@@ -1,0 +1,42 @@
+[versions] #######################################################################################
+# The Kotlin and Compose versions are module settings (`settings.kotlin.version` and
+# `settings.compose.version` in kiteplayer.module-template.yaml), not catalog entries.
+kiteffmpeg = "0.5.1"
+ktor = "3.6.0"
+# 3D maths for the audio visualiser's perspective camera. A sibling Kite library.
+kite3d = "0.2.0"
+
+coroutines = "1.11.0"
+atomicfu = "0.33.0"
+androidxTestCore = "1.8.0-alpha01"
+androidxTestRunner = "1.8.0-alpha01"
+androidxTestExtJunit = "1.4.0-alpha01"
+# The sample's Android activity host for Compose.
+androidxActivityCompose = "1.14.0-alpha03"
+# The ABI dump library of build-plugins/abi-check. Keep it equal to settings.kotlin.version.
+kotlinAbiTools = "2.4.21"
+
+[libraries]
+kite3d = { module = "io.github.yuroyami:kite3d", version.ref = "kite3d" }
+# The codec backend.
+kiteffmpeg = { module = "io.github.yuroyami:kiteffmpeg", version.ref = "kiteffmpeg" }
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
+ktor-client-js = { module = "io.ktor:ktor-client-js", version.ref = "ktor" }
+ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
+ktor-server-cio = { module = "io.ktor:ktor-server-cio", version.ref = "ktor" }
+ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+# The Android Main dispatcher factory. Applications only (the sample); no library module needs Main.
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+# The atomicfu library only. The toolchain applies no atomicfu bytecode transform, so each atomic
+# field costs one wrapper object, allocated once with its owner.
+kotlinx-atomicfu = { module = "org.jetbrains.kotlinx:atomicfu", version.ref = "atomicfu" }
+androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTestCore" }
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTestRunner" }
+androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "androidxTestExtJunit" }
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidxActivityCompose" }
+kotlin-abi-tools-api = { module = "org.jetbrains.kotlin:abi-tools-api", version.ref = "kotlinAbiTools" }
+kotlin-abi-tools = { module = "org.jetbrains.kotlin:abi-tools", version.ref = "kotlinAbiTools" }

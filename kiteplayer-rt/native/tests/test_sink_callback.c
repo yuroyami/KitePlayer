@@ -12,7 +12,7 @@
  * WHY IT CAN DRIVE THE REAL BODY. The ordinary and long cases call `kprt_render_into`, the named
  * sample-moving body of the callback. Malformed AudioBufferList cases call the static
  * `kprt_render_cb` through `kprt_test_invoke_render_callback`, a seam compiled only when
- * build-host.sh defines KPRT_TESTING. CompileKiteRtTask never defines that macro, so the seam is
+ * build-host.sh defines KPRT_TESTING. CompileKiteRt never defines that macro, so the seam is
  * absent from shipped archives and cinterop while these cases still exercise the actual callback
  * guards rather than a test reimplementation.
  *

@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Stage exact checkout publications, then prove automatic transport from an isolated consumer.
 # The endpoint must serve nonempty bytes. iOS starts only the explicitly selected simulator.
+# The consumer is a Gradle build (verification/network-consumer), so it proves what Gradle users get.
 set -euo pipefail
 
 probe_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 probe_consumer="$probe_root/verification/network-consumer"
 probe_repository="$probe_root/build/verification-maven"
-probe_version="$(sed -n 's/^VERSION[[:space:]]*=[[:space:]]*//p' "$probe_root/gradle.properties" | tr -d '\r')"
+probe_gradlew="$probe_root/verification/gradlew"
+probe_version="$(sed -n 's/^    version:[[:space:]]*//p' "$probe_root/library.module-template.yaml" | tr -d '\r')"
 probe_stage=false
 probe_run=false
 probe_target=all
@@ -61,7 +63,7 @@ done
 if [[ "$probe_stage" == true && "$probe_refresh" == false ]]; then
     echo 'Do not reuse dependency caches while staging new bytes.' >&2; exit 2
 fi
-[[ -n "$probe_version" && "$probe_version" != *$'\n'* ]] || { echo 'Expected one root VERSION property' >&2; exit 2; }
+[[ -n "$probe_version" && "$probe_version" != *$'\n'* ]] || { echo 'Expected one publishing version in library.module-template.yaml' >&2; exit 2; }
 case "$probe_target" in jvm|macos|ios|wasm|android|all) ;; *) usage >&2; exit 2 ;; esac
 
 selected() { [[ "$probe_target" == all || "$probe_target" == "$1" ]]; }
@@ -81,19 +83,10 @@ if [[ "$probe_run" == true ]]; then
 fi
 
 if [[ "$probe_stage" == true ]]; then
-    probe_publications=()
     # kiteplayer-network reads DASH through kiteplayer-adaptive, which reads XML through
     # kiteplayer-subtitles, so its metadata names both modules.
-    for probe_module in kiteplayer-core kiteplayer-network kiteplayer-adaptive kiteplayer-subtitles; do
-        for probe_platform in KotlinMultiplatform Jvm MacosArm64 IosSimulatorArm64 WasmJs Android; do
-            probe_publications+=(":$probe_module:publish${probe_platform}PublicationToVerificationRepository")
-        done
-    done
-    for probe_platform in KotlinMultiplatform MacosArm64 IosSimulatorArm64; do
-        probe_publications+=(":kiteplayer-rt:publish${probe_platform}PublicationToVerificationRepository")
-    done
-    "$probe_root/gradlew" -p "$probe_root" --no-configuration-cache --no-parallel \
-        -I "$probe_consumer/stage.init.gradle.kts" "${probe_publications[@]}"
+    "$probe_root/scripts/stage-verification-maven.sh" \
+        kiteplayer-core kiteplayer-network kiteplayer-adaptive kiteplayer-subtitles kiteplayer-rt
 fi
 [[ "$probe_run" == true ]] || exit 0
 [[ -d "$probe_repository" ]] || { echo 'Run --stage before --run' >&2; exit 2; }
@@ -111,7 +104,7 @@ for probe_enabled in false true; do
     if [[ "$probe_enabled" == true ]]; then probe_variant=with-network; else probe_variant=without-network; fi
     probe_build="$probe_consumer/build/$probe_variant"
     mkdir -p "$probe_build/probe-logs"
-    probe_gradle=("$probe_root/gradlew" -p "$probe_consumer" --no-configuration-cache --no-parallel
+    probe_gradle=("$probe_gradlew" -p "$probe_consumer" --no-daemon --no-configuration-cache --no-parallel
         "-PwithNetwork=$probe_enabled" "-PkiteplayerVersion=$probe_version"
         "-PverificationRepository=$probe_repository" "-PprobeUrl=$probe_url" "-PexpectNetwork=$probe_enabled")
     if [[ "$probe_refresh" == true ]]; then probe_gradle+=(--refresh-dependencies); fi

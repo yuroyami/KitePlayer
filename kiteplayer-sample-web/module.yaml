@@ -1,0 +1,26 @@
+# The web sample. By default the page plays ./clip.mp4 through KiteVideo with the Compose controls
+# over the picture, and reports what each frame costs. With ?probe it runs the web upload probe.
+# Not published.
+product: wasm-js/app
+
+apply:
+  - //kiteplayer.module-template.yaml
+  - //compose.module-template.yaml
+
+dependencies:
+  - $libs.kiteffmpeg
+  - //kiteplayer
+  - //kiteplayer-compose
+  - //kiteplayer-compose-video
+  - $compose.runtime
+  - $compose.ui
+  - $compose.foundation
+
+plugins:
+  # Puts kite.mjs, kite.wasm, kiteass.mjs, kiteass.wasm and clip.mp4 into resources/.
+  web-assets:
+    enabled: true
+    page:
+      codec: true
+      libass: true
+      clip: true

@@ -1,0 +1,15 @@
+# The iOS sample app. It opens on the shared visualiser screen of kiteplayer-sample-shared.
+# Launch arguments open the UIKit screen instead (see README.md). Not published.
+product:
+  type: ios/app
+  platforms: [ iosArm64, iosSimulatorArm64 ]
+
+apply:
+  - //kiteplayer.module-template.yaml
+  - //compose.module-template.yaml
+
+dependencies:
+  # The standard runtime carries the default backend, output, network and native view.
+  - //kiteplayer
+  # The shared Compose screen, with the audio visualiser.
+  - //kiteplayer-sample-shared

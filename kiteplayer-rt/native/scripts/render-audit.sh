@@ -43,7 +43,7 @@ AR="${KPRT_AR:-/usr/bin/ar}"
 OTOOL="${KPRT_OTOOL:-/usr/bin/otool}"
 
 # The flag set the shipped archive is built with, copied from
-# buildSrc/src/main/kotlin/CompileKiteRtTask.kt. Checked against that file below rather than trusted,
+# build-plugins/build-support/src/CompileKiteRt.kt. Checked against that file below rather than trusted,
 # because an audit compiled with different flags than the shipped object audits nothing.
 SHIPPED_FLAGS="-O2 -std=c11 -fvisibility=hidden -fPIC -Wall -Wextra -Werror -Werror=vla"
 
@@ -117,7 +117,7 @@ bad() {
 # has never built the Gradle project. Which one was used is printed, because the two are not
 # interchangeable evidence.
 #
-# The preferred package name is CompileKiteRtTask's DEFAULT_LLVM_PACKAGE. Taking the first glob match
+# The preferred package name is CompileKiteRt's DEFAULT_LLVM_PACKAGE. Taking the first glob match
 # instead picked llvm-19 out of the three packages installed here, which is not the compiler anything
 # ships with; measured, not guessed.
 PREFERRED_LLVM="llvm-21-aarch64-macos-essentials-97"
@@ -143,7 +143,7 @@ pick_compiler() {
 CC="${KPRT_CC:-$(pick_compiler)}"
 
 # konan's clang carries no default sysroot, so the SDK has to be named explicitly, exactly as
-# CompileKiteRtTask does inside its task action. Apple clang finds it on its own and does not mind
+# CompileKiteRt does inside its task action. Apple clang finds it on its own and does not mind
 # being told.
 SDK_PATH="$(xcrun --sdk macosx --show-sdk-path 2>/dev/null || true)"
 SYSROOT_ARGS=""
@@ -383,27 +383,27 @@ audit_source_platform_selection() {
 
 # ---- 1. The shipped flag set really is the shipped flag set ----
 
-TASK="$MODULE/../buildSrc/src/main/kotlin/CompileKiteRtTask.kt"
+TASK="$MODULE/../build-plugins/build-support/src/CompileKiteRt.kt"
 if [ ! -f "$TASK" ]; then
-    bad "cannot find CompileKiteRtTask.kt at $TASK, so the audit cannot prove it used the shipped flags"
+    bad "cannot find CompileKiteRt.kt at $TASK, so the audit cannot prove it used the shipped flags"
 else
     missing=""
     for flag in $SHIPPED_FLAGS; do
         grep -q -- "\"$flag\"" "$TASK" || missing="$missing $flag"
     done
     if [ -n "$missing" ]; then
-        bad "CompileKiteRtTask does not carry these flags this audit compiles with:$missing"
+        bad "CompileKiteRt does not carry these flags this audit compiles with:$missing"
     else
-        ok "every flag this audit compiles with is in CompileKiteRtTask's COMPILER_FLAGS"
+        ok "every flag this audit compiles with is in CompileKiteRt's COMPILER_FLAGS"
     fi
 fi
 
 # -Werror=vla in both flag sets. A variable length array is an allocation no symbol list can show, so
 # the compiler has to be the one refusing it, in the shipped build and in the host build alike.
 if grep -q -- '"-Werror=vla"' "$TASK" 2>/dev/null; then
-    ok "the shipped build refuses a variable length array (-Werror=vla in CompileKiteRtTask)"
+    ok "the shipped build refuses a variable length array (-Werror=vla in CompileKiteRt)"
 else
-    bad "-Werror=vla is missing from CompileKiteRtTask, so a VLA could reach a real-time path"
+    bad "-Werror=vla is missing from CompileKiteRt, so a VLA could reach a real-time path"
 fi
 if grep -q -- '-Werror=vla' "$HERE/build-host.sh"; then
     ok "the host build refuses a variable length array (-Werror=vla in build-host.sh)"
@@ -468,10 +468,16 @@ fi
 # optional archives and says so. Once any one exists, all three are required: that makes the iOS
 # gate incapable of silently auditing macOS while skipping either phone archive.
 
-SHIPPED_ROOT="$MODULE/build/kiteplayer-rt-c"
-MACOS_ARCHIVE="$SHIPPED_ROOT/macos_arm64/libkiteplayerrt.a"
-IOS_DEVICE_ARCHIVE="$SHIPPED_ROOT/ios_arm64/libkiteplayerrt.a"
-IOS_SIM_ARCHIVE="$SHIPPED_ROOT/ios_simulator_arm64/libkiteplayerrt.a"
+# The kitert-c build plugin writes one archive per konan target into its task folder under the
+# repository's build/tasks. Not found prints a path that does not exist, so the checks below say so.
+shipped_archive() { # <konan target>
+    local found
+    found=$(find "$MODULE/../build/tasks" -maxdepth 3 -type f -path "*kiteplayer-rt*/$1/libkiteplayerrt.a" 2>/dev/null | head -1)
+    echo "${found:-$MODULE/../build/tasks/<kitert-c task>/$1/libkiteplayerrt.a}"
+}
+MACOS_ARCHIVE="$(shipped_archive macos_arm64)"
+IOS_DEVICE_ARCHIVE="$(shipped_archive ios_arm64)"
+IOS_SIM_ARCHIVE="$(shipped_archive ios_simulator_arm64)"
 SHIPPED_FOUND=0
 SHIPPED_MISSING=""
 for archive in "$MACOS_ARCHIVE" "$IOS_DEVICE_ARCHIVE" "$IOS_SIM_ARCHIVE"; do
@@ -540,7 +546,7 @@ find_llvm_ar() {
     find "$konan_root" -maxdepth 3 -type f -path '*/llvm-*/bin/llvm-ar' 2>/dev/null | sort | tail -1
 }
 
-LINUX_ARCHIVE="$MODULE/build/kiteplayer-rt-c/linux_arm64/libkiteplayerrt.a"
+LINUX_ARCHIVE="$(shipped_archive linux_arm64)"
 LLVM_AR="$(find_llvm_ar)"
 if [ -f "$LINUX_ARCHIVE" ] && [ -n "$LLVM_AR" ] && [ -x "$LLVM_AR" ]; then
     linux_extract="$WORK/shipped-linux-arm64"
@@ -553,7 +559,7 @@ if [ -f "$LINUX_ARCHIVE" ] && [ -n "$LLVM_AR" ] && [ -x "$LLVM_AR" ]; then
     fi
 else
     say "note: the ELF arm did not run (archive $LINUX_ARCHIVE, llvm-ar ${LLVM_AR:-not found})"
-    say "      run ./gradlew :kiteplayer-rt:compileKotlinLinuxArm64 to build it"
+    say "      run ./kotlin build -m kiteplayer-rt -p linuxArm64 to build it"
 fi
 
 # ---- 5c. The counters are lock free on 32-bit ARM ----

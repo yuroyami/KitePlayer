@@ -1,0 +1,7 @@
+# The Android SDK levels of every module that builds for Android.
+settings:
+  android:
+    compileSdk:
+      apiLevel: 37
+      minorApiLevel: 2
+    minSdk: 26

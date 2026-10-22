@@ -42,9 +42,13 @@ Stage only the core, network and native audio ring publications:
 scripts/verify-network-distribution.sh --stage
 ```
 
-This writes to `build/verification-maven`, not to Maven Local or Maven Central. The consumer
+`scripts/stage-verification-maven.sh` publishes these modules to Maven Local in one `./kotlin publish mavenLocal` call.
+Then it copies only this version of these modules from Maven Local into `build/verification-maven`. The consumer
 resolves the KitePlayer group only from that directory. A released artifact with the same version
 therefore cannot replace the bytes under test.
+
+The consumer itself is a Gradle build. It uses the Gradle wrapper in `verification/`, so it checks
+what a Gradle user of KitePlayer gets.
 
 ## Run a target
 
@@ -71,9 +75,12 @@ scripts/verify-network-distribution.sh --run --target android --android-serial e
 The native targets use release executables, and Wasm uses the optimised production build. Android
 uses a release build that is not debuggable, with R8 on, and the script requires its mapping file.
 
-The Android app adds no references to the network provider and no keep rules of its own, so any
-rules R8 needs must come from the published dependency. The app also declares no INTERNET
-permission. The network artifact has to supply it.
+The Android app adds no keep rules of its own, so any rules R8 needs must come from the published
+dependency. An Android archive that the Kotlin Toolchain builds carries no manifest entries. So the
+network build of the app declares the INTERNET and ACCESS_NETWORK_STATE permissions and the network
+provider itself, in `android-app/src/network/AndroidManifest.xml`. The
+[module contract](../../docs/module-contract.md#automatic-network-transport) tells every app to do
+the same.
 
 Outputs and logs go to `verification/network-consumer/build/without-network` and
 `verification/network-consumer/build/with-network`. This folder only describes the check. Its

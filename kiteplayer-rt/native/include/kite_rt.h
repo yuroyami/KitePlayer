@@ -441,7 +441,7 @@ typedef struct kprt_sink kprt_sink;
 
 /* Host-test-only shape for driving the actual AudioUnit callback without an audio device.
  *
- * KPRT_TESTING is defined only by native/scripts/build-host.sh. CompileKiteRtTask never defines it,
+ * KPRT_TESTING is defined only by native/scripts/build-host.sh. CompileKiteRt never defines it,
  * so neither this declaration nor its implementation exists in any shipped archive or cinterop
  * surface. Keeping CoreAudio's AudioBufferList out of this header preserves the public boundary's
  * platform-neutral, <stdint.h>-only contract. */

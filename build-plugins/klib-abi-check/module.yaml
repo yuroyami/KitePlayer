@@ -1,0 +1,14 @@
+product: jvm/amper-plugin
+
+description: Checks the klib ABI of a native-only library against a committed dump. For a module without JVM classes, where abi-check cannot run.
+
+pluginInfo:
+  settingsClass: io.github.yuroyami.buildplugins.klibabi.KlibAbiCheckSettings
+
+dependencies:
+  - $libs.kotlin.abi.tools.api
+  - $libs.kotlin.abi.tools: runtime-only
+
+settings:
+  kotlin:
+    version: 2.4.21

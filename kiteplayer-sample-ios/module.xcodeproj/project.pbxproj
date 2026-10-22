@@ -1,0 +1,235 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXFileReference section */
+		312EA26A2DF26DD7F00C81B6 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.info; name = Info.plist; path = src/Info.plist; sourceTree = "<group>"; };
+		312EA4307B516FE27ACDAAF4 /* KitePlayerSample.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = KitePlayerSample.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		312EAF50C4A43ED6477FF0A1 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+				io/github/yuroyami/kiteplayer/sample/SampleViewController.kt,
+			);
+			target = 312EA4CFA6DDB9582126D113 /* app */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		312EA5C20836A5F696670D4D /* src */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				312EAF50C4A43ED6477FF0A1 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+			);
+			path = src;
+			sourceTree = SOURCE_ROOT;
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		312EA3D3181EF3820D43DD94 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		312EA17A11FA6789C2E90A06 = {
+			isa = PBXGroup;
+			children = (
+				312EABDF56196EB7CB6DE4E8 /* Products */,
+				312EA26A2DF26DD7F00C81B6 /* Info.plist */,
+				312EA5C20836A5F696670D4D /* src */,
+			);
+			sourceTree = "<group>";
+		};
+		312EABDF56196EB7CB6DE4E8 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				312EA4307B516FE27ACDAAF4 /* KitePlayerSample.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		312EA4CFA6DDB9582126D113 /* app */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 312EA8B978309F9E74958B8F /* Build configuration list for PBXNativeTarget "app" */;
+			buildPhases = (
+				312EA9EA76C635D018E881D5 /* Build Kotlin */,
+				312EA17B5A35DEAF30BE49AD /* Sources */,
+				312EA3D3181EF3820D43DD94 /* Frameworks */,
+				312EAFAD61A4D102EE4A4D1C /* Resources */,
+				312EAC0FFEE0000000000001 /* Copy sample media */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				312EA5C20836A5F696670D4D /* src */,
+			);
+			name = app;
+			productName = app;
+			productReference = 312EA4307B516FE27ACDAAF4 /* KitePlayerSample.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		312EAA93916AAC3A9E66D792 /* Project object */ = {
+			isa = PBXProject;
+			buildConfigurationList = 312EA97F5F0C63C86C65B083 /* Build configuration list for PBXProject "module" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = 312EA17A11FA6789C2E90A06;
+			productRefGroup = 312EABDF56196EB7CB6DE4E8 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				312EA4CFA6DDB9582126D113 /* app */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		312EAFAD61A4D102EE4A4D1C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		312EAC0FFEE0000000000001 /* Copy sample media */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			inputPaths = (
+			);
+			name = "Copy sample media";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$SRCROOT/copy-sample-media.sh\"\n";
+		};
+		312EA9EA76C635D018E881D5 /* Build Kotlin */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			inputPaths = (
+			);
+			name = "Build Kotlin";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# !KOTLIN INTEGRATION STEP!\n# This script is managed by the Kotlin Toolchain, do not edit manually!\n\"${KOTLIN_CLI_WRAPPER_PATH}\" tool xcode-integration\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		312EA17B5A35DEAF30BE49AD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		312EA105F4168FF36E45F163 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				INFOPLIST_FILE = src/Info.plist;
+				KOTLIN_CLI_WRAPPER_PATH = ../kotlin;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.yuroyami.kiteplayer.sample.ios;
+				PRODUCT_MODULE_NAME = app;
+				PRODUCT_NAME = KitePlayerSample;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = (
+					1,
+					2,
+				);
+			};
+			name = Release;
+		};
+		312EA4CA3E37162C1E24624C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		312EA667E29B1794186C9037 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				INFOPLIST_FILE = src/Info.plist;
+				KOTLIN_CLI_WRAPPER_PATH = ../kotlin;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.yuroyami.kiteplayer.sample.ios;
+				PRODUCT_MODULE_NAME = app;
+				PRODUCT_NAME = KitePlayerSample;
+				SDKROOT = iphoneos;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = (
+					1,
+					2,
+				);
+			};
+			name = Debug;
+		};
+		312EA75F8832013E5D44391E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		312EA8B978309F9E74958B8F /* Build configuration list for PBXNativeTarget "app" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				312EA667E29B1794186C9037 /* Debug */,
+				312EA105F4168FF36E45F163 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+		};
+		312EA97F5F0C63C86C65B083 /* Build configuration list for PBXProject "module" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				312EA4CA3E37162C1E24624C /* Debug */,
+				312EA75F8832013E5D44391E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 312EAA93916AAC3A9E66D792 /* Project object */;
+}

@@ -1,0 +1,43 @@
+# Settings that every published KitePlayer library shares, on top of kiteplayer.module-template.yaml.
+# Each library sets its own POM name, description and any bundled licences.
+
+# `./kotlin publish mavenLocal` puts every published module into ~/.m2 for tests in other projects.
+# `-m <module> --transitive` publishes one module and its local dependencies.
+repositories:
+  - url: mavenLocal
+    publish: true
+    resolve: false
+
+settings:
+  kotlin:
+    explicitApi: strict
+  publishing:
+    enabled: true
+    group: io.github.yuroyami
+    version: 0.3.0
+    pom:
+      url: https://github.com/yuroyami/KitePlayer
+      licenses:
+        - name: Apache License 2.0
+          url: https://www.apache.org/licenses/LICENSE-2.0.txt
+      # Maven Central rejects a bundle with no developer. Identity only, no address.
+      developers:
+        - id: yuroyami
+          name: yuroyami
+          url: https://github.com/yuroyami
+      scm:
+        url: https://github.com/yuroyami/KitePlayer
+        connection: scm:git:https://github.com/yuroyami/KitePlayer.git
+        developerConnection: scm:git:ssh://git@github.com/yuroyami/KitePlayer.git
+    signArtifacts: true
+    publishSources: true
+    # manual uploads and validates the bundle, then waits for Publish on the Central Portal.
+    # publish.yml switches it to auto when its release input is on.
+    mavenCentral:
+      enabled: true
+      publishingMode: manual
+
+# -Xexport-kdoc keeps the KDoc in the native klibs, so framework headers keep the docs.
+settings@native:
+  kotlin:
+    freeCompilerArgs: [ -Xexport-kdoc ]

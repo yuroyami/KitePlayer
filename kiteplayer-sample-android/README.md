@@ -6,8 +6,8 @@ An Android app that shows each way to put KitePlayer video on screen, side by si
 
 The app opens on `VisualizerActivity`, the shared visualiser screen. It plays the songs in
 `kiteplayer-sample-shared/media`, which the build copies into the APK's assets. To use one song of
-your own instead, set `kiteplayer.sample.song` in the root `local.properties`, or pass
-`-Pkiteplayer.sample.song=<path>`.
+your own instead, set `kiteplayer.sample.song` in the root `local.properties`, or set the
+`KITEPLAYER_SAMPLE_SONG` environment variable to its path.
 
 The **Other samples** button opens a launcher with four playback screens. Each one shows a
 different way to present video:
@@ -38,13 +38,19 @@ a JSON object with eleven keys to `files/s1c-smoke.json` in the app's private st
 
 ## Release builds
 
-Without a release keystore, the release build is signed with the debug key and stays debuggable.
-That is on purpose: reading the smoke result through `run-as` needs both. Because the build is
-debuggable, R8 does not shrink it.
+`./kotlin build -m kiteplayer-sample-android --variant release` makes a release build. It is not
+debuggable, and R8 shrinks it. Without a key, the release APK is not signed and does not install.
+The smoke test reads its result through `run-as`, so run it on the debug build.
 
-To build a real release, set the four `kiteplayer.release.*` properties in
-`~/.gradle/gradle.properties`. The same build type is then signed with your key and is not
-debuggable.
+To sign the release build with your own key:
+
+1. Write `kiteplayer-sample-android/keystore.properties` with `storeFile`, `storePassword`,
+   `keyAlias` and `keyPassword`. Git ignores this file.
+2. Add `signing: { enabled: true }` under `settings.android` in
+   `kiteplayer-sample-android/module.yaml`.
+
+Signing stays off in the committed `module.yaml`. With signing on and no `keystore.properties`,
+every `./kotlin` command prints a warning.
 
 ## Dependencies
 

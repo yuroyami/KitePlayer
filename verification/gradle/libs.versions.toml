@@ -1,0 +1,32 @@
+# The versions of the Gradle builds in this folder: the two consumer projects and the device tests.
+# They match the Kotlin, Android SDK tooling and Compose versions that the KitePlayer libraries are
+# built with (kiteplayer.module-template.yaml and compose.module-template.yaml in the repository
+# root), and the test library versions of libs.versions.toml there.
+[versions]
+kotlin = "2.4.21"
+agp = "9.4.1"
+composeMultiplatform = "1.13.0-alpha02"
+androidxTestCore = "1.8.0-alpha01"
+androidxTestRunner = "1.8.0-alpha01"
+androidxTestExtJunit = "1.4.0-alpha01"
+androidxActivityCompose = "1.14.0-alpha03"
+coroutines = "1.11.0"
+
+[libraries]
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTestCore" }
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTestRunner" }
+androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "androidxTestExtJunit" }
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidxActivityCompose" }
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
+compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "composeMultiplatform" }
+compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "composeMultiplatform" }
+compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "composeMultiplatform" }
+
+[plugins]
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+android-kmp-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

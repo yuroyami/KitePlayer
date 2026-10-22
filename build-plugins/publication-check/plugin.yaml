@@ -1,0 +1,12 @@
+tasks:
+  check:
+    action: !io.github.yuroyami.kiteplayer.build.publication.checkPublication
+      repoRoot: ${project.rootDir}
+      group: ${module.settings.publishing.group}
+      artifactId: ${module.name}
+      version: ${module.settings.publishing.version}
+
+checks:
+  # Run `./kotlin publish mavenLocal` first.
+  - name: publication
+    performedBy: check

@@ -1,0 +1,12 @@
+tasks:
+  buildJni:
+    action: !io.github.yuroyami.kiteplayer.build.libass.android.buildAndroidJni
+      repoRoot: ${project.rootDir}
+      pinFile: ${project.rootDir}/kiteplayer-libass/ass-chain.sha256
+      sourceFile: ${project.rootDir}/kiteplayer-libass/native/src/libass_jni.c
+      workDir: ${taskOutputDir}/work
+      resourcesDir: ${taskOutputDir}/resources
+
+generated:
+  resources:
+    - directory: ${tasks.buildJni.action.resourcesDir}

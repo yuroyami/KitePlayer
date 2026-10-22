@@ -1,26 +1,39 @@
 # KitePlayer kitert cinterop coupling baseline.
 #
-# Command: ./gradlew checkKitertCoupling
+# Command: ./kotlin check kitertCoupling
 # Measured matching Kotlin file count: 2
 #
-# Scope: every present src/**/*.kt file, including untracked files, in each
-# active Gradle subproject except the two exclusions below. Comments are stripped;
+# Scope: every present .kt file, including untracked files, in the src, src@*, test
+# and test@* folders of each module except the two exclusions below. Comments are stripped;
 # string and character literals remain, and each matching file counts once.
 # Included when this baseline was measured:
-#   :kiteplayer-compose
-#   :kiteplayer-compose-interop
-#   :kiteplayer-compose-video
-#   :kiteplayer-core
-#   :kiteplayer-ffmpeg
-#   :kiteplayer-mobile
-#   :kiteplayer-sample
-#   :kiteplayer-sample-android
-#   :kiteplayer-subtitles
-#   :kiteplayer-view
+#   kiteplayer
+#   kiteplayer-adaptive
+#   kiteplayer-audioviz
+#   kiteplayer-compose
+#   kiteplayer-compose-interop
+#   kiteplayer-compose-ui
+#   kiteplayer-compose-video
+#   kiteplayer-core
+#   kiteplayer-ffmpeg
+#   kiteplayer-io
+#   kiteplayer-libass
+#   kiteplayer-libass-android-natives
+#   kiteplayer-network
+#   kiteplayer-sample
+#   kiteplayer-sample-android
+#   kiteplayer-sample-desktop
+#   kiteplayer-sample-ios
+#   kiteplayer-sample-shared
+#   kiteplayer-sample-web
+#   kiteplayer-subtitles
+#   kiteplayer-view
+#   kiteplayer-view-bindings
+#   kiteplayer-web-worker
 # Excluded by design:
-#   :kiteplayer-output - owns the C sink pointer
-#   :kiteplayer-rt - is the binding
+#   kiteplayer-output - owns the C sink pointer
+#   kiteplayer-rt - is the binding
 # Patterns: cnames.structs.kprt_ and kiteplayer.rt.cinterop
 
-allowed_kitert_file kiteplayer-core/src/nativeMain/kotlin/io/github/yuroyami/kiteplayer/internal/NativeAudioRing.kt
-allowed_kitert_file kiteplayer-core/src/nativeTest/kotlin/io/github/yuroyami/kiteplayer/AudioRingDifferentialTest.kt
+allowed_kitert_file kiteplayer-core/src@native/io/github/yuroyami/kiteplayer/internal/NativeAudioRing.kt
+allowed_kitert_file kiteplayer-core/test@native/io/github/yuroyami/kiteplayer/AudioRingDifferentialTest.kt

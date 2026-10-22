@@ -1,0 +1,31 @@
+# Each task writes into a gitignored folder of the module. Its empty marker folder is a generated
+# source folder, so the compile, and so the page or test build, runs after the files exist.
+tasks:
+  page:
+    action: !io.github.yuroyami.kiteplayer.build.web.prepareWebAssets
+      settings: ${pluginSettings}
+      forTests: false
+      directory: resources
+      repoRoot: ${project.rootDir}
+      moduleDir: ${module.rootDir}
+      cacheDir: ${taskOutputDir}/cache
+      marker: ${taskOutputDir}/marker
+
+  tests:
+    action: !io.github.yuroyami.kiteplayer.build.web.prepareWebAssets
+      settings: ${pluginSettings}
+      forTests: true
+      directory: testResources@wasmJs
+      repoRoot: ${project.rootDir}
+      moduleDir: ${module.rootDir}
+      cacheDir: ${taskOutputDir}/cache
+      marker: ${taskOutputDir}/marker
+
+generated:
+  sources:
+    - language: kotlin
+      directory: ${tasks.page.action.marker}
+    - language: kotlin
+      directory: ${tasks.tests.action.marker}
+      fragment:
+        isTest: true

@@ -1,0 +1,118 @@
+# Ktor byte suppliers: https with the operating system supplying TLS, and the requests of the DASH
+# door. Optional and pure Kotlin.
+product:
+  type: kmp/lib
+  platforms: [ jvm, android, macosArm64, iosArm64, iosSimulatorArm64, js, wasmJs ]
+
+aliases:
+  - jvmAndAndroid: [ jvm, android ]
+  # The tests that start a local Ktor server.
+  - serverBacked: [ macosArm64, iosArm64, iosSimulatorArm64, jvm, android ]
+
+apply:
+  - //kiteplayer.module-template.yaml
+  - //android.module-template.yaml
+  - //library.module-template.yaml
+
+dependencies:
+  - //kiteplayer-core: exported
+  - //kiteplayer-adaptive: exported
+  - $libs.ktor.client.core: exported
+  - //kiteplayer-subtitles
+  - $libs.kotlinx.atomicfu
+
+dependencies@jvmAndAndroid:
+  - $libs.ktor.client.okhttp
+
+dependencies@apple:
+  - $libs.ktor.client.darwin
+
+dependencies@js:
+  - $libs.ktor.client.js
+
+dependencies@wasmJs:
+  - $libs.ktor.client.js
+
+test-dependencies:
+  - $libs.kotlinx.coroutines.test
+
+test-dependencies@serverBacked:
+  - $libs.ktor.server.core
+  - $libs.ktor.server.cio
+
+test-dependencies@macosArm64:
+  - //kiteplayer-ffmpeg
+
+settings:
+  kotlin:
+    optIns: [ io.github.yuroyami.kiteplayer.KitePlayerInternalApi ]
+  android:
+    namespace: io.github.yuroyami.kiteplayer.network
+  publishing:
+    pom:
+      name: kiteplayer-network
+      description: HTTP and HTTPS transport for KitePlayer through Ktor. It registers itself.
+
+plugins:
+  publication-check:
+    enabled: true
+  abi-check:
+    enabled: true
+    androidDumpDir: api/android
+    klibPlatforms: [ iosArm64, iosSimulatorArm64, js, macosArm64, wasmJs ]
+  dokka:
+    enabled: true
+    moduleName: kiteplayer-network
+
+
+# The JVM tests run in the module folder. They read the clips of scripts/testmedia.sh from here.
+test-settings@jvm:
+  jvm:
+    test:
+      extraEnvironment:
+        KITEPLAYER_TESTMEDIA: ../testmedia
+
+# Gradle named the klib "io.github.yuroyami:kiteplayer-network". Keep that name, or libraries built against earlier
+# releases fail to link on Kotlin/Native. Set it per platform: on @native, it also renames the
+# klibs of shared native code, which must keep their own names.
+settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-network, -Xshort-module-name=kiteplayer-network ]
+
+settings@iosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-network, -Xshort-module-name=kiteplayer-network ]
+
+settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-network, -Xshort-module-name=kiteplayer-network ]
+
+settings@js:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-network ]
+
+settings@wasmJs:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-network ]
+
+# Tests compile into their own klib, which needs a different name. The test blocks name the
+# same platforms as the blocks above, so the toolchain applies them last.
+test-settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-network_test, -Xshort-module-name=kiteplayer-network_test ]
+
+test-settings@iosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-network_test, -Xshort-module-name=kiteplayer-network_test ]
+
+test-settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-network_test, -Xshort-module-name=kiteplayer-network_test ]
+
+test-settings@js:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=kiteplayer-network_test ]
+
+test-settings@wasmJs:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=kiteplayer-network_test ]

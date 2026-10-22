@@ -1,0 +1,84 @@
+# The DASH door: manifests parsed and served to the HLS path, with no HTTP client of its own.
+product:
+  type: kmp/lib
+  platforms: [ jvm, android, macosArm64, iosArm64, iosSimulatorArm64, js, wasmJs ]
+
+apply:
+  - //kiteplayer.module-template.yaml
+  - //android.module-template.yaml
+  - //library.module-template.yaml
+
+dependencies:
+  - //kiteplayer-core: exported
+  - //kiteplayer-subtitles
+
+test-dependencies:
+  - $libs.kotlinx.coroutines.test
+
+settings:
+  kotlin:
+    optIns: [ io.github.yuroyami.kiteplayer.KitePlayerInternalApi ]
+  android:
+    namespace: io.github.yuroyami.kiteplayer.dash
+  publishing:
+    pom:
+      name: kiteplayer-adaptive
+      description: >-
+        KitePlayer's DASH reader and its TTML subtitles for HLS, in Kotlin, with no HTTP client.
+        It comes with kiteplayer-network.
+
+plugins:
+  publication-check:
+    enabled: true
+  abi-check:
+    enabled: true
+    androidDumpDir: api/android
+    klibPlatforms: [ iosArm64, iosSimulatorArm64, js, macosArm64, wasmJs ]
+  dokka:
+    enabled: true
+    moduleName: kiteplayer-adaptive
+
+# Gradle named the klib "io.github.yuroyami:kiteplayer-adaptive". Keep that name, or libraries built against earlier
+# releases fail to link on Kotlin/Native. Set it per platform: on @native, it also renames the
+# klibs of shared native code, which must keep their own names.
+settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-adaptive, -Xshort-module-name=kiteplayer-adaptive ]
+
+settings@iosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-adaptive, -Xshort-module-name=kiteplayer-adaptive ]
+
+settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-adaptive, -Xshort-module-name=kiteplayer-adaptive ]
+
+settings@js:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-adaptive ]
+
+settings@wasmJs:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-adaptive ]
+
+# Tests compile into their own klib, which needs a different name. The test blocks name the
+# same platforms as the blocks above, so the toolchain applies them last.
+test-settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-adaptive_test, -Xshort-module-name=kiteplayer-adaptive_test ]
+
+test-settings@iosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-adaptive_test, -Xshort-module-name=kiteplayer-adaptive_test ]
+
+test-settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-adaptive_test, -Xshort-module-name=kiteplayer-adaptive_test ]
+
+test-settings@js:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=kiteplayer-adaptive_test ]
+
+test-settings@wasmJs:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=kiteplayer-adaptive_test ]

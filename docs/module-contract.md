@@ -105,11 +105,28 @@ caller-supplied resources remain caller-owned. Do not silently share mutable pla
 an extension registry. Competing providers must have deterministic selection.
 
 JVM and Android use service metadata; Native and web use target initialisation/registration.
-The Android network artifact supplies the normal `android.permission.INTERNET` permission through
-manifest merging, so consumers do not need a separate permission declaration. It also supplies
-`android.permission.ACCESS_NETWORK_STATE` and a provider that keeps the application context, for
-the network status a player waits on (#461); both are normal, granted at install, and removable
-with `tools:node="remove"`, which leaves the wait on its timer.
+The Android archives of KitePlayer carry no manifest entries, because the Kotlin Toolchain does not
+put a library's manifest into its archive. Your app declares them in its own manifest:
+
+```xml
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+<application>
+    <provider
+        android:name="io.github.yuroyami.kiteplayer.io.KiteIoContextProvider"
+        android:authorities="${applicationId}.kiteplayer-io"
+        android:exported="false" />
+    <provider
+        android:name="io.github.yuroyami.kiteplayer.network.KiteNetworkContextProvider"
+        android:authorities="${applicationId}.kiteplayer-network"
+        android:exported="false" />
+</application>
+```
+
+`INTERNET` is for network playback. `ACCESS_NETWORK_STATE` and the network provider give the
+network status a player waits on (#461). Both permissions are normal and granted at install.
+Without them, the wait uses its timer only. The `kiteplayer-io` provider keeps the application
+context for resource addresses (#457).
 Kotlin's eager initialisation is experimental/deprecated, so dependency-presence activation must
 be verified against this pinned toolchain in optimised consumers before being claimed. A consumer
 proof references only core APIs: touching a network symbol would hide a missing registration root.

@@ -1,0 +1,19 @@
+# The Compose Desktop sample. A bare run opens the audio visualiser on the sample songs.
+# `--modifiers` or a measurement flag opens the video screen, where KiteVideo draws frames as
+# ordinary Compose content. Run it from the repository root, so the default media paths resolve.
+product: jvm/app
+
+apply:
+  - //kiteplayer.module-template.yaml
+  - //compose.module-template.yaml
+
+dependencies:
+  - //kiteplayer-compose
+  - //kiteplayer-compose-video
+  - //kiteplayer-sample-shared
+  - $compose.desktop.currentOs
+  - $compose.foundation
+
+settings:
+  jvm:
+    mainClass: io.github.yuroyami.kiteplayer.sample.desktop.MainKt

@@ -46,6 +46,24 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ### Changed
 
+- The build moved from Gradle to the Kotlin Toolchain (`./kotlin`). The group, the artifact IDs and
+  the klib names stay the same. A Gradle consumer still finds each platform through the published
+  module metadata. These changes are visible to a consumer:
+  - The Android archives carry no manifest entries. An Android app now declares `INTERNET`,
+    `ACCESS_NETWORK_STATE` and the two context providers of `kiteplayer-io` and
+    `kiteplayer-network` in its own manifest. `docs/module-contract.md` lists the lines. Without
+    them, resource addresses need a context passed by hand and the network wait uses its timer.
+  - On Android, `kiteplayer-libass` depends on the new artifact `kiteplayer-libass-android-natives`,
+    which holds its JNI libraries. The Android archive of `kiteplayer-libass` has no `jni/` folder.
+  - The web artifacts end in `-wasmjs` instead of `-wasm-js`. A dependency on the module itself,
+    such as `io.github.yuroyami:kiteplayer`, does not change.
+  - The two web zips, `kiteplayer-wasm-js-<version>-web.zip` and
+    `kiteplayer-libass-wasm-js-<version>-web.zip`, are on the GitHub release page, not on Maven
+    Central.
+  - The `-javadoc.jar` of each artifact is empty. The API reference is on the documentation site.
+  - The worker binary in `kiteplayer-wasm-js-<version>-web.zip` is 119,963 bytes larger after gzip.
+    It now links `kiteplayer-network` and Ktor, because the build cannot leave out a dependency
+    that `kiteplayer` brings on the web.
 - Iris is rebuilt as an eye with petals and rings: Kaleidoscope's folded stereo curve grows round
   the fibres with the loudness, and rings of past waveforms spread outward and fade, after Wavy
   Spiral's dots. Its form changes with the music, and it publishes the form through
@@ -127,6 +145,12 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   and the name resolves to Silk.
 - Threads is gone from the audioviz catalogue. Fracture carries its dust, and the name resolves to
   Fracture.
+
+### Fixed
+
+- A Kotlin/Native executable for `androidNativeArm64` that uses `kiteplayer-core` now links. The C
+  audio ring of `kiteplayer-rt` called an atomics helper, `__aarch64_ldadd8_relax`, that no
+  Kotlin/Native link for Android provides. The ring now compiles its atomics inline on that target.
 
 ## [0.3.0] - 2026-10-09
 

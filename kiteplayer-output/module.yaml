@@ -1,0 +1,115 @@
+# The platform audio output, render support and the subtitle rasterisers.
+product:
+  type: kmp/lib
+  platforms:
+    - jvm
+    - android
+    - macosArm64
+    - iosArm64
+    - iosSimulatorArm64
+    - linuxX64
+    - linuxArm64
+    - mingwX64
+    - wasmJs
+
+aliases:
+  - androidAndApple: [ android, macosArm64, iosArm64, iosSimulatorArm64 ]
+
+apply:
+  - //kiteplayer.module-template.yaml
+  - //android.module-template.yaml
+  - //library.module-template.yaml
+
+dependencies:
+  - //kiteplayer-core: exported
+  - $libs.kotlinx.atomicfu
+
+test-dependencies@jvm:
+  - $libs.kotlinx.coroutines.test
+
+test-dependencies@wasmJs:
+  - $libs.kotlinx.coroutines.test
+
+settings:
+  android:
+    namespace: io.github.yuroyami.kiteplayer.output
+  publishing:
+    pom:
+      name: kiteplayer-output
+      description: KitePlayer's platform audio output, render support and subtitle rasterisers.
+
+test-settings@jvm:
+  # JUnit 4: some suites use org.junit.Assume and JUnit 4 rules.
+  junit: junit-4
+
+plugins:
+  publication-check:
+    enabled: true
+  abi-check:
+    enabled: true
+    androidDumpDir: api/android
+    klibPlatforms: [ iosArm64, iosSimulatorArm64, linuxArm64, linuxX64, macosArm64, mingwX64, wasmJs ]
+  dokka:
+    enabled: true
+    moduleName: kiteplayer-output
+
+# Gradle named the klib "io.github.yuroyami:kiteplayer-output". Keep that name, or libraries built against earlier
+# releases fail to link on Kotlin/Native. Set it per platform: on @native, it also renames the
+# klibs of shared native code, which must keep their own names.
+settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-output, -Xshort-module-name=kiteplayer-output ]
+
+settings@iosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-output, -Xshort-module-name=kiteplayer-output ]
+
+settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-output, -Xshort-module-name=kiteplayer-output ]
+
+settings@linuxX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-output, -Xshort-module-name=kiteplayer-output ]
+
+settings@linuxArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-output, -Xshort-module-name=kiteplayer-output ]
+
+settings@mingwX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-output, -Xshort-module-name=kiteplayer-output ]
+
+settings@wasmJs:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-output ]
+
+# Tests compile into their own klib, which needs a different name. The test blocks name the
+# same platforms as the blocks above, so the toolchain applies them last.
+test-settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-output_test, -Xshort-module-name=kiteplayer-output_test ]
+
+test-settings@iosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-output_test, -Xshort-module-name=kiteplayer-output_test ]
+
+test-settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-output_test, -Xshort-module-name=kiteplayer-output_test ]
+
+test-settings@linuxX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-output_test, -Xshort-module-name=kiteplayer-output_test ]
+
+test-settings@linuxArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-output_test, -Xshort-module-name=kiteplayer-output_test ]
+
+test-settings@mingwX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-output_test, -Xshort-module-name=kiteplayer-output_test ]
+
+test-settings@wasmJs:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=kiteplayer-output_test ]

@@ -13,7 +13,8 @@ The address of a Compose Multiplatform resource works the same way on Android, i
 JVM. `MediaItem(Res.getUri("files/intro.mp4"))` plays the bundled file, from the app's assets on
 Android and from the app's jar on the desktop. On Android, the player reads the assets through the
 application context, which a small content provider of `kiteplayer-io` keeps from the moment the
-app starts (as Compose's own resources do).
+app starts (as Compose's own resources do). Your app declares that provider in its manifest, as the
+[module contract](module-contract.md) shows.
 
 Network addresses are the subject of [Network streams](streaming.md).
 

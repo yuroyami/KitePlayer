@@ -10,8 +10,8 @@
 #
 # The adapters also link runtime code from the toolchains that built them: the C++ runtime of the
 # Android NDK, the GCC runtime and GNU libiconv of the Kotlin/Native MinGW toolchain, and the
-# Emscripten runtime. The script finds those toolchains the way kiteplayer-libass/build.gradle.kts
-# does. A toolchain that this machine lacks gets NOASSERTION as its version. The startup objects
+# Emscripten runtime. The script finds those toolchains the way the libass-native build plugin
+# (build-plugins/build-support/src/LibassAdapters.kt) does. A toolchain that this machine lacks gets NOASSERTION as its version. The startup objects
 # that every shared library links are not listed.
 #
 # FFmpeg reaches KitePlayer only as the kiteffmpeg Maven dependency, which KitePlayer does not
@@ -46,10 +46,10 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-version=$(sed -n 's/^VERSION=//p' "$ROOT/gradle.properties")
-release=$(sed -n 's/^val assChainReleaseTag = "\(.*\)"$/\1/p' "$ROOT/kiteplayer-libass/build.gradle.kts")
+version=$(sed -n 's/^    version:[[:space:]]*//p' "$ROOT/library.module-template.yaml" | tr -d '\r')
+release=$(sed -n 's/.*const val RELEASE_TAG: String = "\(.*\)"$/\1/p' "$ROOT/build-plugins/build-support/src/AssChain.kt")
 mingw_name=$(sed -n 's/.*"mingw_x64" -> CTargetSpec(.*konanSysroot = "\([^"]*\)".*/\1/p' \
-    "$ROOT/buildSrc/src/main/kotlin/CompileKiteRtTask.kt")
+    "$ROOT/build-plugins/build-support/src/CompileKiteRt.kt")
 [ -n "$version" ] && [ -n "$release" ] && [ -n "$mingw_name" ] || {
     echo "native-sbom.sh: could not read the version, the chain release or the MinGW sysroot name" >&2
     exit 1

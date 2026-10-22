@@ -29,9 +29,10 @@ So the callback, the AudioUnit and the sample ring moved into this module. `Core
 | `native/scripts/run-c-tests.sh` | Runs the test suites in one of four modes. |
 | `native/scripts/render-audit.sh` | Checks the symbols and instructions of both real-time objects, in the macOS archive and in the two iOS archives. |
 | `native/scripts/source-discipline.sh` | Checks that each memory-ordering decision is still written where the design put it. |
-| `src/nativeInterop/cinterop/kitert.def` | The cinterop definition. It names the archive and links AudioToolbox on macOS and iOS. |
-| `build.gradle.kts` | Registers the Kotlin/Native targets and their C compile tasks. |
-| `../buildSrc/src/main/kotlin/CompileKiteRtTask.kt` | Compiles and archives the C code for each Kotlin/Native target, with Kotlin/Native's own clang and `llvm-ar`. |
+| `native/kitert.def` | The cinterop definition. It names the archive and links AudioToolbox on macOS and iOS. |
+| `module.yaml` | The Kotlin Toolchain module: its Kotlin/Native platforms, and the `kitert-c` build plugin that compiles the C code. |
+| `../build-plugins/kitert-c/` | The `kitert-c` build plugin. It runs one task per Kotlin/Native target and gives each target its own cinterop definition. |
+| `../build-plugins/build-support/src/CompileKiteRt.kt` | Compiles and archives the C code for each Kotlin/Native target, with Kotlin/Native's own clang and `llvm-ar`. |
 
 ## Build and test
 
@@ -47,15 +48,13 @@ cd native
 
 `run-c-tests.sh` never builds anything. Run the matching `build-host.sh` first after every change.
 
-From the repository root, Gradle builds the archives that ship, in one directory per Kotlin/Native
-target:
+From the repository root, the Kotlin Toolchain builds the archives that ship, one per Kotlin/Native
+target, under `build/tasks/`:
 
 ```bash
-./gradlew :kiteplayer-rt:compileKiteRtCForMacosArm64 \
-  :kiteplayer-rt:compileKiteRtCForIosArm64 \
-  :kiteplayer-rt:compileKiteRtCForIosSimulatorArm64
-./gradlew :kiteplayer-rt:macosArm64Test
-./gradlew :kiteplayer-rt:iosSimulatorArm64Test --device "Test iPhone 17"
+./kotlin build -m kiteplayer-rt -p macosArm64 -p iosArm64 -p iosSimulatorArm64
+./kotlin test -m kiteplayer-rt -p macosArm64
+./kotlin test -m kiteplayer-rt -p iosSimulatorArm64
 ```
 
 KiteFFmpeg's `native/kitecodec-c/tests/` has a copy of the same test harness and allocation

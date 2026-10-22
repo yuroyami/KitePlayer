@@ -1,4 +1,5 @@
 .idea/
+# The Gradle consumer projects under verification/ keep their own Gradle state.
 .gradle/
 .kotlin/
 build/
@@ -34,3 +35,17 @@ kiteplayer-sample-shared/media/SynthyBattle.mp3
 
 # Python bytecode left by running or compiling a script.
 __pycache__/
+
+# Files that the build copies beside the web pages and the web tests: the KiteFFmpeg codec
+# module, the libass module and the test clip. The web-assets plugin writes them.
+/kiteplayer-sample-web/resources/*
+!/kiteplayer-sample-web/resources/index.html
+/kiteplayer-libass/testResources@wasmJs/
+/kiteplayer-ffmpeg/testResources@wasmJs/
+/kiteplayer-web-worker/testResources@wasmJs/
+
+# The test clip and the sample songs, copied into the Android sample by the sample-media plugin.
+/kiteplayer-sample-android/assets/
+
+# The Android signing keys of the Android sample. Never commit them.
+/kiteplayer-sample-android/keystore.properties

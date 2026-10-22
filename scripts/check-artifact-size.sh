@@ -3,21 +3,24 @@
 # Measures every published artifact and holds its size to a committed baseline.
 #
 # Nothing else in the build reports artifact sizes, so a dependency that doubles the Android
-# archive would land without a word. This script builds the published artifacts of each publishing
-# module, prints a table of module, target and bytes, and compares each line with the baseline
-# file, artifact-size-baseline.txt.
+# archive would land without a word. This script publishes each published module to Maven Local
+# with `./kotlin publish mavenLocal`, prints a table of module, target and bytes, and compares each
+# line with the baseline file, artifact-size-baseline.txt. It measures the files that ship:
 #
-#   jvm         the JVM jar                 (task jvmJar)
-#   android     the Android archive         (task bundleAndroidMainAar)
-#   macosArm64  the macOS klib              (task macosArm64Klib)
-#   iosArm64    the klib for iOS devices    (task iosArm64Klib)
+#   jvm         the JVM jar
+#   android     the Android archive (AAR), or the one archive of a module with no platform
+#               folder, such as kiteplayer-libass-android-natives
+#   macosArm64  the macOS klib
+#   iosArm64    the klib for iOS devices
 #
 # A cinterop klib is a published file of its own, and it embeds the static libraries that the
 # module links. Each one gets its own line, such as macosArm64-cinterop-libass.
 #
-# A publishing module is one that settings.gradle.kts includes and whose build file applies the
-# Maven publish plugin. That rule drops the samples and every unpublished module. A module with no
-# such target has no line for it: kiteplayer-rt, for example, has no JVM half.
+# A published module is one that scripts/published-modules.sh lists. That rule drops the samples
+# and every unpublished module. A module with no such target has no line for it: kiteplayer-rt,
+# for example, has no JVM half.
+#
+# KITEPLAYER_POM_REPOSITORY names another local Maven repository than ~/.m2/repository.
 #
 # The rules:
 #
@@ -50,79 +53,57 @@ cd "$ROOT"
 
 BASELINE="artifact-size-baseline.txt"
 LIMIT_PERCENT=10
-VERSION=$(sed -n 's/^VERSION=//p' gradle.properties)
-[ -n "$VERSION" ] || { echo "gradle.properties has no VERSION line" >&2; exit 2; }
 
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 
-# The targets, as "name:task". The file each task writes comes from artifact_file below.
-TARGETS="jvm:jvmJar android:bundleAndroidMainAar macosArm64:macosArm64Klib iosArm64:iosArm64Klib"
+VERSION=$(sed -n 's/^    version:[[:space:]]*//p' library.module-template.yaml | tr -d '\r')
+[ -n "$VERSION" ] || { echo "library.module-template.yaml has no publishing version" >&2; exit 2; }
+REPOSITORY="${KITEPLAYER_POM_REPOSITORY:-$HOME/.m2/repository}/io/github/yuroyami"
 
-artifact_file() { # <module> <target>
-    case "$2" in
-        jvm) echo "$1/build/libs/$1-jvm-$VERSION.jar" ;;
-        android) echo "$1/build/outputs/aar/$1.aar" ;;
-        macosArm64) echo "$1/build/libs/$1-macosArm64Main-$VERSION.klib" ;;
-        iosArm64) echo "$1/build/libs/$1-iosArm64Main-$VERSION.klib" ;;
-        *-cinterop-*) echo "$1/build/libs/$1-${2%%-cinterop-*}Cinterop-${2#*-cinterop-}Main-$VERSION.klib" ;;
-    esac
-}
+# The measured targets: the artifact folder suffix, then the table name.
+TARGETS="jvm:jvm android:android macosarm64:macosArm64 iosarm64:iosArm64"
 
-publishing_modules() {
-    sed -n 's/^include(":\([^"]*\)").*/\1/p' settings.gradle.kts | while IFS= read -r module; do
-        if grep -Eq '^[[:space:]]*(alias\(libs\.plugins\.vanniktech\.publish\)|id\("com\.vanniktech\.maven\.publish"\))' \
-            "$module/build.gradle.kts" 2>/dev/null; then
-            echo "$module"
-        fi
-    done
-}
-
-# Builds every artifact and writes "<module> <target> <bytes>" lines to $1.
+# Publishes every published module and writes "<module> <target> <bytes>" lines to $1.
 measure() {
-    local out="$1" module target_task target task file apple interop tasks=""
+    local out="$1" module target_pair suffix target folder file name interop
     local modules
-    modules=$(publishing_modules)
-    [ -n "$modules" ] || { echo "no publishing module found in settings.gradle.kts" >&2; exit 2; }
+    modules=$(scripts/published-modules.sh)
+    [ -n "$modules" ] || { echo "scripts/published-modules.sh lists no module" >&2; exit 2; }
 
-    # Gradle is the authority on which module has which target, so ask it rather than reading
-    # the build files.
-    echo "== Listing the tasks of every module"
-    ./gradlew --console=plain -q tasks --all > "$scratch/tasks.txt"
-
-    : > "$scratch/planned.txt"
+    # shellcheck source=test-signing-key.sh
+    . scripts/test-signing-key.sh
+    : > "$out"
+    local flags=()
+    for module in $modules; do flags+=(-m "$module"); done
+    echo "== Publishing the published modules to Maven Local"
+    KOTLIN_CLI_NO_WELCOME_BANNER=1 ./kotlin publish mavenLocal --non-transitive "${flags[@]}"
     for module in $modules; do
-        for target_task in $TARGETS; do
-            target="${target_task%%:*}"
-            task="${target_task#*:}"
-            if grep -Eq "^$module:$task( |\$)" "$scratch/tasks.txt"; then
-                echo "$module $target" >> "$scratch/planned.txt"
-                tasks="$tasks :$module:$task"
-            fi
-        done
-        for apple in macosArm64 iosArm64; do
-            for interop in $(grep -E "^$module:${apple}Cinterop-[A-Za-z0-9_]+Klib( |\$)" "$scratch/tasks.txt" |
-                sed -E "s/^$module:${apple}Cinterop-([A-Za-z0-9_]+)Klib.*/\1/"); do
-                echo "$module $apple-cinterop-$interop" >> "$scratch/planned.txt"
-                tasks="$tasks :$module:${apple}Cinterop-${interop}Klib"
+        for target_pair in $TARGETS; do
+            suffix="${target_pair%%:*}"
+            target="${target_pair#*:}"
+            folder="$REPOSITORY/$module-$suffix/$VERSION"
+            [ -d "$folder" ] || continue
+            for file in "$folder/$module-$suffix-$VERSION".jar "$folder/$module-$suffix-$VERSION".aar \
+                "$folder/$module-$suffix-$VERSION".klib; do
+                [ -f "$file" ] && echo "$module $target $(( $(wc -c < "$file") ))" >> "$out"
+            done
+            for file in "$folder/$module-$suffix-$VERSION"-cinterop-*.klib; do
+                [ -f "$file" ] || continue
+                name=$(basename "$file" .klib)
+                interop="${name#"$module-$suffix-$VERSION-cinterop-"}"
+                echo "$module $target-cinterop-$interop $(( $(wc -c < "$file") ))" >> "$out"
             done
         done
-    done
-
-    echo "== Building $(wc -l < "$scratch/planned.txt" | tr -d ' ') artifacts"
-    # shellcheck disable=SC2086 # one word per task
-    ./gradlew --console=plain $tasks
-
-    : > "$out"
-    while read -r module target; do
-        file=$(artifact_file "$module" "$target")
-        if [ ! -f "$file" ]; then
-            echo "The build ran the $target task of $module, but $file does not exist." >&2
-            echo "The artifact name changed; update artifact_file in $0." >&2
-            exit 2
+        # A module with no platform folder ships one archive under its own name, such as the
+        # Android JNI libraries of kiteplayer-libass-android-natives.
+        if ! grep -q "^$module " "$out"; then
+            for file in "$REPOSITORY/$module/$VERSION/$module-$VERSION".jar "$REPOSITORY/$module/$VERSION/$module-$VERSION".aar; do
+                [ -f "$file" ] && echo "$module android $(( $(wc -c < "$file") ))" >> "$out"
+            done
         fi
-        echo "$module $target $(( $(wc -c < "$file") ))" >> "$out"
-    done < "$scratch/planned.txt"
+    done
+    [ -s "$out" ] || { echo "No artifact found under $REPOSITORY for version $VERSION" >&2; exit 2; }
 }
 
 # Compares <measured> with <baseline>, prints the table, and exits non-zero on any failure.

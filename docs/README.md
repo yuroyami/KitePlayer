@@ -2,8 +2,8 @@
 
 The [README](../README.md) covers installation and everyday use. The guides under "Using
 KitePlayer" go into more detail, and the other guides describe contracts that the code implements
-today. The API reference is the KDoc, and `./gradlew dokkaGenerate` builds it into
-`build/dokka/html`.
+today. The API reference is the KDoc. `./kotlin do dokka` writes each module's pages, then
+`./kotlin do dokkaSite` merges them into `build/dokka/html`.
 
 ## Using KitePlayer
 

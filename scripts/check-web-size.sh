@@ -4,8 +4,9 @@
 #
 # A web page downloads the codec module that the player pins: kite.wasm and kite.mjs from the
 # KiteFFmpeg web zip (see the README's Web section). A page that runs the player in a worker also
-# downloads the worker binary, from kiteplayer's own web zip (#58). This script measures the files
-# of each gzipped at level 9, and fails when either sum is over its budget below.
+# downloads the worker binary, from kiteplayer's own web zip (#58), which scripts/web-zips.sh
+# builds. This script measures the files of each gzipped at level 9, and fails when either sum is
+# over its budget below.
 #
 # Gzipped and not raw, because the raw module answers the wrong question: exporting every binding
 # entry point makes the raw module about four times bigger and the gzipped one only about six
@@ -60,6 +61,12 @@
 # engine and in the worker's messages. The growth is all in the wasm binary; the three JavaScript
 # files beside it kept their exact bytes, and the codec module measured 1,538,723 bytes throughout.
 #
+# The worker budget is now 0.85 MiB. The Kotlin Toolchain has no dependency exclusion, so the worker
+# links kiteplayer-network, which kiteplayer brings on wasmJs, and Ktor with it. The worker measured
+# 757,505 bytes without kiteplayer-network and 877,468 bytes with it, 119,963 more. Taking
+# kiteplayer-network out of kiteplayer's wasmJs dependencies brings the old size back, but a web app
+# then no longer gets kiteplayer-network from kiteplayer.
+#
 # Both budgets are ratchets: a new KiteFFmpeg pin, or player code, that grows a module past its
 # budget fails here, and raising a budget is a decision made in the same commit, with both numbers
 # in its message. Each file's SHA-256 is printed beside its size, so a failure names the exact bytes
@@ -74,8 +81,8 @@ cd "$ROOT"
 
 # 1.47 MiB.
 BUDGET_BYTES=1541407
-# 0.73 MiB.
-WORKER_BUDGET_BYTES=765460
+# 0.85 MiB.
+WORKER_BUDGET_BYTES=891289
 
 # Measures the files after the label gzipped, prints a table, and fails when the sum is over the budget.
 measure() { # <label> <budget bytes> <file>...
@@ -108,15 +115,48 @@ print("PASS")
 EOF
 }
 
-./gradlew --quiet :kiteplayer-ffmpeg:unpackKiteFFmpegWebModule :kiteplayer:workerWebZip
-grep -E '^kiteffmpeg = "' gradle/libs.versions.toml
+# The codec module: kite.wasm and kite.mjs from the KiteFFmpeg web files that libs.versions.toml pins.
+# Releases after 0.5.1 ship them in the kiteffmpeg-web jar, and older ones in the web zip. Maven Local
+# comes first, else Maven Central with the SHA-1 checked.
+kiteffmpeg=$(sed -n 's/^kiteffmpeg = "\(.*\)"$/\1/p' libs.versions.toml)
+[ -n "$kiteffmpeg" ] || { echo "libs.versions.toml has no kiteffmpeg version" >&2; exit 2; }
+echo "kiteffmpeg = \"$kiteffmpeg\""
+codec_dir="$(mktemp -d)"
+worker_dir="$(mktemp -d)"
+trap 'rm -rf "$codec_dir" "$worker_dir"' EXIT
+codec_paths=(
+    "kiteffmpeg-web/$kiteffmpeg/kiteffmpeg-web-$kiteffmpeg.jar"
+    "kiteffmpeg-wasm-js/$kiteffmpeg/kiteffmpeg-wasm-js-$kiteffmpeg-web.zip"
+)
+codec_archive=""
+for path in "${codec_paths[@]}"; do
+    local_file="$HOME/.m2/repository/io/github/yuroyami/$path"
+    if [ -f "$local_file" ]; then
+        codec_archive="$codec_dir/${path##*/}"
+        cp "$local_file" "$codec_archive"
+        break
+    fi
+done
+if [ -z "$codec_archive" ]; then
+    for path in "${codec_paths[@]}"; do
+        url="https://repo1.maven.org/maven2/io/github/yuroyami/$path"
+        file="$codec_dir/${path##*/}"
+        # A 404 here only means this form does not exist for the version, so try the next one.
+        curl -fsL -o "$file" "$url" 2>/dev/null || continue
+        expected=$(curl -fsSL "$url.sha1" | awk '{ print $1 }')
+        actual=$(shasum -a 1 "$file" | awk '{ print $1 }')
+        [ "$expected" = "$actual" ] || { echo "${path##*/} has SHA-1 $actual, expected $expected" >&2; exit 1; }
+        codec_archive="$file"
+        break
+    done
+fi
+[ -n "$codec_archive" ] || { echo "no web files of KiteFFmpeg $kiteffmpeg in Maven Local or on Maven Central" >&2; exit 1; }
+unzip -q "$codec_archive" -d "$codec_dir"
 
-measure "Web codec module" "$BUDGET_BYTES" \
-    kiteplayer-ffmpeg/build/kiteffmpeg-web/kite.wasm kiteplayer-ffmpeg/build/kiteffmpeg-web/kite.mjs
+measure "Web codec module" "$BUDGET_BYTES" "$codec_dir/kite.wasm" "$codec_dir/kite.mjs"
 
 # Measured from the zip that ships, so what is counted is what a page serves.
-worker_dir="$(mktemp -d)"
-trap 'rm -rf "$worker_dir"' EXIT
-unzip -q kiteplayer/build/worker-zip/kiteplayer-wasm-js-*-web.zip -d "$worker_dir"
+./scripts/web-zips.sh worker
+unzip -q build/web-zips/kiteplayer-wasm-js-*-web.zip -d "$worker_dir"
 measure "Web worker binary" "$WORKER_BUDGET_BYTES" \
     "$worker_dir"/kiteplayer-web-worker.wasm "$worker_dir"/kiteplayer-web-worker*.mjs

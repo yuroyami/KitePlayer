@@ -16,17 +16,20 @@ These are not style preferences. Each one exists because ignoring it cost someon
   red proves nothing.
 - **A claim carries the strength of its evidence and no more.** Compilation is not support. A
   source-set declaration is not support. A laptop green is not a device green. A simulator green is
-  not a device green. A cached up-to-date Gradle run proves only that the cache is not red; gates
+  not a device green. A cached up-to-date build proves only that the cache is not red; gates
   rerun for real. When code, artifacts, docs and measurements disagree, the weakest result is the
   truth.
 - **No em dashes in any file**: code, comments, Markdown, or commit messages. The gate scans for
   them.
-- **No new dependency without asking first**: not a library, not a plugin, not a toolchain or
-  Gradle bump, not a GitHub Action. C or shader source we author ourselves is fine.
+- **No new dependency without asking first**: not a library, not a plugin, not a Kotlin
+  Toolchain or Kotlin bump, not a GitHub Action. C or shader source we author ourselves is fine.
 - **A design act is its own commit.** Deciding a public API shape and executing it never happen in
   the same commit.
 - **Explicit API mode is on in every module.** Any public API change regenerates the ABI dumps in
-  the same commit with `./gradlew updateKotlinAbi`.
+  the same commit: `./kotlin do updateAbi` for the JVM dumps, `./kotlin do updateAndroidAbi` for
+  the Android dumps after `./kotlin build -p android`, and `./kotlin do updateKlibAbi` for the klib
+  dumps after a `./kotlin build` of every platform. `kiteplayer-rt` has klibs only, so its klib dump
+  has its own command: `./kotlin do updateKlibOnlyAbi`.
 - **A published artifact that grows more than ten percent fails CI.** The check is
   `./scripts/check-artifact-size.sh`, against `artifact-size-baseline.txt`. When the growth is
   intended, run the script with `--update` and commit the baseline with the change. Put the old
@@ -65,9 +68,29 @@ Style is guidance. It is never a task of its own.
 
 ## Getting a build
 
-- JDK 21.
-- A clean clone needs `local.properties` with an Android SDK path, or the `ANDROID_HOME`
-  environment variable, before the Android targets have a task graph at all.
+The repository builds with the Kotlin Toolchain. The `./kotlin` wrapper (`kotlin.bat` on Windows)
+downloads the toolchain, its JDK and Kotlin/Native on first use. `project.yaml` lists the modules,
+and each module describes itself in its `module.yaml`. Common settings live in the
+`*.module-template.yaml` files at the root, and dependency versions in `libs.versions.toml`.
+`build-plugins/` holds this repository's own build plugins, such as the C build of the audio ring
+(`kitert-c`) and the ABI check (`abi-check`).
+
+```bash
+./kotlin build -m kiteplayer-core -p jvm      # one module, one platform
+./kotlin test -m kiteplayer-core -p macosArm64
+./kotlin check abi kitertCoupling              # the named checks
+./kotlin show modules                          # every module and its platforms
+```
+
+- Set `ANDROID_HOME` to an Android SDK. The toolchain does not read `sdk.dir` from
+  `local.properties`. Without `ANDROID_HOME` it uses the default SDK folder of the platform.
+- JDK 21 on `PATH`, only for the Gradle builds under `verification/`: the two consumer projects and
+  the Android device tests.
+- Always name the platforms with `-p` for `./kotlin test`. Without it, a macOS host also tries to
+  run the Linux and Windows test binaries.
+- To build against a local build of a dependency, such as KiteFFmpeg, add `mavenLocal` to the
+  `repositories` of `library.module-template.yaml` for that session only.
+  `./scripts/check-dependency-hygiene.sh` fails while it is there, so it cannot reach a commit.
 - Test fixtures are generated, not committed: run `./scripts/testmedia.sh` before any real-media
   suite. It records the encoder version in the manifest and warns when it differs from the recorded
   series. `TESTMEDIA_STRICT_FFMPEG=1` turns that warning into a refusal for version-sensitive work.
@@ -96,13 +119,13 @@ about a target it did not build.
 
 ### Tier 2, roughly 10 to 15 minutes
 
-Selected by any of: files under `native/` or `buildSrc/`, any `.def` file, any `build.gradle.kts`,
-any version catalog, any Kotlin under a platform source set, or the completion of any major piece
-of work.
+Selected by any of: files under `native/` or `build-plugins/`, any `.def` file, any `module.yaml`
+or `plugin.yaml`, any `*.module-template.yaml`, any version catalog, any Kotlin under a platform
+source folder (`src@<platform>`), or the completion of any major piece of work.
 
 Contents: Tier 1, plus `./scripts/testmedia.sh` first, the build logic tests, the macOS host
 suites, the iOS simulator view suite, the sanitizer and interpose C runs, the desktop JVM suites,
-the web Node suite, `./scripts/linux-tests.sh`, `./scripts/linux-jvm-tests.sh`, the Windows link
+the web suites, `./scripts/linux-tests.sh`, `./scripts/linux-jvm-tests.sh`, the Windows link
 check, cross-compile spot checks, and the sample run over the house clips plus a nonexistent path.
 
 ```bash
@@ -113,7 +136,7 @@ Run the aggregate script, not a hand-written list of modules. It is the maintain
 for a local macOS arm64 host and stops on the first failure. `--dry-run` prints the steps and
 commands without running checks. After resolving an environment failure, `--from=STEP` resumes at
 that named step; retain the earlier successful logs and rerun affected steps if sources changed.
-A resumed run reports its partial coverage. Gradle reuses unchanged outputs. Tier 2 also checks
+A resumed run reports its partial coverage. The toolchain reuses unchanged outputs. Tier 2 also checks
 publication metadata and dependency hygiene, and builds and runs the libass C suites in plain and
 sanitizer configurations (the driver suite needs Homebrew's libass and says SKIPPED without it).
 The two libass suites that need no libass also run on wasm32 under Node, where `size_t` is 32 bits.
@@ -125,11 +148,21 @@ needs nothing from the sibling: the published Linux klibs carry FFmpeg themselve
 `kiteass.mjs` with emscripten, so `emcc` must be on PATH (`brew install emscripten`) for the web
 step and for a publish.
 The sample smoke uses the four original house clips; the format-matrix suites cover the wider set.
-The Node gate does not claim browser execution, and Windows links do not claim Windows execution.
+The web step runs `python3 scripts/web-tests/run.py`: wasm in Node and in headless Chrome, and
+Kotlin/JS in Node. `./kotlin test -p wasmJs` gives a module only 30 seconds in the browser, which is too
+short for the larger modules. Windows links do not claim Windows execution.
 CI runs those environments separately. Distribution-only integration checks remain additional
 checks for changes to published dependency metadata or automatic provider discovery. After a
 release, `./scripts/verify-central-consumer.sh` builds the README's install lines from Maven Central
-with an empty Gradle cache, and a weekly CI workflow runs the same script.
+in a Gradle consumer project with an empty Gradle cache, and a weekly CI workflow runs the same
+script.
+
+The Kotlin Toolchain has no instrumented Android tests. `./scripts/run-device-tests.sh` runs the
+device tests in `<module>/android-device-test`, with the shared tests of that module, on a connected
+device or emulator. It publishes the modules to Maven Local, copies them into
+`build/verification-maven`, and runs them through the Gradle build in `verification/device-tests`.
+With more than one device connected, set `ANDROID_SERIAL` to the serial of the one to use.
+Otherwise the tests install on every device.
 
 ### Tier 3
 
@@ -138,8 +171,8 @@ path or the ring handoff.
 
 ### Reading a gate result honestly
 
-- `./gradlew ... | tail` reports the exit code of `tail`, not of the build. Pipe to a file and read
-  the file, or check the log for BUILD FAILED.
+- `./kotlin ... | tail` reports the exit code of `tail`, not of the build. Pipe to a file and read
+  the file, or check the exit code that the run itself returned.
 - A sample miss on a loaded machine that passes on two quiet reruns is recorded as a load
   observation, not rerun until green.
 

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What kiteplayer-network needs. Its Android archive carries no manifest entries, so the app declares them. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <application>
+        <provider
+            android:name="io.github.yuroyami.kiteplayer.network.KiteNetworkContextProvider"
+            android:authorities="${applicationId}.kiteplayer-network"
+            android:exported="false" />
+    </application>
+</manifest>

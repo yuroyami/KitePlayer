@@ -138,6 +138,6 @@ Windows link, Android/iOS compile and sample playback checks passed. Audioviz ra
 failed as intended when immediate recovery was temporarily disabled.
 
 The Linux JVM step failed 19 of 91 tests because the published KiteFFmpeg
-dependency lacks its linux-arm64 `kitecodec_jni` library, the existing limitation
-recorded in `docs/records/verification-0.0.25.md`. The remaining gate steps were resumed and passed.
+dependency lacks its linux-arm64 `kitecodec_jni` library, a limitation of that KiteFFmpeg
+release. The remaining gate steps were resumed and passed.
 Physical Android/iPhone performance and browser execution were not measured.

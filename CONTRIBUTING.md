@@ -45,6 +45,8 @@ These are not style preferences. Each one exists because ignoring it cost someon
   what the blocker hides. Re-size when the blocker falls.
 - **After any task**: re-read every changed file once, run the gate tier the changed paths select,
   then commit.
+- Before you file a finding, search the trackers of both KitePlayer and KiteFFmpeg: open and
+  closed issues, with their comments. File it only when no issue covers it yet.
 
 ### House Kotlin style, when a task leaves a choice
 

@@ -10,11 +10,8 @@ what reading the code or running the gate would not teach you.
 
 ## How work happens here
 
-- Future audioviz pattern revamp specs, analyses and implementation plans live only in
-  `audioviz-revamp/`; start with its `README.md`. That folder is not tracked, because its evidence
-  is device video and stills, so it exists only on the owner's machine. Revamp patterns
-  individually on the accepted technical base. Keep documentation of implemented public contracts
-  in `docs/`.
+- Plans for audio visualiser patterns live in GitHub issues, like all other work. Keep
+  documentation of implemented public contracts in `docs/`.
 - Work on `main`. Never create a branch without asking. Commit locally, never push. The owner
   pushes, publishes and cuts every release.
 - Commit subject is one imperative sentence about the outcome. Short prose body. No trailers.
@@ -225,6 +222,8 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - A segment read to its end from a response in flight hides a store that mixes two files, because
   the response wins over the stored bytes. A test of a changed file reads only a part of the new
   one, closes, and reads the whole in a later open (#547).
+- A bare `ffmpeg -ac 2` uses another downmix than the player, so its PCM differs from ours and
+  looks like decoder damage. Compare against FFmpeg with the same explicit stereo matrix (#16).
 
 ### Language and toolchain
 
@@ -616,6 +615,11 @@ Do not reopen these without new evidence.
   offers it on a home-screen selector; another engine is its default on Android.
 - Pulling logs off an iPhone for that application uses the device control command with the
   application data container domain, and an in-room setting adds one statistics line per tick.
+- The goal for both libraries is every Kotlin Multiplatform target, a simple Kotlin API that apps
+  outside Kotlin Multiplatform can also use, broad rendering options, strong debugging, and high
+  performance and fidelity for video, audio, subtitles, chapters and metadata. KitePlayer aims to
+  match or beat mpv and VLC wherever they apply. This is the goal, not a claim of current support
+  or of measured parity.
 
 ## The 0.0.23 module boundary
 

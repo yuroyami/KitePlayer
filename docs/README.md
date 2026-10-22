@@ -58,8 +58,3 @@ states the goals, and each contract below covers one part of it.
 - [Drawing mappings](audioviz-mapping-api.md): which audio values move which parts of a drawing.
 - [Rendering, motion and flash limits](audioviz-rendering-api.md): trails, the flash policy and
   the viewer's settings.
-
-## Records
-
-[`records/`](records/) holds dated records: the verification logs of past releases and a
-measurement report. They describe the code at their date, and nobody keeps them current.

@@ -610,10 +610,6 @@ drawing: the surface draws the background and returns.
 
 ## Still open
 
-- **No evidence of the destination backend on a phone.** A shader compiled by Skia does not prove
-  its destination is the graphics card. The desktop benchmark reports the window's graphics backend,
-  and Android and iOS have no such evidence yet. That needs a device.
-- **The governor owns no total budget.** Drawings declare what they can give up through
-  `VizQualityControl`, and the quality control shrinks the echo buffer, but there is no
-  surface-wide budget across two scenes, glow, history and the interface.
-- **Android 26 to 32 and context loss** are unqualified. Both need a device.
+- The governor owns no total budget across two scenes, glow, history and the interface (#682).
+- No phone has run the visualiser yet. Its graphics backend there, Android 26 to 32 and a lost
+  graphics context are unqualified (#683).

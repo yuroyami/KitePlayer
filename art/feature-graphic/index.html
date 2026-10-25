@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>KitePlayer feature graphic</title>
+<!--
+  The KitePlayer feature graphic, as a fixed 1920 x 1080 page drawn as a media player.
+  Open this file in a browser, or run render.sh to get a PNG at 3840 x 2160.
+  Add ?theme=light to the URL for the light variant. The default is the dark variant.
+  The logo comes from ../final/kiteplayer-logo.svg, so the mark is always the real one.
+  Nothing on the page is smaller than 40px, so it still reads at README and phone width.
+-->
+<style>
+  @font-face {
+    font-family: "Outfit";
+    src: url("fonts/outfit-latin.woff2") format("woff2");
+    font-weight: 100 900;
+    font-display: block;
+  }
+  @font-face {
+    font-family: "JetBrains Mono";
+    src: url("fonts/jetbrains-mono-latin.woff2") format("woff2");
+    font-weight: 100 800;
+    font-display: block;
+  }
+
+  :root {
+    /* Brand colours, taken from kiteplayer-logo.svg. */
+    --violet: #7F52FF;
+    --magenta: #C518CB;
+    --coral: #ED464C;
+    --grad: linear-gradient(90deg, var(--violet) 0%, var(--magenta) 55%, var(--coral) 100%);
+    --grad-v: linear-gradient(180deg, var(--coral) 0%, var(--magenta) 45%, var(--violet) 100%);
+
+    /* Dark variant. */
+    --bg: #0C0A12;
+    --ink: #FFFFFF;
+    --ink-2: rgba(255, 255, 255, 0.74);
+    --ink-3: rgba(255, 255, 255, 0.48);
+    --rule: rgba(255, 255, 255, 0.13);
+    --track: rgba(255, 255, 255, 0.14);
+    --buffered: rgba(255, 255, 255, 0.22);
+    --frame: rgba(255, 255, 255, 0.16);
+    --screen-shadow: 0 30px 70px rgba(0, 0, 0, 0.55);
+  }
+  :root[data-theme="light"] {
+    --bg: #F4F2F9;
+    --ink: #16121F;
+    --ink-2: rgba(22, 18, 31, 0.76);
+    --ink-3: rgba(22, 18, 31, 0.52);
+    --rule: rgba(22, 18, 31, 0.13);
+    --frame: rgba(22, 18, 31, 0.22);
+    --screen-shadow: 0 30px 70px rgba(22, 18, 31, 0.26);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    width: 1920px;
+    height: 1080px;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Outfit", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: geometricPrecision;
+  }
+  .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+
+  .player {
+    position: relative;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    padding: 72px 88px 52px;
+    display: grid;
+    grid-template-rows: auto auto auto 1fr auto;
+    background: var(--bg);
+  }
+
+  /* Mark and wordmark. */
+  .brand { display: flex; align-items: center; gap: 30px; }
+  .brand img { width: 150px; height: 150px; display: block; }
+  .wordmark { font-size: 136px; font-weight: 700; letter-spacing: -0.035em; line-height: 1; }
+
+  h1 {
+    margin: 52px 0 0;
+    font-size: 72px;
+    line-height: 1.06;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+  }
+  h1 em { font-style: normal; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+  .line {
+    margin: 34px 0 0;
+    font-size: 40px;
+    line-height: 1.3;
+    font-weight: 500;
+    color: var(--ink-2);
+  }
+  .line .dot { color: var(--ink-3); padding: 0 10px; }
+
+  /* The player window: a framed picture area with the controls drawn over it.
+     The picture is dark on both themes, the way a video surface is, so it carries
+     its own ink colours. */
+  .screen {
+    position: relative;
+    margin-top: 44px;
+    padding: 36px 44px 34px;
+    border: 2px solid var(--frame);
+    border-radius: 28px;
+    box-shadow: var(--screen-shadow);
+    overflow: hidden;
+    display: grid;
+    grid-template-rows: 1fr auto auto;
+    background:
+      radial-gradient(1100px 620px at 12% 104%, rgba(127, 82, 255, 0.30) 0%, transparent 60%),
+      radial-gradient(900px 520px at 78% 108%, rgba(197, 24, 203, 0.18) 0%, transparent 60%),
+      #07060B;
+    --bg: #07060B;
+    --ink: #FFFFFF;
+    --ink-2: rgba(255, 255, 255, 0.74);
+    --ink-3: rgba(255, 255, 255, 0.48);
+    --rule: rgba(255, 255, 255, 0.13);
+    --track: rgba(255, 255, 255, 0.14);
+    --buffered: rgba(255, 255, 255, 0.22);
+  }
+
+  /* The picture area: music gets the visualizer on the left, video gets a film strip on the right. */
+  .stage {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    margin-bottom: 36px;
+  }
+
+  /* The visualizer, the kind the audioviz module draws for music. */
+  .viz {
+    width: 720px;
+    height: 170px;
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    opacity: 0.6;
+  }
+  .viz i { flex: 1; border-radius: 3px 3px 0 0; background: var(--grad-v); }
+
+  /* The film strip: four frames of one scene, running off the right edge of the screen. */
+  .film {
+    position: absolute;
+    right: -140px;
+    bottom: 0;
+    width: 1040px;
+    padding: 12px 0;
+    background: #1B1726;
+    border-radius: 10px;
+    box-shadow: 0 24px 50px rgba(0, 0, 0, 0.6);
+  }
+  .film .holes { display: flex; justify-content: space-between; padding: 0 24px; height: 14px; }
+  .film .holes i { width: 22px; height: 14px; border-radius: 3px; background: rgba(255, 255, 255, 0.82); }
+  .film .frames { display: flex; gap: 14px; padding: 10px 24px; }
+  .film .frame {
+    position: relative;
+    flex: 1;
+    height: 132px;
+    border-radius: 6px;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at var(--sun) 44%, #FFD2B3 0 22px, rgba(255, 210, 179, 0.35) 28px, transparent 58px),
+      linear-gradient(180deg, #1E144A 0%, #7F52FF 46%, #C518CB 72%, #ED464C 100%);
+  }
+  /* Two hills in front of the sunset. */
+  .film .frame::before, .film .frame::after {
+    content: "";
+    position: absolute;
+    bottom: -90px;
+    height: 130px;
+    border-radius: 50%;
+    background: #0D0A17;
+  }
+  .film .frame::before { left: -28%; width: 74%; bottom: -86px; }
+  .film .frame::after { right: -34%; width: 86%; bottom: -98px; }
+
+  /* A subtitle line, styled the way a video player draws one. */
+  .subtitle { text-align: center; padding-bottom: 30px; }
+  .subtitle span {
+    display: inline-block;
+    font-size: 48px;
+    font-weight: 600;
+    color: #FFFFFF;
+    text-shadow:
+      -2.5px -2.5px 0 #000, 2.5px -2.5px 0 #000, -2.5px 2.5px 0 #000, 2.5px 2.5px 0 #000,
+      0 -3px 0 #000, 0 3px 0 #000, -3px 0 0 #000, 3px 0 0 #000,
+      0 8px 18px rgba(0, 0, 0, 0.55);
+  }
+
+  /* The control bar. */
+  .bar { display: flex; align-items: center; gap: 30px; }
+  .bar .play { width: 44px; height: 44px; flex: none; }
+  .bar .play path { fill: var(--ink); }
+  .bar .time { font-size: 28px; font-weight: 500; color: var(--ink-2); letter-spacing: 0.02em; flex: none; }
+  .seek { position: relative; flex: 1; height: 14px; border-radius: 7px; background: var(--track); }
+  .seek .buffered { position: absolute; inset: 0; width: 64%; border-radius: 7px; background: var(--buffered); }
+  .seek .played { position: absolute; inset: 0; width: 36%; border-radius: 7px; background: var(--grad); }
+  .seek .chapter { position: absolute; top: -6px; width: 4px; height: 26px; border-radius: 2px; background: var(--ink-3); }
+  .seek .knob {
+    position: absolute; top: 50%; left: 36%;
+    width: 34px; height: 34px; margin: -17px 0 0 -17px;
+    border-radius: 50%; background: var(--ink);
+    box-shadow: 0 0 0 5px var(--bg), 0 4px 16px rgba(0, 0, 0, 0.45);
+  }
+  .chips { display: flex; align-items: center; gap: 16px; flex: none; }
+  .chip {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--ink-2);
+    border: 2px solid var(--rule);
+    border-radius: 8px;
+    padding: 9px 14px 8px;
+    line-height: 1;
+  }
+  .chip.on { color: var(--ink); border-color: var(--ink-3); }
+  .icon { width: 40px; height: 40px; }
+  .icon path, .icon rect { fill: none; stroke: var(--ink-2); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .icon rect.fill { fill: var(--ink-2); stroke: none; }
+
+  .meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 30px;
+    padding-top: 26px;
+    border-top: 1px solid var(--rule);
+    font-size: 36px;
+    font-weight: 500;
+    color: var(--ink-2);
+  }
+  .meta .platforms .dot { color: var(--ink-3); padding: 0 8px; }
+  .meta .repo { display: flex; align-items: center; gap: 16px; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 28px; color: var(--ink-3); }
+  .meta .repo svg { width: 34px; height: 34px; fill: var(--ink-2); }
+</style>
+</head>
+<body>
+<main class="player">
+  <header class="brand">
+    <img src="../final/kiteplayer-logo.svg" alt="">
+    <span class="wordmark">KitePlayer</span>
+  </header>
+
+  <h1>A native media player for <em>Kotlin Multiplatform.</em></h1>
+
+  <p class="line">Video<span class="dot">·</span>Audio<span class="dot">·</span>Subtitles<span class="dot">·</span>HLS and DASH<span class="dot">·</span>HDR<span class="dot">·</span>Picture-in-picture<span class="dot">·</span>Compose or native views</p>
+
+  <div class="screen">
+  <div class="stage" aria-hidden="true">
+    <div class="viz"></div>
+    <div class="film">
+      <div class="holes"></div>
+      <div class="frames">
+        <i class="frame" style="--sun: 28%"></i>
+        <i class="frame" style="--sun: 40%"></i>
+        <i class="frame" style="--sun: 52%"></i>
+        <i class="frame" style="--sun: 64%"></i>
+      </div>
+      <div class="holes"></div>
+    </div>
+  </div>
+
+  <div class="subtitle"><span>Subtitles are drawn by libass.</span></div>
+
+  <div class="bar">
+    <svg class="play" viewBox="0 0 36 36" aria-hidden="true"><path d="M9 5.5v25c0 1.6 1.8 2.6 3.2 1.8l20-12.5c1.3-.8 1.3-2.8 0-3.6l-20-12.5C10.8 2.9 9 3.9 9 5.5z"/></svg>
+    <span class="time mono">00:42:17</span>
+    <div class="seek">
+      <div class="buffered"></div>
+      <div class="played"></div>
+      <i class="chapter" style="left: 11%"></i>
+      <i class="chapter" style="left: 27%"></i>
+      <i class="chapter" style="left: 52%"></i>
+      <i class="chapter" style="left: 73%"></i>
+      <i class="chapter" style="left: 89%"></i>
+      <div class="knob"></div>
+    </div>
+    <span class="time mono">01:58:03</span>
+    <div class="chips">
+      <span class="chip on">CC</span>
+      <span class="chip">1.5×</span>
+      <span class="chip on">HDR</span>
+      <svg class="icon" viewBox="0 0 32 32" aria-hidden="true"><path d="M5 8.5A2.5 2.5 0 0 1 7.5 6h17A2.5 2.5 0 0 1 27 8.5v15a2.5 2.5 0 0 1-2.5 2.5H7.5A2.5 2.5 0 0 1 5 23.5z"/><rect class="fill" x="15" y="15" width="9" height="7" rx="1.2"/></svg>
+      <svg class="icon" viewBox="0 0 32 32" aria-hidden="true"><path d="M5 12V7a2 2 0 0 1 2-2h5M27 12V7a2 2 0 0 0-2-2h-5M5 20v5a2 2 0 0 0 2 2h5M27 20v5a2 2 0 0 1-2 2h-5"/></svg>
+    </div>
+  </div>
+  </div>
+
+  <footer class="meta">
+    <span class="platforms">Android<span class="dot">·</span>iOS<span class="dot">·</span>macOS<span class="dot">·</span>Desktop JVM<span class="dot">·</span>Web</span>
+    <span class="repo">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+      github.com/yuroyami/KitePlayer
+    </span>
+  </footer>
+</main>
+
+<script>
+  // The visualizer bars: a fixed pattern, so every render is the same.
+  (function () {
+    var viz = document.querySelector(".viz");
+    for (var i = 0; i < 56; i++) {
+      var t = i / 55;
+      var h = 0.18 + 0.42 * Math.pow(Math.sin(t * 9.3 + 0.8), 2) + 0.34 * Math.pow(Math.sin(t * 23.7 + 2.1), 2) * (1 - t * 0.6);
+      var bar = document.createElement("i");
+      bar.style.height = Math.round(Math.min(1, h) * 100) + "%";
+      viz.appendChild(bar);
+    }
+    // The sprocket holes of the film strip, one row above the frames and one below.
+    document.querySelectorAll(".film .holes").forEach(function (row) {
+      for (var j = 0; j < 22; j++) row.appendChild(document.createElement("i"));
+    });
+  })();
+
+  // ?theme=light switches to the light variant. Anything else keeps the dark one.
+  var theme = new URLSearchParams(location.search).get("theme");
+  if (theme === "light") document.documentElement.setAttribute("data-theme", "light");
+</script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="art/readme/kiteplayer-feature-graphic.png">
-    <img src="art/readme/kiteplayer-feature-graphic-light.png" width="100%" alt="KitePlayer, a native media player for Kotlin Multiplatform, drawn as a player window. One engine written in Kotlin with FFmpeg underneath. Hardware decoding and HDR where the platform has them, a gapless queue with crossfade, every common subtitle format with ASS and SSA drawn by libass, HLS and DASH, background playback and picture-in-picture, video inside Compose or in a native view. Android, iOS, macOS, desktop JVM and web.">
+    <img src="art/readme/kiteplayer-feature-graphic-light.png" width="100%" alt="KitePlayer, a native media player for Kotlin Multiplatform: video, audio, subtitles, HLS and DASH, HDR, picture-in-picture, and video in Compose or in native views. A player window shows an audio visualizer, a film strip, the subtitle line Subtitles, drawn by libass, with a karaoke sweep, and a control bar. Android, iOS, macOS, desktop JVM and web.">
   </picture>
 </p>
 

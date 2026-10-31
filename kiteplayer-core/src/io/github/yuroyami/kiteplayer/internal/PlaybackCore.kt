@@ -12140,9 +12140,9 @@ internal class PlaybackCore(
             withContext(dispatchers.videoDecode) {
                 try {
                     decoder.flush(epoch)
-                } catch (cancellation: CancellationException) {
-                    throw cancellation
                 } catch (failure: Throwable) {
+                    // A cancellation the decoder threw while its lane runs is its failure (#589).
+                    throwIfOwnCancellation(failure)
                     throw VideoDecoderRuntimeFailure("flush", failure)
                 }
             }
@@ -13602,9 +13602,11 @@ internal class PlaybackCore(
         scope.launch(context) {
             try {
                 body()
-            } catch (cancellation: CancellationException) {
-                throw cancellation
             } catch (failure: Throwable) {
+                // Only the lane's own cancellation is a clean stop. One that code the lane called
+                // threw while the lane runs is its failure, and is reported as one (#589): taken
+                // for a stop, it ended the lane with nothing said, and playback stood still.
+                throwIfOwnCancellation(failure)
                 val outcome = WorkerOutcome(session.token, worker.name, failure)
                 session.firstWorkerOutcome.compareAndSet(null, outcome)
                 outcomes.trySend(outcome)
@@ -14100,9 +14102,9 @@ internal class PlaybackCore(
                     // decoder starts over, on the next keyframe.
                     try {
                         decoder.flush(epoch)
-                    } catch (cancellation: CancellationException) {
-                        throw cancellation
                     } catch (failure: Throwable) {
+                        // A cancellation the decoder threw while its lane runs is its failure (#589).
+                        throwIfOwnCancellation(failure)
                         throw VideoDecoderRuntimeFailure("flush", failure)
                     }
                     ending = false
@@ -14258,17 +14260,16 @@ internal class PlaybackCore(
         packet: io.github.yuroyami.kiteplayer.spi.PlayerPacket?,
     ): Boolean = try {
         decoder.send(packet)
-    } catch (cancellation: CancellationException) {
-        throw cancellation
     } catch (failure: Throwable) {
+        // A cancellation the decoder threw while its lane runs is its failure (#589).
+        throwIfOwnCancellation(failure)
         throw VideoDecoderRuntimeFailure("send", failure)
     }
 
     private fun videoDecoderSkip(decoder: VideoDecoder, skip: Boolean) = try {
         decoder.skipNonReferenceFrames(skip)
-    } catch (cancellation: CancellationException) {
-        throw cancellation
     } catch (failure: Throwable) {
+        // Not a suspending call, so a cancellation out of it is never the lane's own (#589).
         throw VideoDecoderRuntimeFailure("skip", failure)
     }
 
@@ -14308,9 +14309,9 @@ internal class PlaybackCore(
 
     private suspend fun videoDecoderReceive(decoder: VideoDecoder): VideoFrame? = try {
         decoder.receive()
-    } catch (cancellation: CancellationException) {
-        throw cancellation
     } catch (failure: Throwable) {
+        // A cancellation the decoder threw while its lane runs is its failure (#589).
+        throwIfOwnCancellation(failure)
         throw VideoDecoderRuntimeFailure("receive", failure)
     }
 

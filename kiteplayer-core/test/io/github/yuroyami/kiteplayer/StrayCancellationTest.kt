@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
@@ -61,6 +62,35 @@ class StrayCancellationTest {
         assertNull(snapshot.tracks.selectedSubtitle, "the subtitle track is deselected")
         harness.core.play()
         harness.run(1.seconds)
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        harness.close()
+    }
+
+    /**
+     * A hardware decoder that throws a cancellation while its lane runs has failed, and the
+     * engine recovers it in software as it does any decoder failure (#589). The lane took the
+     * exception for its own stop, ended with nothing said, and the picture stood still.
+     */
+    @Test
+    fun aDecoderThatThrowsACancellationWhilePlayingIsRecoveredAsAFailure() = runTest {
+        val faults = FaultPlan().apply {
+            videoDecodeFailsAfterFrames = 12
+            videoDecodeFailure = CancellationException("stray")
+        }
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(durationUs = 6_000_000),
+            faults = faults,
+            config = PlayerConfig(hardwareDecode = HwdecPolicy.Auto),
+        )
+        harness.backend.videoDecoderStatus.value = HwdecStatus.HardwareWithDownload(HwdecKind.VideoToolbox)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1500.milliseconds)
+        assertEquals(2, harness.backend.openCalls, "the failed decoder was never recovered")
+        val presented = assertNotNull(harness.renderer).count
+        harness.run(1.seconds)
+        assertTrue(assertNotNull(harness.renderer).count > presented, "the picture stood still after the decoder failed")
         assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
         harness.close()
     }

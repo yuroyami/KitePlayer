@@ -222,8 +222,10 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
   longer closes the whole player (#589). An app's `withTimeout` around its HTTP call is an
   ordinary way to throw one, and the player read it as its own end, published
   `RuntimeCompromised` and refused every later call. The subtitle now fails as any unreadable
-  file does, and a decoder factory's track is left out. The media source calls of an open and the
-  worker lanes still treat such an exception as their own end.
+  file does, and a decoder factory's track is left out. A decoder that throws one while it plays has failed,
+  and is recovered in software as any decoder failure is, where its lane used to end with
+  nothing said and the picture stood still. The media source calls of an open still treat such
+  an exception as their own end.
 - A live HLS stream now starts where its `EXT-X-START` tag says, and a live DASH stream as far
   behind the live edge as its `suggestedPresentationDelay` asks (#627). FFmpeg obeys the tag only
   with its `prefer_x_start` option on, which the player never set, so every live stream started

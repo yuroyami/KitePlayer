@@ -592,6 +592,9 @@ internal class FaultPlan(
      */
     var videoDecodeFailsAfterFrames: Int? = null
 
+    /** What the failure of [videoDecodeFailsAfterFrames] throws, or null for a plain error. */
+    var videoDecodeFailure: Throwable? = null
+
     /** True makes opening the sink fail. */
     var sinkOpenFails: Boolean = false
 
@@ -1636,7 +1639,7 @@ internal class ScriptedVideoDecoder(
     override suspend fun receive(): VideoFrame? {
         val failAfter = faults.videoDecodeFailsAfterFrames
         if (failAfter != null && hardware != HwdecStatus.Software && delivered >= failAfter) {
-            error("scripted hardware video decode failed after $delivered frames")
+            throw faults.videoDecodeFailure ?: IllegalStateException("scripted hardware video decode failed after $delivered frames")
         }
         val frame = pending.removeFirstOrNull()
         if (frame == null && ending) drained = true

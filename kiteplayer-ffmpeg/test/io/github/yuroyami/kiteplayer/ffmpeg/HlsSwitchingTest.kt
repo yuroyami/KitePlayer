@@ -285,6 +285,47 @@ class HlsSwitchingTest {
         assertEquals("high 15", assertNotNull(switch.open("https://kite-hls.invalid/segment/15.ts")).text())
     }
 
+    private fun liveMp4(name: String, first: Int, count: Int, tail: String = "") = buildString {
+        append("#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:$first\n")
+        append("#EXT-X-MAP:URI=\"$name-init.mp4\"\n")
+        for (n in first until first + count) append("#EXTINF:2.000000,\n$name-$n.m4s\n")
+        append(tail)
+    }
+
+    /**
+     * A live fMP4 reload that gains a second `EXT-X-MAP`, as an inserted advertisement brings, is
+     * served up to it, and the stream holds its variant until the map leaves the window (#621). The
+     * reload threw, FFmpeg dropped the playlist, and the stream ended at its first advertisement.
+     */
+    @Test
+    fun aLiveReloadWithASecondMapIsServedUpToItAndHoldsItsVariant() = runTest {
+        val stream = Stream(mutableMapOf())
+        stream.files["https://cdn.test/low.m3u8"] = liveMp4("low", 10, 5)
+        stream.files["https://cdn.test/high.m3u8"] = liveMp4("high", 10, 5)
+        for (n in 10..20) {
+            stream.files["https://cdn.test/low-$n.m4s"] = "low $n"
+            stream.files["https://cdn.test/high-$n.m4s"] = "high $n"
+        }
+        val switch = switchOver(stream)
+        assertNotNull(switch.open(HlsVariantSwitch.PLAYLIST)).close()
+
+        val ad = "#EXT-X-DISCONTINUITY\n#EXT-X-MAP:URI=\"ad-init.mp4\"\n#EXTINF:2.000000,\nad-1.m4s\n"
+        stream.files["https://cdn.test/low.m3u8"] = liveMp4("low", 11, 5, ad)
+        val reloaded = assertNotNull(switch.open(HlsVariantSwitch.PLAYLIST)).text()
+        assertTrue("#EXT-X-MEDIA-SEQUENCE:11" in reloaded, reloaded)
+        assertTrue("segment/15.m4s" in reloaded, "the segments before the map were not served: $reloaded")
+        assertFalse("ad" in reloaded, "what follows the second map reached FFmpeg: $reloaded")
+        assertFalse("#EXT-X-ENDLIST" in reloaded, "a live playlist was ended")
+        assertEquals("low 15", assertNotNull(switch.open("https://kite-hls.invalid/segment/15.m4s")).text())
+        assertFalse(switch.request(1), "the stream moved while its playlist went past a map")
+
+        // The advertisement leaves the window, and the playlist reads whole again.
+        stream.files["https://cdn.test/low.m3u8"] = liveMp4("low", 16, 5)
+        val whole = assertNotNull(switch.open(HlsVariantSwitch.PLAYLIST)).text()
+        assertTrue("segment/20.m4s" in whole, "the reload after the advertisement was not served whole: $whole")
+        assertEquals("low 20", assertNotNull(switch.open("https://kite-hls.invalid/segment/20.m4s")).text())
+    }
+
     private fun mp4Box(type: String, payload: ByteArray): ByteArray =
         byteArrayOf(0, 0, ((8 + payload.size) shr 8).toByte(), (8 + payload.size).toByte()) + type.encodeToByteArray() + payload
 

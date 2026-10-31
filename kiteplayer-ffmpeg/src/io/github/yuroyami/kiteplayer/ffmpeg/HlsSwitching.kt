@@ -82,6 +82,11 @@ internal class HlsMediaPlaylist(
     val ended: Boolean,
     /** The playlist with every segment at an address of the switch, see [HlsVariantSwitch]. */
     val served: String,
+    /**
+     * True when the playlist went on past what the switch understands, a second `EXT-X-MAP` or one
+     * after a segment, and this holds only the segments before it (#621).
+     */
+    val truncated: Boolean = false,
 ) {
     fun at(sequence: Long): HlsSegment? {
         val first = segments.firstOrNull()?.sequence ?: return null
@@ -94,12 +99,13 @@ internal class HlsMediaPlaylist(
  * it is no media playlist or uses something the switch does not serve: variables (`EXT-X-DEFINE`
  * or a `{$name}`), more than one `EXT-X-MAP`, a segment before the `EXT-X-MAP`, or a key method other than
  * AES-128. Such a playlist reaches FFmpeg as the server sent it, and a variant change opens the
- * stream again.
+ * stream again. With [keepUpToAMap], a playlist that only goes on past a second `EXT-X-MAP` is read
+ * up to it instead, and marked [HlsMediaPlaylist.truncated].
  *
  * The served text of a playlist with an `EXT-X-MAP` names no key: the switch decrypts those
  * segments itself, because it must hold their plain bytes to write them again (#565).
  */
-internal fun readSwitchablePlaylist(text: String, base: String): HlsMediaPlaylist? {
+internal fun readSwitchablePlaylist(text: String, base: String, keepUpToAMap: Boolean = false): HlsMediaPlaylist? {
     // A variable may come from the master or the address, which only FFmpeg puts in.
     if ("{$" in text) return null
     var started = false
@@ -119,6 +125,7 @@ internal fun readSwitchablePlaylist(text: String, base: String): HlsMediaPlaylis
     val rangeEnds = HashMap<String, Long>()
     val segments = ArrayList<HlsSegment>()
     val served = StringBuilder(text.length + 256)
+    var truncated = false
     for (raw in text.removePrefix("﻿").lineSequence()) {
         val line = raw.trim()
         if (!started) {
@@ -158,7 +165,13 @@ internal fun readSwitchablePlaylist(text: String, base: String): HlsMediaPlaylis
                 served.append(KEY_MARK).append(if (uri == null) line else withUri(line, uri)).append('\n')
             }
             line.startsWith("#EXT-X-MAP:") -> {
-                if (init != null || segments.isNotEmpty()) return null
+                if (init != null || segments.isNotEmpty()) {
+                    // A reload with a second map, as an inserted advertisement brings (#621): the
+                    // segments before it are what the switch can still serve.
+                    if (!keepUpToAMap || segments.isEmpty()) return null
+                    truncated = true
+                    break
+                }
                 val attributes = parseHlsAttributes(line.substringAfter(':'))
                 val address = Playlists.resolve(base, attributes["URI"] ?: return null)
                 val bytes = attributes["BYTERANGE"]?.let { parseByteRange(it) ?: return null }
@@ -199,7 +212,7 @@ internal fun readSwitchablePlaylist(text: String, base: String): HlsMediaPlaylis
     } else {
         text.lineSequence().filter { !it.startsWith(KEY_MARK) }.joinToString("\n")
     }
-    return HlsMediaPlaylist(segments, init, ended, shown)
+    return HlsMediaPlaylist(segments, init, if (truncated) false else ended, shown, truncated)
 }
 
 /** Starts an `EXT-X-KEY` line while a playlist is read. No playlist line holds it. */
@@ -288,6 +301,9 @@ internal class HlsVariantSwitch(
     /** True when the first playlist was not understood, so FFmpeg read it as the server sent it. */
     private var passedThrough = false
 
+    /** True while the playlist FFmpeg reads goes past what the switch serves, so no move is made (#621). */
+    private var frozen = false
+
     /** The newest playlist read of each variant. */
     private val loaded = arrayOfNulls<Loaded>(addresses.size)
 
@@ -364,7 +380,7 @@ internal class HlsVariantSwitch(
      */
     suspend fun request(index: Int?): Boolean = lock.withLock {
         val current = listed ?: return false
-        if (passedThrough) return false
+        if (passedThrough || frozen) return false
         val wanted = index ?: choose()
         if (wanted !in addresses.indices) return false
         if (wanted == target.value) return true
@@ -475,7 +491,9 @@ internal class HlsVariantSwitch(
         } finally {
             reader.close()
         }
-        val playlist = readSwitchablePlaylist(bytes.decodeToString(), location)
+        // A reload FFmpeg reads from this switch once it holds its addresses: one that gained a
+        // second map is served up to it, so the stream plays on rather than fail its reload (#621).
+        val playlist = readSwitchablePlaylist(bytes.decodeToString(), location, keepUpToAMap = listed != null)
         if (playlist == null) {
             // FFmpeg holds addresses of this switch once it read one playlist from it.
             check(listed == null) { "the playlist at $address changed into one the variant switch cannot serve" }
@@ -486,6 +504,9 @@ internal class HlsVariantSwitch(
         loaded[variant] = read
         listed = read
         if (init == null) init = playlist.init
+        // Moves wait while the playlist goes past a map the switch cannot serve, and resume once
+        // a reload reads whole again, the map gone from the window.
+        frozen = playlist.truncated
         BytesMediaIo(playlist.served.encodeToByteArray(), PLAYLIST)
     }
 

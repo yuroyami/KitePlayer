@@ -172,6 +172,12 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- A live fMP4 HLS stream with two or more variants no longer stops at its first advertisement
+  (#621). A reload that gained a second `EXT-X-MAP`, as server-side ad insertion writes, threw in
+  the variant switch, and FFmpeg dropped the playlist for good. The reload is now served up to
+  that map, so the stream plays on the segments before it, holds its variant while the map stays
+  in the window, and goes on once a reload reads whole again. The advertisement itself is not
+  played; a switch that serves one map per discontinuity is the fuller fix.
 - A clipped item no longer shows a picture from before its clip's start (#456). A keyframe seek
   to an unaligned start showed the keyframe before it, and a backward step at the clip's first
   picture showed the picture before the clip and reported success. Both now keep to the item: the

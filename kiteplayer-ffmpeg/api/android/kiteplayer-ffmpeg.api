@@ -25,6 +25,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegResampler : io
 public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSource : io/github/yuroyami/kiteplayer/spi/PlayerMediaSource, io/github/yuroyami/kiteplayer/spi/RecordingCapable {
 	public final fun audioDecoderFactories ()Ljava/util/List;
 	public fun close ()V
+	public fun decodesVariant (I)Z
 	public fun fromSegmentTime-tjdgUQw (J)J
 	public fun getAttachments ()Ljava/util/List;
 	public fun getChapters ()Ljava/util/List;

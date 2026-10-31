@@ -882,6 +882,7 @@ abstract interface io.github.yuroyami.kiteplayer.spi/PlayerMediaSource : kotlin/
     abstract fun selectStreams(kotlin.collections/Set<kotlin/Int>) // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.selectStreams|selectStreams(kotlin.collections.Set<kotlin.Int>){}[0]
     abstract suspend fun readPacket(): io.github.yuroyami.kiteplayer.spi/PlayerPacket? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.readPacket|readPacket(){}[0]
     abstract suspend fun seekToKeyframe(io.github.yuroyami.kiteplayer/Pts): io.github.yuroyami.kiteplayer/Pts? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.seekToKeyframe|seekToKeyframe(io.github.yuroyami.kiteplayer.Pts){}[0]
+    open fun decodesVariant(kotlin/Int): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.decodesVariant|decodesVariant(kotlin.Int){}[0]
     open fun fromSegmentTime(io.github.yuroyami.kiteplayer/Pts): io.github.yuroyami.kiteplayer/Pts // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.fromSegmentTime|fromSegmentTime(io.github.yuroyami.kiteplayer.Pts){}[0]
     open fun interrupt(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.interrupt|interrupt(){}[0]
     open fun pauseReading(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.pauseReading|pauseReading(){}[0]

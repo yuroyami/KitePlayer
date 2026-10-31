@@ -7987,11 +7987,21 @@ internal class PlaybackCore(
     private fun mayChangeVariant(session: OpenSession): Boolean = session.source.seekable || !session.variantMoveRefused
 
     /**
+     * The variants the stream may be moved to: those whose codecs this build decodes, or all of
+     * them when the source says none does (#625), so a step never lands on a variant that plays
+     * with no sound or no picture.
+     */
+    private fun decodableVariants(): List<StreamVariant> {
+        val source = session?.source ?: return tracks.variants
+        return tracks.variants.filter { source.decodesVariant(it.index) }.ifEmpty { tracks.variants }
+    }
+
+    /**
      * The variants a step down from [current] may take: those of lower bitrate in the range that
      * plays, or of any range when that one has none, because a stall outranks the range (#447).
      */
     private fun lowerVariants(current: StreamVariant): List<StreamVariant> {
-        val lower = tracks.variants.filter { it.bitrate < current.bitrate }
+        val lower = decodableVariants().filter { it.bitrate < current.bitrate }
         return lower.filter { it.hdr == current.hdr }.ifEmpty { lower }
     }
 
@@ -8029,7 +8039,7 @@ internal class PlaybackCore(
         // Nobody sees the picture, so the cheapest variant carries the sound, often one with no
         // video at all (#595): a parked lane still downloaded the top rung and climbed further.
         if (session.videoParked.value) {
-            val cheapest = tracks.variants.minByOrNull { it.bitrate } ?: return
+            val cheapest = decodableVariants().minByOrNull { it.bitrate } ?: return
             if (cheapest.bitrate < current.bitrate) {
                 if (variantBeforePark == null) variantBeforePark = current.index
                 variantChosenByPlayer = true
@@ -8053,7 +8063,7 @@ internal class PlaybackCore(
         // size and took the top rung: down to the largest variant inside them, at once (#600). The
         // network steps only ever looked for more, so the 2160p rung played on a phone for good.
         if (!withinCaps(current, item.demux)) {
-            val inside = tracks.variants
+            val inside = decodableVariants()
                 .filter { it.bitrate < current.bitrate && it.hdr == current.hdr && withinCaps(it, item.demux) }
                 .maxByOrNull { it.bitrate } ?: return
             variantChosenByPlayer = true
@@ -8063,7 +8073,7 @@ internal class PlaybackCore(
         }
         if (stepUpNotBeforeNanos != NO_POSITION && clock.nanos() < stepUpNotBeforeNanos) return
         // Within the range that plays: a step is a matter of bitrate, never of SDR or HDR (#447).
-        val higher = tracks.variants
+        val higher = decodableVariants()
             .filter { it.bitrate > current.bitrate && it.hdr == current.hdr && withinCaps(it, item.demux) }
             .minByOrNull { it.bitrate } ?: return
         if (!wellBuffered(session)) return

@@ -152,6 +152,12 @@ public class KiteFFmpegSource internal constructor(
 
     override suspend fun switchVariant(index: Int?): Boolean = switch?.request(index) ?: false
 
+    /** Whether FFmpeg here decodes each codec the variant's `CODECS` names, as the open's choice asks (#625). */
+    override fun decodesVariant(index: Int): Boolean {
+        val codecs = variants.firstOrNull { it.index == index }?.codecs ?: return true
+        return codecs.split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() }.all(::hlsCodecDecodable)
+    }
+
     private var reader: PacketReader? = null
 
     /**

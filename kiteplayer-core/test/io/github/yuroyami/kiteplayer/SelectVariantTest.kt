@@ -426,6 +426,34 @@ class SelectVariantTest {
         harness.close()
     }
 
+    /**
+     * A quality step skips a variant this build cannot decode (#625), such as the E-AC-3 copy of a
+     * tier on the web, which played the picture in silence.
+     */
+    @Test
+    fun aStepDownPassesOverAVariantThatDoesNotDecode() = runTest {
+        val three = listOf(
+            StreamVariant(index = 0, bitrate = 5_000_000, width = 1920, height = 1080),
+            StreamVariant(index = 1, bitrate = 2_500_000, width = 1280, height = 720),
+            StreamVariant(index = 2, bitrate = 800_000, width = 640, height = 360),
+        )
+        val script = MediaScript(
+            durationUs = 60_000_000,
+            variants = three,
+            undecodableVariants = setOf(1),
+            readDelayUsByVariant = mapOf(0 to 200_000L),
+        )
+        val harness = CoreHarness(this, script = script)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(15.seconds)
+        val lowered = harness.core.warningHistory().map { it.warning }.filterIsInstance<PlaybackWarning.VariantLowered>()
+        assertEquals(listOf(0 to 2), lowered.map { it.from to it.to }, "the step went onto a variant that does not decode: $lowered")
+        assertEquals(2, harness.core.snapshots.value.tracks.selectedVariant)
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        harness.close()
+    }
+
     /** A fast link steps up only as far as the view, and further once the view grows (#447). */
     @Test
     fun aStepUpStopsAtTheDrawnSizeAndRisesWithTheView() = runTest {

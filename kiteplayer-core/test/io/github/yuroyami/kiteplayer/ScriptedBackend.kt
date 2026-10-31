@@ -237,6 +237,8 @@ internal class MediaScript(
     val audioSilentUs: List<LongRange> = emptyList(),
     /** The variants the source offers, as an HLS master playlist would. The item's choice picks one. */
     val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> = emptyList(),
+    /** The variants whose codecs this build does not decode (#625). */
+    val undecodableVariants: Set<Int> = emptySet(),
     /** The seek bar pictures the scripted stream carries, or null (#433). */
     val thumbnails: io.github.yuroyami.kiteplayer.spi.PlayerThumbnails? = null,
     /**
@@ -1060,6 +1062,8 @@ internal class ScriptedSource(
     }
 
     override val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> get() = script.variants
+
+    override fun decodesVariant(index: Int): Boolean = index !in script.undecodableVariants
 
     override val thumbnails: io.github.yuroyami.kiteplayer.spi.PlayerThumbnails? get() = script.thumbnails
 

@@ -283,6 +283,13 @@ public interface PlayerMediaSource : AutoCloseable {
     public val selectedVariant: Int? get() = null
 
     /**
+     * True when this build decodes every codec the variant at [index] names (#625), so the engine's
+     * quality steps never move the stream onto a variant that would play with no sound or no
+     * picture. The default answers true, for a source that cannot tell.
+     */
+    public fun decodesVariant(index: Int): Boolean = true
+
+    /**
      * Moves this source to the variant at [index], or to the one it would open by itself for null,
      * while it plays (#464). True means that the packets change to that variant at the next point
      * where the media allows it, on the same streams and the same timestamps, and that a decoder

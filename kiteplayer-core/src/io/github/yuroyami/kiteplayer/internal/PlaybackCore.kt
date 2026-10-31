@@ -574,8 +574,9 @@ internal class PlaybackCore(
      *
      * A reader that [open] hands back after the limit has passed, or after the task was cancelled,
      * has no one else to close it, so it is closed here, and a reader handed on is closed by
-     * [readWholly] alone: either way, exactly once. A cancellation is the task's own end and is
-     * thrown on, never read as a failed reader.
+     * [readWholly] alone: either way, exactly once. A cancellation of the task itself is its own
+     * end and is thrown on. One the reader threw while the task still runs, such as the timeout of
+     * an app's own `withTimeout`, is a failed reader (#589): thrown on, it closed the whole player.
      */
     private suspend fun openSubtitleReader(limit: Duration, open: suspend () -> MediaIo?): SubtitleReader {
         var made: MediaIo? = null
@@ -587,22 +588,29 @@ internal class PlaybackCore(
             if (opened == true) return SubtitleReader.Opened(made)
             made?.let { runCatching { it.close() } }
             return SubtitleReader.TimedOut
-        } catch (cancellation: CancellationException) {
-            made?.let { runCatching { it.close() } }
-            throw cancellation
         } catch (failure: Throwable) {
             made?.let { runCatching { it.close() } }
+            throwIfOwnCancellation(failure)
             return SubtitleReader.Failed(failure)
         }
     }
 
-    /** [readWholly], with a failure read as a refusal that [reason] words, and a cancellation thrown on. */
+    /** [readWholly], with a failure read as a refusal that [reason] words, and the task's own cancellation thrown on. */
     private suspend fun readOrRefuse(reader: MediaIo, uri: String, reason: (Throwable) -> String): SubtitleBytes = try {
         readWholly(reader, uri)
-    } catch (cancellation: CancellationException) {
-        throw cancellation
     } catch (failure: Throwable) {
+        throwIfOwnCancellation(failure)
         SubtitleBytes.Refused(reason(failure))
+    }
+
+    /**
+     * Throws [failure] on when it is the cancellation of the coroutine that runs this, and returns
+     * for anything else (#589). A `CancellationException` that code the engine called threw while
+     * the engine still runs, an app's reader or factory among them, is that call's failure: the
+     * actor read it as its own end and closed the player for good.
+     */
+    private suspend fun throwIfOwnCancellation(failure: Throwable) {
+        if (failure is CancellationException && !currentCoroutineContext().isActive) throw failure
     }
 
     /**
@@ -4197,9 +4205,8 @@ internal class PlaybackCore(
             val subtitleDecoder = subtitleStream?.let { stream ->
                 try {
                     backendSession.subtitleDecoders.firstNotNullOfOrNull { factory -> factory.create(stream) }
-                } catch (cancellation: CancellationException) {
-                    throw cancellation
                 } catch (failure: Throwable) {
+                    throwIfOwnCancellation(failure)
                     subtitleRefusal = "the subtitle decoder could not be created${causeDetail(failure)}"
                     null
                 }
@@ -4541,9 +4548,8 @@ internal class PlaybackCore(
         acquire = {
             try {
                 factory.create(stream, policy, config.deinterlace)
-            } catch (cancellation: CancellationException) {
-                throw cancellation
             } catch (failure: Throwable) {
+                throwIfOwnCancellation(failure)
                 failures += "${factory.name}: ${failure.message ?: failure::class.simpleName}"
                 null
             }
@@ -4588,9 +4594,8 @@ internal class PlaybackCore(
                 acquire = {
                     try {
                         factory.create(stream)
-                    } catch (cancellation: CancellationException) {
-                        throw cancellation
                     } catch (failure: Throwable) {
+                        throwIfOwnCancellation(failure)
                         failures += "${factory.name}: ${failure.message ?: failure::class.simpleName}"
                         null
                     }
@@ -5084,9 +5089,8 @@ internal class PlaybackCore(
     private suspend fun alignedSubtitleDecoder(session: OpenSession, stream: PlayerStreamInfo): SubtitleDecoderOutcome {
         val decoder = try {
             session.backendSession.subtitleDecoders.firstNotNullOfOrNull { it.create(stream) }
-        } catch (cancellation: CancellationException) {
-            throw cancellation
         } catch (failure: Throwable) {
+            throwIfOwnCancellation(failure)
             return SubtitleDecoderOutcome.Refused("the target subtitle decoder could not be created${causeDetail(failure)}")
         } ?: return SubtitleDecoderOutcome.Refused("no decoder accepted subtitle stream ${stream.index}")
         try {
@@ -6074,9 +6078,8 @@ internal class PlaybackCore(
         if (targetStream != null) {
             preparedDecoder = try {
                 session.backendSession.subtitleDecoders.firstNotNullOfOrNull { it.create(targetStream) }
-            } catch (cancellation: CancellationException) {
-                throw cancellation
             } catch (failure: Throwable) {
+                throwIfOwnCancellation(failure)
                 command.reply.complete(
                     TrackChange.Discarded("the secondary subtitle decoder could not be created${causeDetail(failure)}"),
                 )

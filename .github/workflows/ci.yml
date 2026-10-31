@@ -179,7 +179,8 @@ jobs:
           ./kotlin test -m build-support
 
       # Every module that HAS jvm tests. The ones that need the clips (ffmpeg, kiteplayer,
-      # compose-video, audioviz) are here rather than on Linux for the generator reason above.
+      # compose-video, audioviz) run here on the macOS library; ffmpeg and kiteplayer run on the
+      # Linux one too, in linux-jvm-android (#639).
       # This job generated the clips above, so a test that finds one missing fails rather than
       # skipping. One module per run, because the wall-clock gates must not compete with other
       # modules' tests or compilation. audioviz runs through its gate script, which leaves out the
@@ -399,7 +400,7 @@ jobs:
   linux-jvm-android:
     name: Linux x64 (JVM + Android host tests)
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -414,6 +415,32 @@ jobs:
           . scripts/test-env.sh
           ./kotlin test -p jvm -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
             -m kiteplayer-output -m kiteplayer-view -m kiteplayer-adaptive -m kiteplayer-network
+
+      # The clips as the web job makes them, with the pinned series and the strict check, so the
+      # Linux x64 JNI library of the published KiteFFmpeg jar plays real media in CI (#639). Only
+      # macOS loaded a native library in a test before, so a Linux library that failed to load or
+      # to decode reached users with every job green.
+      - name: Install the ffmpeg CLI the clips are recorded against
+        run: |
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          brew install --quiet ffmpeg
+          echo "$(brew --prefix ffmpeg)/bin" >> "$GITHUB_PATH"
+
+      - name: Generate the test clips
+        run: ./scripts/testmedia.sh
+        env:
+          TESTMEDIA_STRICT_FFMPEG: "1"
+
+      # One module per run, as on macos-host, so the wall-clock gates do not compete. The job made
+      # the clips, so a test that finds one missing fails rather than skipping.
+      - name: JVM tests, media-backed modules on the Linux library
+        env:
+          KITEPLAYER_REQUIRE_TESTMEDIA: "1"
+        run: |
+          . scripts/test-env.sh
+          for module in kiteplayer-ffmpeg kiteplayer; do
+            ./kotlin test -m "$module" -p jvm
+          done
 
       - name: The hot path numbers
         if: always()
@@ -444,7 +471,8 @@ jobs:
           ./kotlin build -p jvm -p android $modules
           ./kotlin check duplicateClasses
 
-      # The sample bundles the clip as an asset, so a placeholder stands in on this media-free runner.
+      # The sample bundles the clip as an asset; the clips step above made it, and a placeholder
+      # stands in should that step have been skipped.
       - name: Package the sample app for every Android ABI
         run: |
           mkdir -p testmedia

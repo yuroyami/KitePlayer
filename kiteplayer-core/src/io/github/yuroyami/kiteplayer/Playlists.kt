@@ -11,8 +11,8 @@ package io.github.yuroyami.kiteplayer
  * - PLS: the `FileN` entries in their number order, with their `TitleN`.
  * - XSPF: each `<track>`'s first `<location>`, with its `<title>`, `<creator>` and `<album>`.
  * - A cue sheet (#456): each audio track as an item of its file with a [MediaClip], from its
- *   `INDEX 01` to where the next track of the file begins, its pregap played at the end of the
- *   track before it, with its `TITLE` and `PERFORMER` and the sheet's `TITLE` as its album. So an
+ *   `INDEX 01` to the next track's `INDEX 01`, so a pregap plays once, at the end of the track
+ *   before it, and the tracks of one file meet with no gap, with its `TITLE` and `PERFORMER` and the sheet's `TITLE` as its album. So an
  *   album ripped to one file with its `.cue` plays as its tracks.
  *
  * A relative address is resolved against the list's own: a path beside a list on disk, with the

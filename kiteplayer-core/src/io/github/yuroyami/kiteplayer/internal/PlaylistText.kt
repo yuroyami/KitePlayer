@@ -117,15 +117,16 @@ internal object PlaylistText {
     }
 
     /**
-     * The tracks of a cue sheet (#456), each its file's part from its `INDEX 01` to where the next
-     * track of the same file begins: that track's `INDEX 00` when it has a pregap, which plays at
-     * the end of the track before it, as foobar2000 plays it, and its `INDEX 01` otherwise. The last
-     * track of a file runs to the file's end. A track takes its own `TITLE` and `PERFORMER`, the
+     * The tracks of a cue sheet (#456), each its file's part from its `INDEX 01` to the `INDEX 01`
+     * of the next track of the same file. A pregap, from a track's `INDEX 00` to its `INDEX 01`,
+     * therefore plays at the end of the track before it, as foobar2000 plays it, and two tracks of
+     * one file meet at one boundary, so they join with no gap. The first track starts at its own
+     * `INDEX 01`, past any pregap before it. The last track of a file runs to the file's end. A track takes its own `TITLE` and `PERFORMER`, the
      * sheet's `PERFORMER` when it names none, and the sheet's `TITLE` as its album. Times are
      * minutes, seconds and frames of a compact disc, 75 to the second.
      */
     private fun cueSheet(text: String, base: String): List<MediaItem> {
-        class Track(val file: String, var title: String? = null, var performer: String? = null, var pregap: Long? = null, var start: Long? = null)
+        class Track(val file: String, var title: String? = null, var performer: String? = null, var start: Long? = null)
         var albumTitle: String? = null
         var albumPerformer: String? = null
         var file: String? = null
@@ -150,12 +151,10 @@ internal object PlaylistText {
                 "PERFORMER" -> if (current == null) albumPerformer = cueValue(rest) else current.performer = cueValue(rest)
                 "INDEX" -> {
                     val track = current ?: continue
+                    // INDEX 00, a pregap, needs no note: it plays at the end of the track before.
                     val number = rest.substringBefore(' ').toIntOrNull() ?: continue
                     val time = cueTime(rest.substringAfter(' ').trim()) ?: continue
-                    when (number) {
-                        0 -> track.pregap = time
-                        1 -> track.start = time
-                    }
+                    if (number == 1) track.start = time
                 }
             }
         }
@@ -163,7 +162,8 @@ internal object PlaylistText {
         return playable.mapIndexed { index, track ->
             val next = playable.getOrNull(index + 1)?.takeIf { it.file == track.file }
             val start = track.start!!
-            val end = next?.let { it.pregap ?: it.start }?.takeIf { it > start }
+            // The next track's pregap is this track's end, so no second of the file is left out.
+            val end = next?.start?.takeIf { it > start }
             MediaItem(
                 uri = playlistAddress(base, track.file),
                 clip = MediaClip(start = start.microseconds, end = end?.microseconds),

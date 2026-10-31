@@ -172,6 +172,10 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- A cue sheet track with a pregap no longer leaves that pregap out of every item (#456). The
+  track before ended at the pregap's start and the track ended at its own start, so the seconds
+  between played in neither, and the two tracks no longer met for the gapless join of one file.
+  The track before now ends where the next one starts, as the documented policy says.
 - `captureFrame(withSubtitles = true)` now returns one moment: the frame's pixels with the
   subtitles, the subtitle look and the viewer's turn that went with that frame (#73). The pixels
   were copied as the frame was shown, but the rest was read when the caller resumed, so a caller

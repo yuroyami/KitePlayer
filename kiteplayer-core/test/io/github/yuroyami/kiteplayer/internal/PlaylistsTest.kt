@@ -180,11 +180,23 @@ class PlaylistsTest {
         assertEquals(listOf("The Band", "A Guest", "The Band"), items.map { it.artist })
         assertEquals(List(3) { "The Album" }, items.map { it.album })
         val clips = items.map { it.clip!! }
-        // The pregap of track 2 plays at the end of track 1.
-        assertEquals(MediaClip(0.seconds, 250.seconds), clips[0])
-        assertEquals((4 * 60 + 12).seconds + (37 * 1_000_000 / 75).microseconds, clips[1].start)
+        // The pregap of track 2, 4:10 to 4:12 and 37 frames, plays at the end of track 1, so the
+        // tracks meet at one boundary and no second of the file is left out (#456).
+        val second = (4 * 60 + 12).seconds + (37 * 1_000_000 / 75).microseconds
+        assertEquals(MediaClip(0.seconds, second), clips[0])
+        assertEquals(second, clips[1].start)
         assertEquals(483.seconds, clips[1].end)
         assertEquals(MediaClip(483.seconds, null), clips[2])
+        clips.zipWithNext().forEach { (a, b) -> assertEquals(a.end, b.start, "a gap or an overlap between $a and $b") }
+    }
+
+    /** The first track starts at its own INDEX 01, past a pregap before it (#456). */
+    @Test
+    fun aFirstTracksPregapIsBeforeItsStart() {
+        val cue = "FILE a.flac WAVE\nTRACK 01 AUDIO\nINDEX 00 00:00:00\nINDEX 01 00:02:00\nTRACK 02 AUDIO\nINDEX 00 03:00:00\nINDEX 01 03:01:15\n"
+        val clips = Playlists.parse(cue, "/m/a.cue").orEmpty().map { it.clip }
+        val second = 181.seconds + (15 * 1_000_000 / 75).microseconds
+        assertEquals(listOf(MediaClip(2.seconds, second), MediaClip(second, null)), clips)
     }
 
     @Test

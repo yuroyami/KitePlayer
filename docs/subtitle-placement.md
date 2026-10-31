@@ -84,8 +84,9 @@ changes shape, for example after a rotation.
   events against the picture, and only an event that its author positioned there reaches a bar.
   Under `Fill` and `Stretch`, the typesetter uses the whole output as the picture. Zoom and pan do
   not move typeset text.
-- A bitmap cue keeps its authored pixel size. Its origin maps from its authored canvas onto the
-  area that the Kotlin tier lays out in, each axis on its own.
+- A bitmap cue's origin and extent scale together from its authored canvas onto the area that the
+  Kotlin tier lays out in, each axis on its own. A bitmap that lands on a different extent is
+  resampled, and one at its authored size passes through untouched.
 - A cue in a TTML region is placed by its region, whose box is a fraction of the area that the
   Kotlin tier lays out in, and stands in no bottom stack. [TTML regions](subtitle-regions.md) has
   the rule.

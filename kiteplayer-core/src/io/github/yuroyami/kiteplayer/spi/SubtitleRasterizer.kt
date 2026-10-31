@@ -17,10 +17,10 @@ import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
  * output pixels afterwards, and a renderer composites them over its whole output, never over the
  * picture alone. docs/subtitle-placement.md has the whole rule.
  *
- * Bitmap cues arrive pre-rendered and are POSITIONED, not scaled: an overlay image carries an
- * origin and its pixels, and no implementation resizes them. Giving a bitmap cue a target
- * rectangle would be a public model change, so it is a decision to take deliberately rather than
- * a promise this interface can quietly make.
+ * Bitmap cues arrive pre-rendered for an authored canvas. A region's origin and its extent scale
+ * together from that canvas onto the viewport, so a bitmap that lands on a different extent is
+ * resampled, a bitmap at its authored size passes through untouched, and only the part inside the
+ * viewport is kept. Every built-in rasterizer places its regions that way.
  *
  * Every implementation keeps to the limits in the companion object. The built-in ones draw nothing
  * for a viewport larger than [MAX_VIEWPORT_SIZE] on a side, lay out only what [limitCues] keeps,

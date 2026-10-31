@@ -244,6 +244,9 @@ public class AwtCanvasVideoRenderer(
             return VideoSize((width * scaleX).roundToInt(), (height * scaleY).roundToInt())
         }
 
+    /** The canvas paints the decoded picture as it is, so the engine warns when picture controls are set (#610). */
+    override val appliesAdjustments: Boolean get() = false
+
     override fun setScaleMode(mode: VideoScale) {
         synchronized(lock) { scaleMode = mode }
         repaintRetained()

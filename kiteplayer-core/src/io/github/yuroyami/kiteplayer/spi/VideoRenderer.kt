@@ -89,6 +89,14 @@ public interface VideoRenderer : AutoCloseable {
     public fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {}
 
     /**
+     * True when this renderer draws [setAdjustments]'s picture controls (#610). The engine warns
+     * `PlaybackWarning.PictureControlsUnavailable` when controls other than the neutral ones are
+     * set while a renderer that answers false is attached, so an application learns why its slider
+     * changes nothing. Defaulted to true, for a renderer that overrides [setAdjustments].
+     */
+    public val appliesAdjustments: Boolean get() = true
+
+    /**
      * Whether to dim the picture while it flashes (#500), told on attach and on every change like
      * [setAdjustments]. A renderer with a guard runs [VideoFlashGuard] on what it draws; only an
      * Apple renderer reads the system setting for [io.github.yuroyami.kiteplayer.FlashGuard.FollowSystem].

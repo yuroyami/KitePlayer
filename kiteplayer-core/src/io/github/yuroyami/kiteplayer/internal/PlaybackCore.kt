@@ -1275,6 +1275,22 @@ internal class PlaybackCore(
     /** The renderers already warned that they draw this item's 360 degree video flat (#460). */
     private val projectionWarned = mutableListOf<VideoRenderer>()
 
+    /** The renderers already warned that they do not draw the picture controls (#610). */
+    private val adjustmentsWarned = mutableListOf<VideoRenderer>()
+
+    /**
+     * Warns once for [renderer] when the picture controls are set and it does not draw them (#610).
+     * They were stored, published and told to the renderer, and dropped with nothing said.
+     */
+    private fun warnIfAdjustmentsIgnored(renderer: VideoRenderer?) {
+        renderer ?: return
+        if (videoAdjustments.isIdentity || renderer.appliesAdjustments) return
+        if (adjustmentsWarned.any { it === renderer }) return
+        adjustmentsWarned += renderer
+        val name = ((renderer as? AttachableRenderer)?.delegate ?: renderer)::class.simpleName ?: "renderer"
+        warn(PlaybackWarning.PictureControlsUnavailable(name))
+    }
+
     /** Runtime subtitle timing shift, seeded from config. Positive shows cues later. */
     private var subtitleDelay: Duration = config.subtitles.delay
 
@@ -3273,6 +3289,7 @@ internal class PlaybackCore(
                 // the engine's, honoured by whichever renderer is or becomes attached.
                 session?.renderer?.setAdjustments(command.value)
                 if (session == null) pendingRenderer?.setAdjustments(command.value)
+                warnIfAdjustmentsIgnored(pendingRenderer)
                 // A held picture shows the change now, not with a frame that is not coming (#463).
                 requestRedraw(forced = false)
                 command.reply.complete(Unit)
@@ -3437,6 +3454,7 @@ internal class PlaybackCore(
         // player, so whichever renderer arrives is told the ruling values before its first frame.
         renderer?.setScaleMode(videoScale)
         renderer?.setAdjustments(videoAdjustments)
+        warnIfAdjustmentsIgnored(renderer)
         renderer?.setRenderQuality(renderQuality)
         renderer?.setHdrPolicy(hdrPolicy)
         renderer?.setFlashGuard(flashGuard)

@@ -16,6 +16,7 @@ public final class io/github/yuroyami/kiteplayer/output/AwtCanvasVideoRenderer :
 	public fun accepts (Lio/github/yuroyami/kiteplayer/spi/FrameShape;)Z
 	public fun clearPicture ()V
 	public fun close ()V
+	public fun getAppliesAdjustments ()Z
 	public fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public final fun getFailedFrames ()J
 	public fun getOutputSize ()Lio/github/yuroyami/kiteplayer/VideoSize;

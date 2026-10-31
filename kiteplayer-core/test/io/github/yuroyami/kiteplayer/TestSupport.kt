@@ -168,6 +168,11 @@ internal class RecordingRenderer(
     /** What this renderer claims its surface is, so a test can prove which canvas the text used. */
     var outputSizeOverride: io.github.yuroyami.kiteplayer.VideoSize? = null
 
+    /** Whether this renderer says it draws the picture controls (#610). */
+    var appliesAdjustmentsOverride: Boolean = true
+
+    override val appliesAdjustments: Boolean get() = appliesAdjustmentsOverride
+
     override val outputSize: io.github.yuroyami.kiteplayer.VideoSize?
         get() = outputSizeOverride
 

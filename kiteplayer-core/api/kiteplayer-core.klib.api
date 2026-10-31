@@ -1049,6 +1049,8 @@ abstract interface io.github.yuroyami.kiteplayer.spi/VideoFrame : kotlin/AutoClo
 abstract interface io.github.yuroyami.kiteplayer.spi/VideoRenderer : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.spi/VideoRenderer|null[0]
     abstract val events // io.github.yuroyami.kiteplayer.spi/VideoRenderer.events|{}events[0]
         abstract fun <get-events>(): kotlinx.coroutines.flow/Flow<io.github.yuroyami.kiteplayer.spi/RendererEvent> // io.github.yuroyami.kiteplayer.spi/VideoRenderer.events.<get-events>|<get-events>(){}[0]
+    open val appliesAdjustments // io.github.yuroyami.kiteplayer.spi/VideoRenderer.appliesAdjustments|{}appliesAdjustments[0]
+        open fun <get-appliesAdjustments>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/VideoRenderer.appliesAdjustments.<get-appliesAdjustments>|<get-appliesAdjustments>(){}[0]
     open val outputSize // io.github.yuroyami.kiteplayer.spi/VideoRenderer.outputSize|{}outputSize[0]
         open fun <get-outputSize>(): io.github.yuroyami.kiteplayer/VideoSize? // io.github.yuroyami.kiteplayer.spi/VideoRenderer.outputSize.<get-outputSize>|<get-outputSize>(){}[0]
     open val redrawsHeldPicture // io.github.yuroyami.kiteplayer.spi/VideoRenderer.redrawsHeldPicture|{}redrawsHeldPicture[0]
@@ -5814,6 +5816,20 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun copy(io.github.yuroyami.kiteplayer/TrackId = ..., kotlin/Int = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.PathologicalInterleaving // io.github.yuroyami.kiteplayer/PlaybackWarning.PathologicalInterleaving.copy|copy(io.github.yuroyami.kiteplayer.TrackId;kotlin.Int){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.PathologicalInterleaving.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.PathologicalInterleaving.hashCode|hashCode(){}[0]
+    }
+
+    final class PictureControlsUnavailable : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.PictureControlsUnavailable|null[0]
+        constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.PictureControlsUnavailable.<init>|<init>(kotlin.String){}[0]
+
+        final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.PictureControlsUnavailable.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.PictureControlsUnavailable.message.<get-message>|<get-message>(){}[0]
+        final val renderer // io.github.yuroyami.kiteplayer/PlaybackWarning.PictureControlsUnavailable.renderer|{}renderer[0]
+            final fun <get-renderer>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.PictureControlsUnavailable.renderer.<get-renderer>|<get-renderer>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.PictureControlsUnavailable.component1|component1(){}[0]
+        final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.PictureControlsUnavailable // io.github.yuroyami.kiteplayer/PlaybackWarning.PictureControlsUnavailable.copy|copy(kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.PictureControlsUnavailable.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.PictureControlsUnavailable.hashCode|hashCode(){}[0]
     }
 
     final class ProjectionUnavailable : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.ProjectionUnavailable|null[0]

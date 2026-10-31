@@ -351,6 +351,8 @@ internal class AttachableRenderer : VideoRenderer {
         delegate?.setAdjustments(adjustments)
     }
 
+    override val appliesAdjustments: Boolean get() = delegate?.appliesAdjustments ?: true
+
     override fun setFlashGuard(mode: io.github.yuroyami.kiteplayer.FlashGuard) {
         delegate?.setFlashGuard(mode)
     }

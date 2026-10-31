@@ -206,6 +206,9 @@ public class SampleBufferVideoRenderer internal constructor(
 
     override fun vsyncIntervalNanos(): Long? = null
 
+    /** The layer shows the decoded picture as it is, so the engine warns when picture controls are set (#610). */
+    override val appliesAdjustments: Boolean get() = false
+
     /** The layer's bounds and gravity belong to whoever owns it, as with the Core Graphics path. */
     override fun setViewport(width: Int, height: Int, scale: Float): Unit = Unit
 

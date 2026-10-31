@@ -12,6 +12,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/view/AndroidPlayer
 public final class io/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer$DefaultImpls {
 	public static fun accepts (Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;Lio/github/yuroyami/kiteplayer/spi/FrameShape;)Z
 	public static fun clearPicture (Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;)V
+	public static fun getAppliesAdjustments (Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;)Z
 	public static fun getOutputSize (Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;)Lio/github/yuroyami/kiteplayer/VideoSize;
 	public static fun getRedrawsHeldPicture (Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;)Z
 	public static fun getShowsHdr (Lio/github/yuroyami/kiteplayer/view/AndroidPlayerViewRenderer;)Z
@@ -250,6 +251,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/view/PlayerViewRen
 public final class io/github/yuroyami/kiteplayer/view/PlayerViewRenderer$DefaultImpls {
 	public static fun accepts (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;Lio/github/yuroyami/kiteplayer/spi/FrameShape;)Z
 	public static fun clearPicture (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;)V
+	public static fun getAppliesAdjustments (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;)Z
 	public static fun getOutputSize (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;)Lio/github/yuroyami/kiteplayer/VideoSize;
 	public static fun getRedrawsHeldPicture (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;)Z
 	public static fun getShowsHdr (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;)Z

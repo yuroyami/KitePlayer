@@ -555,6 +555,16 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * The picture controls of [KitePlayer.setVideoAdjustments] are set, and the attached [renderer]
+     * does not draw them, so the picture shows as decoded (#610). Told once for each renderer while
+     * the controls are other than the neutral ones. The snapshot still reports what was set.
+     */
+    public data class PictureControlsUnavailable(val renderer: String) : PlaybackWarning() {
+        override val message: String
+            get() = "the picture controls are set, and the renderer $renderer does not draw them"
+    }
+
+    /**
      * The video that plays is a 360 degree video, and the attached renderer shows its whole
      * picture flat, because it cannot draw a view into a sphere or into this [kind] of projection
      * (#460). [detail] says which. Told once for each item and renderer. See

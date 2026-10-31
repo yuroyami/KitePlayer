@@ -12,6 +12,12 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Added
 
+- `PlaybackWarning.PictureControlsUnavailable` and `VideoRenderer.appliesAdjustments` (#610). The
+  picture controls of `setVideoAdjustments` were stored, published and silently dropped on the
+  desktop canvas view, the web canvas and Apple's picture in picture layer. The player now warns
+  once for such a renderer while controls other than the neutral ones are set. A renderer answers
+  true by default; the three named answer false. Android's direct MediaCodec path does not
+  answer yet.
 - `PlaybackError.DrmUnsupported(uri, system)` refuses media protected by digital rights management
   before any of it decodes (#624). An HLS stream that names a Widevine, PlayReady or FairPlay key,
   in a master's `EXT-X-SESSION-KEY` or a media playlist's `EXT-X-KEY`, or uses `SAMPLE-AES-CTR`,

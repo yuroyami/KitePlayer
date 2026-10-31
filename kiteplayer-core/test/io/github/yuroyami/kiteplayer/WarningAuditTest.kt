@@ -44,6 +44,7 @@ class WarningAuditTest {
         PlaybackWarning.AudioSourceUnreadable("dub.m4a", "x"),
         PlaybackWarning.EditionPartLeftOut("0e0e0e00000000000000000000000002", "Opening", "x"),
         PlaybackWarning.ProjectionUnavailable(ProjectionKind.Equirectangular, "x"),
+        PlaybackWarning.PictureControlsUnavailable("x"),
         PlaybackWarning.ContainerDeclarationDiverged(0, "Width", "1920", "1440"),
         PlaybackWarning.TypesetterUnavailable("io.github.yuroyami.kiteplayer.libass", "x"),
         PlaybackWarning.SubtitlesNotDrawn("x"),
@@ -147,6 +148,10 @@ class WarningAuditTest {
         is PlaybackWarning.ProjectionUnavailable -> listOf(
             "PlaybackCore.tellProjection, when the selected video track has a projection and the " +
                 "attached renderer's projects answers false for its kind, once for each item and renderer",
+        )
+        is PlaybackWarning.PictureControlsUnavailable -> listOf(
+            "PlaybackCore.warnIfAdjustmentsIgnored, when picture controls other than the neutral ones are " +
+                "set while the attached renderer's appliesAdjustments answers false, once for each renderer",
         )
         is PlaybackWarning.ThumbnailsUnreadable -> listOf(
             "PlaybackCore.readItemThumbnails, after an open, when the item's thumbnail file could not " +

@@ -693,6 +693,11 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * next drawn frame with no decoder or pipeline work at all. Pass
      * [VideoAdjustments.Identity] to reset. Published as [PlayerSnapshot.videoAdjustments].
      *
+     * Not every renderer draws them: the desktop canvas view, the web canvas and Apple's picture
+     * in picture layer show the decoded picture as it is. With such a renderer attached the player
+     * warns [PlaybackWarning.PictureControlsUnavailable] once, rather than drop the value with
+     * nothing said (#610).
+     *
      * @throws IllegalArgumentException outside the documented ranges: brightness -1..1,
      *         contrast 0..2, saturation 0..2, hue -180..180, all finite. Gamma needs no check
      *         here, because [VideoAdjustments] refuses a gamma outside 0.5..2 when it is built.

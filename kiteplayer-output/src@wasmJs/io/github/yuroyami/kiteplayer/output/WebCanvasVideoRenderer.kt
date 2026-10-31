@@ -355,6 +355,9 @@ public class WebCanvasVideoRenderer(
         redrawRetained(s)
     }
 
+    /** The canvas draws the decoded picture as it is, so the engine warns when picture controls are set (#610). */
+    override val appliesAdjustments: Boolean get() = false
+
     override fun setScaleMode(mode: VideoScale) {
         scaleMode = mode
     }

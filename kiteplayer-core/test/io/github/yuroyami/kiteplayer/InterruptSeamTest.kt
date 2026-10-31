@@ -1,10 +1,13 @@
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.internal.SeekResult
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
@@ -38,6 +41,43 @@ class InterruptSeamTest {
         harness.close()
         assertEquals(0, harness.ledger.liveCount)
         assertEquals(0, harness.ledger.doubleCloseCount)
+    }
+
+    /**
+     * The start seek of an open, which every "resume where you left off" makes, is bounded as a
+     * user's seek is and gives way to a stop or a close (#591). It ran on the actor with no
+     * deadline, so a long scan kept the player from its mailbox until it ended.
+     */
+    @Test
+    fun aWedgedStartSeekGivesWayToAStopAndTheCloseReturns() = runTest(timeout = 20.seconds) {
+        val faults = FaultPlan().apply { seekWedges = true }
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 120_000_000), faults = faults)
+        harness.attachRenderer()
+        val opening = async { runCatching { harness.core.open(MediaItem("scripted://media", startPosition = 60.seconds)) } }
+        harness.run(1.seconds)
+        assertTrue(!opening.isCompleted, "the start seek did not wedge, so this proves nothing")
+        val stopping = async { runCatching { harness.core.stop() } }
+        harness.run(1.seconds)
+        assertTrue(opening.isCompleted, "the open did not give way to the stop")
+        assertTrue(opening.await().isFailure, "the preempted open must fail its caller")
+        assertTrue(stopping.isCompleted, "the stop did not run")
+        assertTrue(harness.source.interruptCalls > 0, "the wedged seek was never interrupted")
+        withTimeout(30.seconds) { harness.core.closeAndAwait() }
+        assertEquals(0, harness.ledger.liveCount)
+    }
+
+    @Test
+    fun aWedgedStartSeekFailsTypedAtTheDeadline() = runTest(timeout = 20.seconds) {
+        val faults = FaultPlan().apply { seekWedges = true }
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 120_000_000), faults = faults)
+        harness.attachRenderer()
+        val failure = assertFailsWith<PlaybackException> {
+            harness.core.open(MediaItem("scripted://media", startPosition = 60.seconds))
+        }
+        assertIs<PlaybackError.SourceUnavailable>(failure.error, "was ${failure.error}")
+        assertEquals(PlaybackStatus.Failed, harness.core.snapshots.value.status)
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount)
     }
 
     @Test

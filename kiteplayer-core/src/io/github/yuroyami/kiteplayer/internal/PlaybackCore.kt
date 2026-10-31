@@ -3885,9 +3885,7 @@ internal class PlaybackCore(
                 // comes before the target, so nothing before the clip is ever shown or heard, even
                 // for a moment, and a source that cannot seek decodes forward to it (#456).
                 if (built.clipStartUs > 0L) built.discardBeforeUs.value = startTargetUs
-                if (built.source.seekable) {
-                    withContext(dispatchers.demux) { built.source.seekToKeyframe(Pts(startTargetUs)) }
-                }
+                if (built.source.seekable) boundedContainerSeek(built.source, Pts(startTargetUs), preemptible = true)
                 publishedPositionMicros.value = startTargetUs
                 built.startUs = startTargetUs
             }
@@ -4319,10 +4317,10 @@ internal class PlaybackCore(
             }
             val start = if (startAtItem) itemStart(item, source, played, report) else null
             val readFromUs = if (start != null) start.fileUs ?: 0L else startUs
-            withContext(dispatchers.demux) {
-                source.selectStreams(readStreams)
-                if (readFromUs > 0L && source.seekable) source.seekToKeyframe(Pts(readFromUs))
-            }
+            withContext(dispatchers.demux) { source.selectStreams(readStreams) }
+            // Bounded as the seek of a user's is (#591), and preempted by a stop or a close when
+            // this build runs on the actor; the preload's runs off it and has no mailbox to read.
+            if (readFromUs > 0L && source.seekable) boundedContainerSeek(source, Pts(readFromUs), preemptible = pending == null)
 
             builtTracks = builtTracks
                 .withSelection(TrackKind.Video, videoStream?.let { TrackId(it.index) })
@@ -4666,6 +4664,55 @@ internal class PlaybackCore(
      *
      * @throws OpenPreempted when a stop or a close cancelled the resolve.
      */
+    /**
+     * Moves [source] to the keyframe at or before [target] on the demux lane, as a user's seek does
+     * (#591): under [SEEK_NATIVE_DEADLINE], and, when [preemptible], given up for a stop or a close
+     * waiting in the mailbox. The start seek of an open and the seek of a rebuilt session ran with
+     * neither, so a long scan, such as a Matroska file with no Cues read over the network, held
+     * the actor until it finished and a stop or a close waited behind it.
+     *
+     * Past the deadline or at a preemption the source is interrupted and given
+     * [SEEK_INTERRUPT_GRACE] to return. A source that cannot interrupt is waited for, as a user's
+     * seek waits for it, because the demux lane is the seek's until it returns.
+     *
+     * @throws OpenPreempted when a stop or a close came first.
+     * @throws PlaybackException with [PlaybackError.SourceUnavailable] when the seek did not finish
+     *         in time, or failed.
+     */
+    private suspend fun boundedContainerSeek(source: PlayerMediaSource, target: Pts, preemptible: Boolean) {
+        val call = scope.async(dispatchers.demux) { runCatching { source.seekToKeyframe(target) } }
+        var waited = Duration.ZERO
+        var preemptedHere = false
+        var outcome: Result<Pts?>? = null
+        while (outcome == null) {
+            outcome = withTimeoutOrNull(WORKER_POLL) { call.await() }
+            if (outcome != null) break
+            if (preemptible && preempted()) {
+                preemptedHere = true
+                break
+            }
+            waited += WORKER_POLL
+            if (waited >= SEEK_NATIVE_DEADLINE) break
+        }
+        if (outcome == null) {
+            outcome = if (!source.interrupt()) {
+                call.await()
+            } else {
+                withTimeoutOrNull(SEEK_INTERRUPT_GRACE) { call.await() }
+                    ?: Result.failure(IllegalStateException("the interrupted container seek did not return within $SEEK_INTERRUPT_GRACE"))
+            }
+            if (preemptedHere) throw OpenPreempted()
+            if (outcome.isSuccess) {
+                outcome = Result.failure(IllegalStateException("the container seek did not finish within $SEEK_NATIVE_DEADLINE"))
+            }
+        }
+        val failure = outcome.exceptionOrNull() ?: return
+        if (failure is CancellationException && !currentCoroutineContext().isActive) throw failure
+        throw PlaybackException(
+            PlaybackError.SourceUnavailable(media?.uri ?: "", failure, "the container seek did not complete: ${failure.message}"),
+        )
+    }
+
     private suspend fun resolveReader(item: MediaItem, preemptible: Boolean): MediaIo? {
         if (!preemptible) return resolveMediaIo(item, config.network)
         var outcome: Result<MediaIo?>? = null

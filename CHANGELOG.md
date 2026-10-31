@@ -172,6 +172,11 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- The start seek of an open, as a resume uses, and the seek of a rebuilt session now give up
+  after 10 seconds with `SourceUnavailable`, as a user's seek does, and give way to a stop or a
+  close at once (#591). They had no deadline, so a long scan, such as a Matroska file with no
+  Cues read over the network, kept the player deaf to `stop()` and `close()` until it ended. The
+  seek of the software recovery after a hardware decoder failure is not bounded yet.
 - A device or decoder release that never returns during a stop, a failed worker or a rebuild no
   longer makes a later `closeAndAwait()` wait for ever (#590). Only the release that close starts
   had a deadline; every other release ran on the player's own loop with none, so the loop never

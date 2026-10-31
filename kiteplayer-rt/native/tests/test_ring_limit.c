@@ -17,6 +17,8 @@
  *  - A volume low enough that nothing passes full scale, and a steady boost, which the fold
  *    already keeps within it, leave the limiter out of the path.
  *  - A flush starts the limiter over, so the new position plays untouched from its first frame.
+ *  - A ceiling above full scale, which a sink with a volume after the ring sets (#612), lets a
+ *    burst under it through bit for bit and holds a louder one at the ceiling instead of at 1.
  */
 
 #include "harness.h"
@@ -267,6 +269,38 @@ int main(void)
             KT_EQ_INT(kprt_ring_render(ring, output + (size_t)i * CHANNELS, REQUEST, 50000 + i), REQUEST);
         KT_CHECK(same_bits(input, output, 4096));
         KT_EQ_I64(kprt_ring_limited_frames(ring), limited);
+        kprt_ring_destroy(ring);
+    }
+
+    kt_case("a ceiling of 2 lets a burst at 1.6 through untouched (#612)");
+    {
+        kprt_ring *ring = kprt_ring_create(RATE, CHANNELS, CAPACITY);
+        KT_NOT_NULL(ring);
+        kprt_ring_set_ceiling(ring, 2.0f);
+        make_burst(1.6f);
+        play_all(ring, TOTAL);
+        KT_CHECK(same_bits(input, output, TOTAL));
+        KT_EQ_I64(kprt_ring_limited_frames(ring), 0);
+        kprt_ring_destroy(ring);
+    }
+
+    kt_case("a ceiling of 1.25 holds a burst at 1.6 at the ceiling, not at full scale (#612)");
+    {
+        kprt_ring *ring = kprt_ring_create(RATE, CHANNELS, CAPACITY);
+        float largest = 0.0f;
+        int32_t i;
+        KT_NOT_NULL(ring);
+        kprt_ring_set_ceiling(ring, 1.25f);
+        make_burst(1.6f);
+        play_all(ring, TOTAL);
+        for (i = 0; i < TOTAL * CHANNELS; i++) {
+            float a = output[i] < 0.0f ? -output[i] : output[i];
+            if (a > largest)
+                largest = a;
+        }
+        KT_CHECKF(largest <= 1.25f, "a sample left at %.9g", (double)largest);
+        KT_CHECKF(largest > 1.2f, "the loudest sample was %.9g, turned down past the ceiling", (double)largest);
+        KT_CHECK(kprt_ring_limited_frames(ring) > 0);
         kprt_ring_destroy(ring);
     }
 

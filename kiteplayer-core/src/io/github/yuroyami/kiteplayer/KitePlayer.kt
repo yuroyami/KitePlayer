@@ -366,6 +366,12 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * through a saturator rather than allowed to clip, so a boosted loud passage compresses
      * instead of squaring off; at or below unity nothing is folded.
      *
+     * On Android the part at or below unity is the track's own volume instead, applied after its
+     * buffer, so the ring plays at unity there and a change is heard after that buffer, about
+     * 120 ms (#14). The ring's peak limiter then lets a loud passage past full scale as far as the
+     * track's volume brings it back and the track takes it, so a peak is not squeezed at a volume
+     * where it had room (#612).
+     *
      * The ceiling is 1 by default, which refuses every boost: amplifying without being asked is
      * not a player's decision. Raise [AudioConfig.volumeCeiling] to offer one.
      *

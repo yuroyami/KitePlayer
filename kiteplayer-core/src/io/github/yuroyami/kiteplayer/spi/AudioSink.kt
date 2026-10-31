@@ -97,6 +97,19 @@ public interface AudioSink : AutoCloseable {
      */
     public fun setDeviceGain(gain: Float): Boolean = false
 
+    /**
+     * How loud a sample this sink takes, as a multiple of full scale, before the gain of
+     * [setDeviceGain] applies (#612). 1 by default, which means a sample past full scale is
+     * clipped on its way in.
+     *
+     * When this sink turns the sound down after its buffer, the engine lets the ring hand it
+     * samples past full scale, up to this headroom and up to what the gain brings back within full
+     * scale, instead of limiting every volume as full volume. A float device that is promised
+     * room above full scale answers that room; a 16-bit device answers 1. Read at each volume
+     * change and each open.
+     */
+    public val deviceGainHeadroom: Float get() = 1f
+
     /** The device's own buffer size in sample frames. Sizes the engine's ring. */
     public val deviceBufferFrames: Int
 

@@ -333,6 +333,22 @@ KPRT_API int32_t kprt_ring_is_silent(const kprt_ring *ring);
 KPRT_API int32_t kprt_limit_lookahead_frames(int32_t sample_rate);
 KPRT_API int32_t kprt_limit_release_frames(int32_t sample_rate);
 
+/* The loudest ceiling `kprt_ring_set_ceiling` accepts. One law shared with KotlinAudioRing's
+ * `CEILING_MAX`. */
+#define KPRT_CEILING_MAX 4.0f
+
+/* Sets how loud a rendered sample may be before the limiter turns it down, from full scale at 1,
+ * the default, up to KPRT_CEILING_MAX (#612).
+ *
+ * A device that turns the sound down after the ring, as Android's track volume does, hears a
+ * sample at 1.6 under a volume of 0.5 at 0.8, so limiting it to 1 here squeezed loud passages
+ * that had room. The caller passes the lower of the inverse of that later volume and the level the
+ * device takes above full scale at all. At 1 the limiter is exactly the one of #504, bit for bit.
+ *
+ * Safe from any thread, allocation free, and it never blocks. Values below 1, NaN included, are
+ * clamped to 1 and values above KPRT_CEILING_MAX to it. */
+KPRT_API void kprt_ring_set_ceiling(kprt_ring *ring, float ceiling);
+
 /* How many rendered frames the limiter turned down, since the ring was created. Zero for content
  * that never passes full scale. Safe from any thread. */
 KPRT_API int64_t kprt_ring_limited_frames(const kprt_ring *ring);

@@ -3696,6 +3696,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/AudioSink : ja
 	public abstract fun drain (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun getCutsSoundOnStop ()Z
 	public abstract fun getDeviceBufferFrames ()I
+	public fun getDeviceGainHeadroom ()F
 	public abstract fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public abstract fun getLatencyQuality ()Lio/github/yuroyami/kiteplayer/LatencyQuality;
 	public fun getPlatformSessionId ()Ljava/lang/Integer;
@@ -3710,6 +3711,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/AudioSink : ja
 
 public final class io/github/yuroyami/kiteplayer/spi/AudioSink$DefaultImpls {
 	public static fun getCutsSoundOnStop (Lio/github/yuroyami/kiteplayer/spi/AudioSink;)Z
+	public static fun getDeviceGainHeadroom (Lio/github/yuroyami/kiteplayer/spi/AudioSink;)F
 	public static fun getPlatformSessionId (Lio/github/yuroyami/kiteplayer/spi/AudioSink;)Ljava/lang/Integer;
 	public static fun setContent (Lio/github/yuroyami/kiteplayer/spi/AudioSink;Lio/github/yuroyami/kiteplayer/AudioContent;)V
 	public static fun setDeviceGain (Lio/github/yuroyami/kiteplayer/spi/AudioSink;F)Z

@@ -137,6 +137,7 @@ kprt_ring *kprt_ring_create(int32_t sample_rate, int32_t channels, int32_t capac
     ring->gain_current = 1.0f;
     ring->gain_slope = 1.0f / (float)kprt_gain_ramp_frames(sample_rate);
     kprt_ring_set_gain(ring, 1.0f);
+    kprt_ring_set_ceiling(ring, 1.0f);
     ring->lim_lookahead = kprt_limit_lookahead_frames(sample_rate);
     ring->lim_release = 1.0f / (float)kprt_limit_release_frames(sample_rate);
     atomic_store_explicit(&ring->lim_reset, 1, memory_order_relaxed);
@@ -187,6 +188,20 @@ void kprt_ring_set_gain(kprt_ring *ring, float target)
         target = KPRT_GAIN_MAX;
     memcpy(&bits, &target, sizeof(bits));
     atomic_store_explicit(&ring->gain_target_bits, bits, memory_order_relaxed);
+}
+
+void kprt_ring_set_ceiling(kprt_ring *ring, float ceiling)
+{
+    uint32_t bits;
+    if (ring == NULL)
+        return;
+    /* Clamped rather than refused, as the gain is, and a NaN reads as full scale. */
+    if (!(ceiling >= 1.0f))
+        ceiling = 1.0f;
+    if (ceiling > KPRT_CEILING_MAX)
+        ceiling = KPRT_CEILING_MAX;
+    memcpy(&bits, &ceiling, sizeof(bits));
+    atomic_store_explicit(&ring->ceiling_bits, bits, memory_order_relaxed);
 }
 
 void kprt_ring_set_hold(kprt_ring *ring, int32_t held)

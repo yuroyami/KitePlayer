@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.internal.AudioPipeline
+import io.github.yuroyami.kiteplayer.internal.CEILING_MAX
 import io.github.yuroyami.kiteplayer.internal.GAIN_MAX
 import io.github.yuroyami.kiteplayer.internal.KotlinAudioRing
 import io.github.yuroyami.kiteplayer.internal.AudioRingHandle
@@ -1143,12 +1144,23 @@ public class AudioPlayback(
      */
     private fun pushGain(): Unit = synchronized(lock) {
         val target = if (wantedMute.value) 0f else wantedVolume.value * fadeLevel.value * duckLevel.value
-        val ringGain = if (sink.setDeviceGain(if (target < 1f) target else 1f)) {
+        val deviceGain = if (target < 1f) target else 1f
+        val takesGain = sink.setDeviceGain(deviceGain)
+        val ringGain = if (takesGain) {
             if (target > 1f) target else 1f
         } else {
             target
         }
         ring?.setGain(ringGain)
+        // A sound turned down after the ring has room above full scale here, as far as the device
+        // takes it and as far as its gain brings it back within full scale (#612).
+        val ceiling = if (takesGain) {
+            val room = sink.deviceGainHeadroom.takeIf { it.isFinite() }?.coerceIn(1f, CEILING_MAX) ?: 1f
+            if (deviceGain > 0f) minOf(room, 1f / deviceGain).coerceAtLeast(1f) else room
+        } else {
+            1f
+        }
+        ring?.setCeiling(ceiling)
     }
 
     /**

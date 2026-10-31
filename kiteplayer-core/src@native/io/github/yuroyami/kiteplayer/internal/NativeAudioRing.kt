@@ -25,6 +25,7 @@ import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_free_frames
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_is_silent
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_limited_frames
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_mark_ending
+import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_set_ceiling
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_set_gain
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_set_hold
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_render
@@ -249,6 +250,13 @@ internal class NativeAudioRing private constructor(
             "gain must be between 0 and $GAIN_MAX, was $target"
         }
         kprt_ring_set_gain(ring, target)
+    }
+
+    override fun setCeiling(ceiling: Float) {
+        require(ceiling.isFinite() && ceiling >= 1f && ceiling <= CEILING_MAX) {
+            "a ceiling must be between 1 and $CEILING_MAX, was $ceiling"
+        }
+        kprt_ring_set_ceiling(ring, ceiling)
     }
 
     override fun hold(held: Boolean) {

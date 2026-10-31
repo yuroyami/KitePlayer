@@ -195,6 +195,13 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- On Android the peak limiter no longer squeezes loud passages at a lowered volume (#612). The
+  track applies the volume after its buffer there, so the ring played at unity and limited every
+  volume as full volume: a downmix peak of 1.6 at half volume was pulled down by about 4 dB,
+  though the track would have halved it to 0.8. `AudioSink.deviceGainHeadroom` is new, and the
+  ring now limits at the lower of what the device's volume brings back within full scale and what
+  the device takes above it, about 3 dB for Android's float track and nothing for its 16-bit
+  fallback, which clips on the way in. Both rings carry the same rule.
 - The README now says that an Android app must compile against SDK 37.2 or later (#613). Every
   Android artifact of 0.3.0 carries that floor in its AAR metadata, and the install section named
   only `minSdk` 26, so an app on `compileSdk` 36 failed its first build with no warning.

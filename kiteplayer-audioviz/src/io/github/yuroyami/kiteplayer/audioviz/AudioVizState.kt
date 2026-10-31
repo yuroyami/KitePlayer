@@ -27,6 +27,11 @@ import kotlin.time.Duration.Companion.nanoseconds
  * What the visualiser shows and how: the drawing, the palette, whether the director picks drawings
  * with the music, and the finishing pass. Make one with [rememberAudioVizState] and show it with
  * [KiteAudioViz].
+ *
+ * A state is shown by one [KiteAudioViz] at a time. It holds the drawings themselves, which keep
+ * state of their own, so a second view restarts the drawing the first one shows, and while both
+ * are on screen every drawing steps twice a frame (#674). A second place that shows the visualiser,
+ * a mini player beside a full one, takes a state of its own; the second view logs a warning.
  */
 @Stable
 public class AudioVizState internal constructor(feed: AudioVizFeed? = null, private val clock: () -> VizClockReading) {

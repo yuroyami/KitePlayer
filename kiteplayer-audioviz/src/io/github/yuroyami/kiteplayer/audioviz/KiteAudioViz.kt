@@ -1,10 +1,12 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import io.github.yuroyami.kiteplayer.KiteLog
 import io.github.yuroyami.kiteplayer.audioviz.viz.DirectedVisualizerSurface
 import io.github.yuroyami.kiteplayer.audioviz.viz.VisualizerSurface
 
@@ -13,9 +15,22 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VisualizerSurface
  *
  * Show it instead of the video when [isAudioOnly] is true. [post] lays the finishing pass over the
  * drawing: glow, darker corners and grain.
+ *
+ * One view at a time for one [state], whose drawings it steps: a second view of the same state
+ * restarts them and steps them twice a frame, and logs a warning through `KiteLog` (#674).
  */
 @Composable
 public fun KiteAudioViz(state: AudioVizState, modifier: Modifier = Modifier, post: Boolean = true) {
+    DisposableEffect(state) {
+        if (!ShownStates.add(state)) {
+            KiteLog.log(
+                "KiteAudioViz",
+                "one AudioVizState is shown by two KiteAudioViz views, so its drawings restart and step twice " +
+                    "a frame; give each view a state of its own",
+            )
+        }
+        onDispose { ShownStates.remove(state) }
+    }
     LaunchedEffect(state) {
         while (true) withFrameNanos { state.nextFrame(it) }
     }
@@ -53,4 +68,31 @@ public fun KiteAudioViz(state: AudioVizState, modifier: Modifier = Modifier, pos
             framesPerSecond = state.framesPerSecond,
         )
     }
+}
+
+/** How many views show each state now, so a second one is noticed (#674). */
+@OptIn(kotlin.concurrent.atomics.ExperimentalAtomicApi::class)
+internal object ShownStates {
+    private val shown = kotlin.concurrent.atomics.AtomicReference<Map<AudioVizState, Int>>(emptyMap())
+
+    /** Counts one more view of [state], and answers whether it is the only one. */
+    fun add(state: AudioVizState): Boolean {
+        while (true) {
+            val old = shown.load()
+            val count = (old[state] ?: 0) + 1
+            if (shown.compareAndSet(old, old + (state to count))) return count == 1
+        }
+    }
+
+    fun remove(state: AudioVizState) {
+        while (true) {
+            val old = shown.load()
+            val count = (old[state] ?: return) - 1
+            val next = if (count <= 0) old - state else old + (state to count)
+            if (shown.compareAndSet(old, next)) return
+        }
+    }
+
+    /** The views of [state] now, for a test. */
+    fun count(state: AudioVizState): Int = shown.load()[state] ?: 0
 }

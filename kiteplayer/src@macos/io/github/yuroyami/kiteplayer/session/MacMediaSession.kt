@@ -35,7 +35,7 @@ import kotlin.time.Duration.Companion.seconds
  *
  * @param skipInterval how far the skip back and skip forward buttons move. Positive.
  */
-public actual class KitePlayerMediaSession actual constructor(
+public actual class KitePlayerMediaSession @Throws(IllegalArgumentException::class) actual constructor(
     private val player: KitePlayer,
     skipInterval: Duration,
 ) : AutoCloseable {
@@ -132,6 +132,7 @@ internal fun playbackStateFor(phase: MediaSessionPhase, playRequested: Boolean):
  * Call this on the main thread.
  */
 @Suppress("UNUSED_PARAMETER")
+@Throws(Exception::class)
 public actual fun KitePlayer.attachMediaSession(
     background: BackgroundPolicy?,
     interruptions: InterruptionPolicy?,

@@ -33,7 +33,7 @@ import kotlin.time.Duration.Companion.seconds
  * @param skipInterval how far the skip back and skip forward buttons move, on the lock screen, the
  *        control centre, CarPlay and a headset. Positive.
  */
-public actual class KitePlayerMediaSession actual constructor(
+public actual class KitePlayerMediaSession @Throws(IllegalArgumentException::class) actual constructor(
     private val player: KitePlayer,
     skipInterval: Duration,
 ) : AutoCloseable {
@@ -103,6 +103,7 @@ public actual class KitePlayerMediaSession actual constructor(
  * The session owns all of it and closes it with the player, so most apps never close it by hand.
  * Call this on the main thread.
  */
+@Throws(Exception::class)
 public actual fun KitePlayer.attachMediaSession(
     background: BackgroundPolicy?,
     interruptions: InterruptionPolicy?,

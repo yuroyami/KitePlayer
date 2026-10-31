@@ -537,7 +537,9 @@ jobs:
     needs: device-test-artifacts
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    continue-on-error: true
+    # A red device test fails the run, and so stops a release that runs this file (#638). The job
+    # was report-only until it had been trusted; it has since been green on twenty runs in a row.
+    # The one allowance left is the second run of ReopenDeviceTest inside its step (#301).
     env:
       AVD_PACKAGE: system-images;android-35;google_apis;x86_64
       NEEDS_PUSHED_MEDIA: io.github.yuroyami.kiteplayer.NeedsPushedMedia

@@ -526,6 +526,17 @@ private fun encodeDemux(demux: DemuxPolicy): JsAny = record {
     put("program", demux.program)
     put("edition", demux.edition)
     if (!demux.orderedEditions) put("orderedEditions", false)
+    // The page's own choice of variant, which went missing here and left the worker on its canvas's fit (#599).
+    put(
+        "fit",
+        demux.fit?.let { fit ->
+            record {
+                put("drawnWidth", fit.drawnWidth)
+                put("drawnHeight", fit.drawnHeight)
+                if (fit.showsHdr) put("showsHdr", true)
+            }
+        },
+    )
 }
 
 private fun encodeSnapshot(snapshot: PlayerSnapshot): JsAny = record {
@@ -675,6 +686,7 @@ private fun encodeVariant(variant: StreamVariant): JsAny = record {
     put("height", variant.height)
     put("frameRate", variant.frameRate)
     put("codecs", variant.codecs)
+    if (variant.hdr) put("hdr", true)
 }
 
 private fun encodeProgram(program: MediaProgram): JsAny = record {
@@ -1418,6 +1430,9 @@ private fun decodeDemux(o: JsAny): DemuxPolicy = DemuxPolicy(
     program = o.int("program"),
     edition = o.int("edition"),
     orderedEditions = o.bool("orderedEditions") ?: true,
+    fit = o.child("fit")?.let { fit ->
+        VariantFit(drawnWidth = fit.int("drawnWidth"), drawnHeight = fit.int("drawnHeight"), showsHdr = fit.flag("showsHdr"))
+    },
 )
 
 private fun decodeProbe(o: JsAny): ProbeDepth = when (o.str("t")) {
@@ -1564,6 +1579,7 @@ private fun decodeVariant(o: JsAny): StreamVariant = StreamVariant(
     height = o.int("height"),
     frameRate = o.num("frameRate"),
     codecs = o.str("codecs"),
+    hdr = o.flag("hdr"),
 )
 
 private fun decodeProgram(o: JsAny): MediaProgram = MediaProgram(

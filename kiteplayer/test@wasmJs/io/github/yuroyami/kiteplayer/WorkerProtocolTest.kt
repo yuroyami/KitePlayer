@@ -54,6 +54,8 @@ class WorkerProtocolTest {
             program = 202,
             edition = 1,
             orderedEditions = false,
+            // The page's own fit, which the protocol lost (#599).
+            fit = VariantFit(1280, 720, showsHdr = true),
         ),
         title = "Title",
         artist = "Artist",
@@ -99,7 +101,7 @@ class WorkerProtocolTest {
         selectedAudio = TrackId(1),
         selectedSubtitle = TrackId(2),
         selectedSecondarySubtitle = TrackId(-1),
-        variants = listOf(StreamVariant(0, 800_000L, 640, 360, 30.0, "avc1.4d401e"), StreamVariant(1, 3_000_000L)),
+        variants = listOf(StreamVariant(0, 800_000L, 640, 360, 30.0, "avc1.4d401e"), StreamVariant(1, 3_000_000L, hdr = true)),
         selectedVariant = 1,
         programs = listOf(
             MediaProgram(101, listOf(TrackId(0), TrackId(1)), "ChannelA", "Kite", mapOf("service_name" to "ChannelA")),

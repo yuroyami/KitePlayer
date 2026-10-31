@@ -376,6 +376,27 @@ class SelectVariantTest {
         own.close()
     }
 
+    /**
+     * A stream opened before its view had a size takes the top rung, and steps down to the view
+     * once it has one (#600). Nothing corrected it before, so a phone played 2160p for good.
+     */
+    @Test
+    fun aViewThatGetsItsSizeAfterTheOpenStepsTheVariantDownToIt() = runTest {
+        val script = MediaScript(durationUs = 240_000_000, variants = ladder, linkBitsPerSecond = { 50_000_000 })
+        val harness = CoreHarness(this, script = script)
+        harness.attachRenderer()
+        harness.core.open(MediaItem("scripted://media", io = { LinkIo(script, harness.clock) }))
+        assertEquals(2, harness.core.snapshots.value.tracks.selectedVariant, "with no size the open took the top rung")
+        harness.core.play()
+        harness.run(5.seconds)
+
+        assertNotNull(harness.renderer).outputSizeOverride = VideoSize(640, 360)
+        harness.run(70.seconds)
+        assertEquals(0, harness.core.snapshots.value.tracks.selectedVariant, "the variant did not follow the view down to 360p")
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        harness.close()
+    }
+
     /** A fast link steps up only as far as the view, and further once the view grows (#447). */
     @Test
     fun aStepUpStopsAtTheDrawnSizeAndRisesWithTheView() = runTest {

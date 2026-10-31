@@ -7849,7 +7849,8 @@ internal class PlaybackCore(
      * reader that fetches ahead serves its reads at once, however slow the link.
      *
      * Only while the player chooses the variant itself, and never past the item's
-     * `DemuxPolicy.maxBitrate` or `maxVideoHeight`. A change may open the stream again, which holds
+     * `DemuxPolicy.maxBitrate` or `maxVideoHeight`. A variant past those caps, or past the size the
+     * renderer draws into now, steps down to the largest one inside them (#600). A change may open the stream again, which holds
      * the picture for a moment: after a step down this waits [VARIANT_STEP_UP_WAIT], and twice as
      * long each time a step up was followed by another step down.
      */
@@ -7859,8 +7860,20 @@ internal class PlaybackCore(
         val item = media ?: return
         if (item.demux.variant != null && !variantChosenByPlayer) return
         if (!mayChangeVariant(session)) return
-        if (stepUpNotBeforeNanos != NO_POSITION && clock.nanos() < stepUpNotBeforeNanos) return
         val current = tracks.variants.firstOrNull { it.index == tracks.selectedVariant } ?: return
+        // Past the caps as the renderer draws now, as when the stream opened before its view had a
+        // size and took the top rung: down to the largest variant inside them, at once (#600). The
+        // network steps only ever looked for more, so the 2160p rung played on a phone for good.
+        if (!withinCaps(current, item.demux)) {
+            val inside = tracks.variants
+                .filter { it.bitrate < current.bitrate && it.hdr == current.hdr && withinCaps(it, item.demux) }
+                .maxByOrNull { it.bitrate } ?: return
+            variantChosenByPlayer = true
+            lastStepWasUp = false
+            pendingVariant = VariantRequest(inside.index, CompletableDeferred())
+            return
+        }
+        if (stepUpNotBeforeNanos != NO_POSITION && clock.nanos() < stepUpNotBeforeNanos) return
         // Within the range that plays: a step is a matter of bitrate, never of SDR or HDR (#447).
         val higher = tracks.variants
             .filter { it.bitrate > current.bitrate && it.hdr == current.hdr && withinCaps(it, item.demux) }

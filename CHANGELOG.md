@@ -156,6 +156,11 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- A stream opened before its view had a size no longer plays its top variant for good (#600). With
+  no size the open took the highest rung, and the network steps only ever looked for more, so a
+  phone could play 2160p into a small view. Once the view reports a size, a variant the player
+  chose that is past it steps down to the largest one inside it. A stream opened on an SDR display
+  that later moves to an HDR one still keeps its SDR rung.
 - A Kotlin/Native executable for `androidNativeArm64` that uses `kiteplayer-core` now links. The C
   audio ring of `kiteplayer-rt` called an atomics helper, `__aarch64_ldadd8_relax`, that no
   Kotlin/Native link for Android provides. The ring now compiles its atomics inline on that target.

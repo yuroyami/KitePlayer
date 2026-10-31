@@ -251,6 +251,39 @@ class DashHlsTest {
         }
     }
 
+    /**
+     * The initialization range of a WebM file comes from the manifest, and the player allocated it
+     * whole before reading: 1 GiB for `0-1073741823`, and a NegativeArraySizeException for
+     * `0-2147483647` (#626). It is refused as a manifest this reader cannot play.
+     */
+    @Test
+    fun aWebmInitializationRangePastTheLimitIsRefusedBeforeAnythingIsRead() = runTest {
+        val file = WebmBytes.file(listOf(0, 2000, 4000), blockBytes = 500, durationMillis = 5000.0)
+        for (end in listOf(1_073_741_823L, 2_147_483_647L, 9_000_000_000L)) {
+            val manifest = parse(
+                """
+                <MPD type="static" mediaPresentationDuration="PT5S">
+                    <Period>
+                        <AdaptationSet contentType="video" mimeType="video/webm" codecs="vp9">
+                            <Representation id="v" bandwidth="500000"><BaseURL>single.webm</BaseURL>
+                                <SegmentBase><Initialization range="0-$end"/></SegmentBase></Representation>
+                        </AdaptationSet>
+                    </Period>
+                </MPD>
+                """.trimIndent(),
+            )
+            val presentation = DashHls.presentation(manifest.periods.single())
+            var opened = 0
+            val io = DashHlsMediaIo(presentation, manifest, "https://cdn.test/vod/movie.mpd", DashUrlPolicy.Default, {
+                opened++
+                BytesMediaIo(file.bytes)
+            }, null, { 0L })
+            val refusal = assertFailsWith<DashUnsupportedException> { io.openRelated(presentation.tracks.single().address) }
+            assertTrue("${DashHlsMediaIo.MAX_INDEX_BYTES}" in refusal.message!!, "the refusal names the limit: ${refusal.message}")
+            assertEquals(0, opened, "the file was opened for a range that was always going to be refused")
+        }
+    }
+
     /** A video set beside a sidecar TTML set and a segmented stpp set; the video's own time starts at [videoOffsetSeconds]. */
     private fun subtitled(videoOffsetSeconds: Int = 0) = parse(
         """

@@ -688,6 +688,10 @@ internal class DashHlsMediaIo(
     private suspend fun webmPlan(representation: DashRepresentation, base: DashSegmentBase, totalMicros: Long?): DashTimedPlan {
         val file = representation.baseUrl
         val headEnd = base.initializationRange?.let { it.last + 1 } ?: WEBM_HEAD_BYTES
+        // The range comes from the manifest, and a head of 1 GiB was allocated before a byte came (#626).
+        if (headEnd > MAX_INDEX_BYTES) {
+            throw DashUnsupportedException("the initialization of ${representation.id} is larger than $MAX_INDEX_BYTES bytes")
+        }
         val layout = WebmIndex.layout(readRange(file, 0L until headEnd, allowShort = true))
         val cuesRange = base.indexRange ?: run {
             val start = layout.cuesStart ?: throw DashUnsupportedException("$file names no Cues, so its clusters cannot be found")
@@ -752,9 +756,16 @@ internal class DashHlsMediaIo(
         throw DashUnsupportedException("$file has no segment index among its first $MAX_BOXES_BEFORE_INDEX boxes")
     }
 
-    /** The bytes of [range] of [file]; fewer only at the end of the file, when [allowShort]. */
+    /**
+     * The bytes of [range] of [file]; fewer only at the end of the file, when [allowShort]. A range
+     * of more than [MAX_INDEX_BYTES] is refused before anything is allocated, whoever asks.
+     */
     private suspend fun readRange(file: String, range: LongRange, allowShort: Boolean = false): ByteArray {
-        val wanted = (range.last - range.first + 1).toInt()
+        val length = range.last - range.first + 1
+        if (length > MAX_INDEX_BYTES) {
+            throw DashUnsupportedException("${shownUri(file)} asks for $length bytes at once, and the limit is $MAX_INDEX_BYTES")
+        }
+        val wanted = length.coerceAtLeast(0L).toInt()
         val io = openOriginal(DashManifestParser.requireAllowed(manifestUrl, file, policy))
         try {
             if (range.first > 0) io.seek(range.first)

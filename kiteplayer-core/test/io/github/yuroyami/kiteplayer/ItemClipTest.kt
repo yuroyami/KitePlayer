@@ -172,6 +172,46 @@ class ItemClipTest {
         harness.close()
     }
 
+    /**
+     * No picture from before the clip's start is shown, whatever the seek (#456): the file may be
+     * decoded from a keyframe before it, but what came before stays unseen. A backward step at the
+     * first picture and a keyframe seek to an unaligned start each showed one.
+     */
+    @Test
+    fun aBackwardStepAtTheClipsFirstPictureIsRefusedAndShowsNothingBeforeIt() = runTest {
+        val harness = CoreHarness(this, script = sixSeconds)
+        harness.attachRenderer()
+        harness.core.open(clipped(2.seconds, 4.seconds))
+        harness.run(100.milliseconds)
+        val renderer = assertNotNull(harness.renderer)
+        assertEquals(2_000_000L, renderer.timestamps.last().micros, "the clip opens on its first picture")
+
+        assertFailsWith<IllegalStateException> { harness.core.stepFrame(StepDirection.Backward) }
+        harness.run(100.milliseconds)
+        assertTrue(renderer.timestamps.all { it.micros >= 2_000_000 }, "a picture before the clip was shown: ${renderer.timestamps}")
+        harness.close()
+    }
+
+    @Test
+    fun aKeyframeSeekToAnUnalignedClipStartShowsNothingBeforeIt() = runTest {
+        for (mode in listOf(SeekMode.Keyframe, SeekMode.KeyframeThenRefine, SeekMode.Precise)) {
+            val harness = CoreHarness(this, script = sixSeconds)
+            harness.attachRenderer()
+            // Between the pictures at 2.000 and 2.040 s.
+            harness.core.open(clipped(2_020.milliseconds, 4.seconds))
+            harness.core.seek(Pts(1_000_000), SeekMode.Precise)
+            harness.run(100.milliseconds)
+            val renderer = assertNotNull(harness.renderer)
+            val before = renderer.timestamps.size
+            harness.core.seek(Pts(0), mode)
+            harness.run(200.milliseconds)
+            val shown = renderer.timestamps.drop(before).map { it.micros }
+            assertTrue(shown.isNotEmpty(), "the $mode seek showed nothing")
+            assertTrue(shown.all { it >= 2_020_000 }, "the $mode seek showed a picture before the clip: $shown")
+            harness.close()
+        }
+    }
+
     @Test
     fun theStartPositionCountsFromTheClipsStart() = runTest {
         val harness = CoreHarness(this, script = MediaScript(durationUs = 6_000_000, hasVideo = false))

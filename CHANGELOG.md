@@ -172,6 +172,10 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- A clipped item no longer shows a picture from before its clip's start (#456). A keyframe seek
+  to an unaligned start showed the keyframe before it, and a backward step at the clip's first
+  picture showed the picture before the clip and reported success. Both now keep to the item: the
+  keyframe seek shows the first picture inside it, and the backward step is refused.
 - A cue sheet track with a pregap no longer leaves that pregap out of every item (#456). The
   track before ended at the pregap's start and the track ended at its own start, so the seconds
   between played in neither, and the two tracks no longer met for the gapless join of one file.

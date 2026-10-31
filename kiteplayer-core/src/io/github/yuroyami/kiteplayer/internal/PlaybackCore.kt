@@ -1499,6 +1499,13 @@ internal class PlaybackCore(
      */
     private val itemOriginMicros = atomic(0L)
 
+    /**
+     * The first file time that belongs to [session]'s item: its clip's start, or the start of the run
+     * that plays, or no bound at all for an item that starts with its file (#456). No picture or
+     * sound before it is ever shown, though a seek decodes from a keyframe before it.
+     */
+    private fun itemFloorUs(session: OpenSession): Long = session.originUs.takeIf { it > 0L } ?: Long.MIN_VALUE
+
     /** A position of the file as the current item reports it: from its clip's start, never before it. */
     private fun itemTime(fileUs: Long): Long {
         val origin = itemOriginMicros.value
@@ -11325,7 +11332,8 @@ internal class PlaybackCore(
                         return@invokeOnCompletion
                     }
                     when (val result = landing.getCompleted()) {
-                        is SeekResult.Applied -> if (result.landedAt.micros < onScreenUs) {
+                        // The reply counts in the item's time and the picture on screen in the file's (#456).
+                        is SeekResult.Applied -> if (result.landedAt.micros < itemTime(onScreenUs)) {
                             reply.complete(Unit)
                         } else {
                             reply.completeExceptionally(
@@ -11963,7 +11971,8 @@ internal class PlaybackCore(
             // pictures and audio the promise says cannot appear. The tolerance
             // still exists where it belongs, in the overshoot judgment below.
             session.discardBeforeUs.value = when (phaseMode) {
-                SeekMode.Keyframe -> Long.MIN_VALUE
+                // A keyframe landing shows the keyframe, but never one from before the item (#456).
+                SeekMode.Keyframe -> itemFloorUs(session)
                 else -> target.micros
             }
             session.landsBeforeTarget.value = landsBefore && phaseMode != SeekMode.Keyframe
@@ -14354,7 +14363,8 @@ internal class PlaybackCore(
             if (frame.pts.micros < session.discardBeforeUs.value) {
                 // A backward step lands on the last frame before its target, so the newest frame
                 // below it is kept in place of the one before instead of being thrown away.
-                if (session.landsBeforeTarget.value) {
+                // Never one from before the item, so a step back at its first picture has nothing to show (#456).
+                if (session.landsBeforeTarget.value && frame.pts.micros >= itemFloorUs(session)) {
                     held.replace(frame, session)
                     ownsFrame = false
                 }

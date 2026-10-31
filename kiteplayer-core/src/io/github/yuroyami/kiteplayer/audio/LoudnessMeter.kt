@@ -57,7 +57,7 @@ public class LoudnessMeter(
 
     private val weights: FloatArray = run {
         val mask = channelLayoutMask?.takeIf { it.countOneBits() == channels }
-            ?: MixLayout.forChannelCount(channels)?.mask
+            ?: MixLayout.forUnmaskedSource(channels)?.mask
         val speakers = mask?.let { m -> (0 until 64).filter { bit -> (m shr bit) and 1L == 1L } }
         FloatArray(channels) { channel -> speakers?.let { weightOf(it[channel]) } ?: 1.0f }
     }

@@ -76,6 +76,10 @@ commonMain.dependencies {
 }
 ```
 
+This page describes `main`, which is ahead of 0.3.0. Three parts are marked *not released yet*:
+Matroska editions with linked files, 360 degree video, and `kiteplayer-compose` on the web. They
+come with the next release, and code that uses them does not compile against 0.3.0.
+
 You don't install FFmpeg (it comes inside the artifacts), and there is no Gradle plugin to apply.
 On Android, every artifact needs `minSdk` 26. To build a smaller stack of your own, the
 [module contract](docs/module-contract.md) explains what each module brings in.
@@ -297,9 +301,10 @@ The player can also:
 - step frame by frame and take screenshots
 - record what plays into a Matroska file, without re-encoding
 - play Matroska editions, including ordered chapters that take a season's opening and ending from
-  other files ([Editions and linked files](docs/media-sources.md#editions-and-linked-files))
+  other files ([Editions and linked files](docs/media-sources.md#editions-and-linked-files)),
+  *not released yet*
 - show a 360 degree video as a view that your app turns with a drag or with the phone's motion
-  ([360 degree video](docs/spherical-video.md))
+  ([360 degree video](docs/spherical-video.md)), *not released yet*
 
 [Controlling the player](docs/player-api.md) lists every call by area.
 
@@ -466,7 +471,7 @@ in a live grid.
 | **iOS** | ✓ | ✓ | ✓ |
 | **Desktop JVM** | ✓ | ✓ | ✓ |
 | **macOS** (native) | ✓ | | |
-| **Web** (`wasmJs`) | ✓ | ✓ | |
+| **Web** (`wasmJs`) | ✓ | ✓ (not released yet) | |
 | **Linux and Windows** (native) | No audio output | | |
 
 - On iOS, the artifacts target `iosArm64` and `iosSimulatorArm64`, with no `iosX64`.
@@ -475,10 +480,10 @@ in a live grid.
 - On Linux and Windows native, KitePlayer has no audio output and no HTTPS. `KitePlayer()` throws
   there, and `KitePlayer.isAvailable` is false. Pass `KiteFFmpegMediaBackend()` and your own
   `OutputBackend` to `KitePlayer.create`.
-- On the web, `kiteplayer-compose` draws the video inside Compose's own WebGL context, so it needs
-  a browser with WebGL2. Clipping, alpha and other Compose content apply to it as on the other
-  platforms. It runs the player on the page's main thread. The worker player draws on a canvas of
-  its own.
+- *Not released yet:* on the web, `kiteplayer-compose` draws the video inside Compose's own WebGL
+  context, so it needs a browser with WebGL2. Clipping, alpha and other Compose content apply to it
+  as on the other platforms. It runs the player on the page's main thread. The worker player draws
+  on a canvas of its own.
 - `kiteplayer` also compiles for `js`, where `KitePlayer()` reports that the target is not
   available.
 - The engine modules (`kiteplayer-core`, `kiteplayer-io` and `kiteplayer-subtitles`) also build
@@ -529,10 +534,10 @@ case in detail.
 - KitePlayer converts Dolby Vision profile 5 and 10.0 to HDR10 on the CPU. That keeps up at 1080p,
   but not at 4K.
 - Nobody has played sound with the desktop JVM build on a real Linux or Windows computer yet.
-- You can only look around in a 360 degree video where `KiteVideo` draws it. The native views that
-  `KitePlayerVideo` uses by default on Android, iOS and the desktop JVM show the whole frame flat,
-  so pass `path = KiteRenderPath.ComposeCanvas` there. On Android, the 360 degree view needs
-  Android 13 or later.
+- *Not released yet:* you can only look around in a 360 degree video where `KiteVideo` draws it. The
+  native views that `KitePlayerVideo` uses by default on Android, iOS and the desktop JVM show the
+  whole frame flat, so pass `path = KiteRenderPath.ComposeCanvas` there. On Android, the 360 degree
+  view needs Android 13 or later.
 
 Missing features and known bugs are [open issues](https://github.com/yuroyami/KitePlayer/issues).
 

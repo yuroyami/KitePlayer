@@ -1,5 +1,8 @@
 # 360 degree video
 
+> [!NOTE]
+> Not released yet: this is on `main` after 0.3.0 and comes with the next release.
+
 This document is the design for issue #460, and the player now does what it says. It states the
 public API, what the player does with a 360 degree video, how the renderers draw one, and which of
 them do. Where building it changed a detail, the detail here is the one that was built.

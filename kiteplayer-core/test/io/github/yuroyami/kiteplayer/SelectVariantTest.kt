@@ -397,6 +397,35 @@ class SelectVariantTest {
         harness.close()
     }
 
+    /**
+     * With the picture off nobody sees the video, so the stream moves to its cheapest variant, and
+     * back to the one before when the picture is on again (#595). A parked picture kept the top
+     * rung downloading.
+     */
+    @Test
+    fun aParkedPictureMovesTheStreamToItsCheapestVariantAndBack() = runTest {
+        val script = MediaScript(durationUs = 240_000_000, variants = ladder, linkBitsPerSecond = { 50_000_000 })
+        val harness = CoreHarness(this, script = script)
+        harness.attachRenderer()
+        assertNotNull(harness.renderer).outputSizeOverride = VideoSize(1920, 1080)
+        harness.core.open(MediaItem("scripted://media", io = { LinkIo(script, harness.clock) }))
+        assertEquals(2, harness.core.snapshots.value.tracks.selectedVariant)
+        harness.core.play()
+        harness.run(5.seconds)
+
+        harness.core.post(io.github.yuroyami.kiteplayer.internal.CoreCommand.SetVideoEnabled(false, kotlinx.coroutines.CompletableDeferred()))
+        harness.run(10.seconds)
+        assertEquals(0, harness.core.snapshots.value.tracks.selectedVariant, "the parked picture kept its 1080p rung")
+        harness.run(70.seconds)
+        assertEquals(0, harness.core.snapshots.value.tracks.selectedVariant, "the stream climbed while nobody saw it")
+
+        harness.core.post(io.github.yuroyami.kiteplayer.internal.CoreCommand.SetVideoEnabled(true, kotlinx.coroutines.CompletableDeferred()))
+        harness.run(10.seconds)
+        assertEquals(2, harness.core.snapshots.value.tracks.selectedVariant, "the picture came back on the cheapest rung")
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        harness.close()
+    }
+
     /** A fast link steps up only as far as the view, and further once the view grows (#447). */
     @Test
     fun aStepUpStopsAtTheDrawnSizeAndRisesWithTheView() = runTest {

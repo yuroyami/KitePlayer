@@ -1420,6 +1420,9 @@ internal class PlaybackCore(
     private var starvedSinceNanos: Long = NO_POSITION
 
     /** The player tries no higher variant before this instant, or [NO_POSITION] for no wait (#376). */
+    /** The variant that played before a parked picture moved the stream to the cheapest one (#595), or null. */
+    private var variantBeforePark: Int? = null
+
     private var stepUpNotBeforeNanos: Long = NO_POSITION
 
     /** The wait after a step down before a step up. It doubles when a step up was followed by one. */
@@ -3810,6 +3813,7 @@ internal class PlaybackCore(
         stepUpNotBeforeNanos = NO_POSITION
         stepUpWait = VARIANT_STEP_UP_WAIT
         lastStepWasUp = false
+        variantBeforePark = null
         lastChapterIndex = Int.MIN_VALUE
         markerCursorUs = NO_POSITION
         markerCursorEpoch = null
@@ -7962,12 +7966,35 @@ internal class PlaybackCore(
      * long each time a step up was followed by another step down.
      */
     private fun stepUpWhenFast(session: OpenSession) {
-        if (!playRequested || status != PlaybackStatus.Playing || !firstFrameSeen) return
+        if (!playRequested || status != PlaybackStatus.Playing) return
         if (pendingSeek != null || reopenPending) return
         val item = media ?: return
         if (item.demux.variant != null && !variantChosenByPlayer) return
         if (!mayChangeVariant(session)) return
         val current = tracks.variants.firstOrNull { it.index == tracks.selectedVariant } ?: return
+        // Nobody sees the picture, so the cheapest variant carries the sound, often one with no
+        // video at all (#595): a parked lane still downloaded the top rung and climbed further.
+        if (session.videoParked.value) {
+            val cheapest = tracks.variants.minByOrNull { it.bitrate } ?: return
+            if (cheapest.bitrate < current.bitrate) {
+                if (variantBeforePark == null) variantBeforePark = current.index
+                variantChosenByPlayer = true
+                lastStepWasUp = false
+                pendingVariant = VariantRequest(cheapest.index, CompletableDeferred())
+            }
+            return
+        }
+        // The picture is back: the variant from before the park, at once, since a variant with
+        // no video shows no frame that the climb below would wait for.
+        variantBeforePark?.let { before ->
+            variantBeforePark = null
+            if (before != current.index && tracks.variants.any { it.index == before }) {
+                variantChosenByPlayer = true
+                pendingVariant = VariantRequest(before, CompletableDeferred())
+                return
+            }
+        }
+        if (!firstFrameSeen) return
         // Past the caps as the renderer draws now, as when the stream opened before its view had a
         // size and took the top rung: down to the largest variant inside them, at once (#600). The
         // network steps only ever looked for more, so the 2160p rung played on a phone for good.

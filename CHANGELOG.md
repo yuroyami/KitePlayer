@@ -172,6 +172,12 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- An HLS or DASH stream with its picture off now moves to its cheapest variant, and back to the
+  one before when the picture is on again (#595). With `setVideoEnabled(false)` or the media
+  session's background policy the video lane only dropped what arrived, so the stream kept
+  downloading its top rung and stepped up further. The stream's video is still read while the
+  picture is off; leaving it out of the reads where the stream has separate audio is the fuller
+  fix.
 - A live fMP4 HLS stream with two or more variants no longer stops at its first advertisement
   (#621). A reload that gained a second `EXT-X-MAP`, as server-side ad insertion writes, threw in
   the variant switch, and FFmpeg dropped the playlist for good. The reload is now served up to

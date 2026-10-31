@@ -173,6 +173,12 @@ public interface VideoRenderer : AutoCloseable {
      * Emitting is optional. A renderer that cannot draw refuses the frame instead, which the
      * schedule counts as a drop and carries on from, so a silent feed costs only the chance to
      * report why.
+     *
+     * A feed that replays to a new collector may replay surface state, such as
+     * [RendererEvent.SurfaceLost], but a replayed [RendererEvent.Failed] is an earlier attach's: the
+     * engine ignores one that reaches it from the replay before it has handed this renderer a frame
+     * (#596). A renderer that wants both keeps its surface state in a `StateFlow` and sends failures
+     * on a feed with no replay.
      */
     public val events: Flow<RendererEvent>
 

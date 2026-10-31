@@ -3558,9 +3558,17 @@ internal class PlaybackCore(
      * The renderer's event feed, finally collected: surface loss and hard
      * failure become typed warnings, so they reach the event flow, the bounded history and the
      * dump instead of being visible only as a frozen picture. One collector per attached
-     * renderer; replacing or detaching cancels it, and the core's own scope ends it at close.
+     * renderer; replacing or detaching cancels it, and so does close (#602).
      */
     private var rendererEventsJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * Frames handed to the renderer since it was last attached. A renderer whose events replay
+     * hands a new collector the failure it reported to an earlier one, and a renderer that has been
+     * given no frame since this attach cannot have failed one, so a replayed failure that arrives
+     * before the first frame is the old one and detaches nothing (#596).
+     */
+    private val framesHandedSinceAttach = atomic(0L)
 
     /** Latches [PlaybackWarning.HdrToneMapped] to once per open. Reset with the session. */
     private var toneMapWarned: Boolean = false
@@ -3588,9 +3596,14 @@ internal class PlaybackCore(
 
     private fun watchRendererEvents(renderer: VideoRenderer?) {
         rendererEventsJob?.cancel()
+        framesHandedSinceAttach.value = 0L
         rendererEventsJob = renderer?.let { attached ->
+            // The events a replaying flow holds now reach the collector first, and are from before.
+            val replayed = (attached.events as? kotlinx.coroutines.flow.SharedFlow<*>)?.replayCache?.size ?: 0
             scope.launch {
+                var received = 0
                 attached.events.collect { event ->
+                    val fromBefore = received++ < replayed
                     when (event) {
                         is RendererEvent.SurfaceLost ->
                             warn(PlaybackWarning.NoRenderSurface(event.detail))
@@ -3602,7 +3615,7 @@ internal class PlaybackCore(
                         // continues headless, which is a state it already supports completely, the
                         // frames are counted as headless instead of refused, and the application
                         // is free to attach a working renderer whenever it has one.
-                        is RendererEvent.Failed -> {
+                        is RendererEvent.Failed -> if (!fromBefore || framesHandedSinceAttach.value > 0L) {
                             warn(
                                 PlaybackWarning.RendererFailed(
                                     "${event.detail}; the renderer was detached and playback " +
@@ -4196,6 +4209,7 @@ internal class PlaybackCore(
                 it.delegate = pendingRenderer
                 // Any lane may publish, so the actor hears of it through its mailbox (#463).
                 it.onOverlay = { commands.trySend(CoreCommand.OverlayReached()) }
+                it.onHanded = { framesHandedSinceAttach.incrementAndGet() }
             }
             val videoPlayback = videoStream?.let {
                 VideoPlayback(
@@ -12194,6 +12208,13 @@ internal class PlaybackCore(
         // else can reach, and the release can then run somewhere this coroutine is able to stop
         // waiting for. The close is the caller's own end of a recording, so it warns nothing.
         val detached = detachSession(quietRecordingEnd = true)
+        // What close promises: the renderer's events stop reaching this player, which a renderer
+        // that outlives it, as a Compose screen's does, otherwise kept reachable with everything
+        // the closed player held, its parsed subtitles among them (#602).
+        rendererEventsJob?.cancel()
+        rendererEventsJob = null
+        pendingRenderer = null
+        externalSubtitleTracks = emptyList()
         val release = ClosingGraph(
             // The current item first: after a handoff the next item owns the audio device and the
             // ring the current one's clock reads, so the next item must be released after it.

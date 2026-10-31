@@ -283,6 +283,9 @@ internal class AttachableRenderer : VideoRenderer {
 
     var delegate: VideoRenderer? = null
 
+    /** Called before each frame is handed to a [delegate], accepted or not, from the scheduler's lane. */
+    var onHanded: () -> Unit = {}
+
     /** Frames a real renderer accepted. Not frames drawn: a renderer counts that itself. */
     val submittedFrames: Long get() = submittedCount.value
 
@@ -316,6 +319,7 @@ internal class AttachableRenderer : VideoRenderer {
             // True, because the schedule did its job: there is simply nothing attached to draw on.
             return true
         }
+        onHanded()
         // Counted only after the renderer says yes: submittedFrames documents "frames a real
         // renderer accepted", and counting before the answer contradicted that on every refusal.
         val accepted = target.present(frame, targetNanos)

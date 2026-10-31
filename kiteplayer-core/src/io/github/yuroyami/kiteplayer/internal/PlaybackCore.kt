@@ -3199,6 +3199,20 @@ internal class PlaybackCore(
                 val changed = videoEnabled != command.value
                 videoEnabled = command.value
                 session?.videoParked?.value = !command.value
+                // Where the sound is a download of its own, the picture off is not read at all, and
+                // read again as it comes back (#595). The seek below, or the next keyframe, then
+                // brings the picture back as for a picture that was only parked.
+                session?.let { active ->
+                    val picture = active.videoStream?.index
+                    if (changed && picture != null && active.audioStream != null && active.source.separateAudioRenditions) {
+                        val change = if (command.value) {
+                            ReadChange(add = setOf(picture), remove = emptySet(), readFromUs = null)
+                        } else {
+                            ReadChange(add = emptySet(), remove = setOf(picture), readFromUs = null)
+                        }
+                        askToRead(active, change)
+                    }
+                }
                 /* Coming back, the decoder needs a keyframe: it has been fed nothing for a while
                  * and the next packet is mid group-of-pictures. A seekable source gets a precise
                  * seek to where playback already is, which flushes the lane and lands on a
@@ -4354,8 +4368,11 @@ internal class PlaybackCore(
             } else {
                 emptySet()
             }
+            // The picture is a download of its own too, so with the picture off it is not read
+            // at all (#595), as long as a sound is left to read.
+            val pictureUnread = !videoEnabled && source.separateAudioRenditions && audioStream != null
             val readStreams = buildSet {
-                videoStream?.index?.let(::add)
+                if (!pictureUnread) videoStream?.index?.let(::add)
                 cachedAudioStreams.forEach { if (it.index !in unreadSounds) add(it.index) }
                 cachedSubtitleStreams.forEach { add(it.index) }
             }

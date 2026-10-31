@@ -65,6 +65,11 @@ public data class PlayerConfig(
     /**
      * False opens media with video decoding parked: audio plays, no video frame is decoded.
      *
+     * Where the stream allows, no video is downloaded either (#595): an HLS or DASH stream whose
+     * sound is a download of its own leaves its picture out of the reads, and one whose variants
+     * carry the sound with the picture moves to its cheapest variant while the picture is off. A
+     * file is read as it is, since its sound and picture come in the same reads.
+     *
      * For an application that knows from the start it is only playing sound. Change it while
      * playing with [KitePlayer.setVideoEnabled], which parks and resumes in place without
      * reopening anything.

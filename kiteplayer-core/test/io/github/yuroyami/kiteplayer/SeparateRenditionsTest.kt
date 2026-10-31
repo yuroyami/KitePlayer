@@ -44,6 +44,58 @@ class SeparateRenditionsTest {
         harness.close()
     }
 
+    /**
+     * The picture is a download of its own too, so with the picture off it is not read at all, and
+     * it comes back on when the picture does (#595). A parked lane only threw its packets away,
+     * and the stream kept downloading every one.
+     */
+    @Test
+    fun aPictureThatIsOffIsNotReadAndComesBack() = runTest {
+        val media = script(separate = true)
+        val harness = CoreHarness(this, script = media)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1.seconds)
+        assertTrue(media.videoIndex in harness.source.selectionHistory.last(), "the picture was not read with the picture on")
+
+        harness.core.post(io.github.yuroyami.kiteplayer.internal.CoreCommand.SetVideoEnabled(false, kotlinx.coroutines.CompletableDeferred()))
+        harness.run(1.seconds)
+        assertTrue(media.videoIndex !in harness.source.selectionHistory.last(), "the picture was still read with nobody seeing it")
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status, "the sound stopped with the picture")
+
+        val shown = harness.renderer!!.count
+        harness.core.post(io.github.yuroyami.kiteplayer.internal.CoreCommand.SetVideoEnabled(true, kotlinx.coroutines.CompletableDeferred()))
+        harness.run(2.seconds)
+        assertTrue(media.videoIndex in harness.source.selectionHistory.last(), "the picture was not read again")
+        assertTrue(harness.renderer!!.count > shown, "the picture did not come back")
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        harness.close()
+    }
+
+    /** A file reads its picture even with the picture off, as before: its sound is in the same reads. */
+    @Test
+    fun aFileKeepsReadingItsPictureWhenItIsOff() = runTest {
+        val media = script(separate = false)
+        val harness = CoreHarness(this, script = media, config = PlayerConfig(videoEnabled = false))
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1.seconds)
+        assertTrue(media.videoIndex in harness.source.selectionHistory.last())
+        harness.close()
+    }
+
+    @Test
+    fun aStreamOpenedWithThePictureOffReadsNoPicture() = runTest {
+        val media = script(separate = true)
+        val harness = CoreHarness(this, script = media, config = PlayerConfig(videoEnabled = false))
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1.seconds)
+        assertTrue(media.videoIndex !in harness.source.selectionHistory.last(), "the open read a picture nobody sees")
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        harness.close()
+    }
+
     @Test
     fun aFileReadsEverySoundAsBefore() = runTest {
         val harness = CoreHarness(this, script = script(separate = false))

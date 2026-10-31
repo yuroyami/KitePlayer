@@ -160,6 +160,12 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- A working hardware video decoder is no longer moved to software when a keyframe interval holds
+  more than 16 MiB (#645). The decoder keeps a copy of the packets since the last keyframe so that
+  software can take over if the hardware fails, and when that copy would pass its cap the player
+  demoted the hardware decoder instead, so a 4K HEVC file stalled at its first long static scene
+  and played in software from then on. The player now gives up the copy and keeps the hardware. A
+  hardware failure before the next keyframe reopens the item in software at the current position.
 - A file named with a `file:` URI now opens when its name holds a space or a non-ASCII letter, and
   on Windows when the URI names a drive (#655). Android's `Uri.fromFile`, Apple's `NSURL` and
   Java's `File.toURI` all write such a name percent-encoded, and only the playlist reader decoded

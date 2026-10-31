@@ -62,16 +62,12 @@ public fun AudioVizBrowser(state: AudioVizState, modifier: Modifier = Modifier, 
         }
     }
     var query by remember { mutableStateOf("") }
-    // The tiles redraw at fifteen a second, so they read through a source of their own and see every event.
-    val source = remember(state) { state.frameSource() }
-    var shown by remember { mutableStateOf(source.take()) }
     val tileRate = if (state.framesPerSecond > 0) minOf(TILE_RATE, state.framesPerSecond) else TILE_RATE
     LaunchedEffect(state, tileRate, previewParams) {
         while (true) {
             // Separate animation state, but the same settings as the drawing being previewed.
             for ((configured, preview) in previewParams) preview.value = configured.value
             for ((configured, preview) in neonPreviews) preview.copyRecipeFrom(configured)
-            shown = source.take()
             delay(1_000L / tileRate)
         }
     }
@@ -99,6 +95,10 @@ public fun AudioVizBrowser(state: AudioVizState, modifier: Modifier = Modifier, 
         )
         LazyVerticalGrid(columns = GridCells.Adaptive(160.dp), modifier = Modifier.fillMaxSize()) {
             items(matches, key = { it.name }) { tile ->
+                // Each tile reads through a source of its own, which its clock takes from at each
+                // step, so it sees every event once. One source for the grid, read on a timer that
+                // drifts from the tiles' clocks, stepped a frame twice with its events, or never (#673).
+                val tileSource = remember(state, tile) { state.frameSource() }
                 Column(
                     Modifier
                         .clip(RoundedCornerShape(8.dp))
@@ -111,7 +111,7 @@ public fun AudioVizBrowser(state: AudioVizState, modifier: Modifier = Modifier, 
                 ) {
                     VisualizerSurface(
                         visualization = tile,
-                        frame = { shown },
+                        frame = { tileSource.take() },
                         palette = state.palette,
                         modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(6.dp)),
                         post = false,

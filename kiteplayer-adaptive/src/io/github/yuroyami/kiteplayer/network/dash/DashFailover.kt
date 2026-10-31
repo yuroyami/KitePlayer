@@ -33,10 +33,18 @@ internal class DashFailover(
     /** The bases, the most specific first, so a representation's own base wins over its Period's. */
     private var sets: List<DashBaseUrls> = sorted(sets)
 
-    /** For each base, by its primary address, the index of the location this reader is on. */
-    private val current = HashMap<String, Int>()
+    /**
+     * For each base, by its primary address, the address of the location this reader is on. An
+     * address and not a place in the list, because a refreshed list can reorder or drop locations:
+     * an index kept across one sent the reader to another server, or past the end of the list,
+     * which threw after a segment had opened and lost its reader (#440).
+     */
+    private val current = HashMap<String, String>()
 
-    /** Takes the bases of a manifest fetched again. A base this reader already moved stays where it went. */
+    /**
+     * Takes the bases of a manifest fetched again. A base this reader already moved stays where it
+     * went while that location is still listed, and starts again by the manifest's rules if not.
+     */
     suspend fun update(next: List<DashBaseUrls>) = lock.withLock { sets = sorted(next) }
 
     /**
@@ -45,7 +53,11 @@ internal class DashFailover(
      */
     suspend fun <T> open(url: String, open: suspend (String) -> T): T {
         val found = lock.withLock {
-            sets.firstOrNull { moved(url, it.primary, it.primary) != null }?.let { set -> set to current.getOrPut(set.primary) { startOf(set) } }
+            sets.firstOrNull { moved(url, it.primary, it.primary) != null }?.let { set ->
+                val on = current[set.primary]?.let { address -> set.locations.indexOfFirst { it.url == address } }?.takeIf { it >= 0 }
+                    ?: startOf(set).also { current[set.primary] = set.locations[it].url }
+                set to on
+            }
         }
         val (set, start) = found ?: return open(url)
         val locations = set.locations
@@ -89,17 +101,23 @@ internal class DashFailover(
         throw failure ?: IllegalStateException("no location of ${shownUri(url)} could be opened")
     }
 
+    /**
+     * Moves [set]'s base from the location at [from] to the one at [to], both of [set]'s own list,
+     * unless another open moved it first. Only addresses cross the lock, so a refresh in between
+     * cannot make one list's place name another list's location.
+     */
     private suspend fun settle(set: DashBaseUrls, from: Int, to: Int, failure: Exception?) {
+        val fromUrl = set.locations[from].url
+        val toUrl = set.locations[to].url
         val moved = lock.withLock {
-            if (current[set.primary] != from) return@withLock false
-            current[set.primary] = to
+            if (current[set.primary] != fromUrl) return@withLock false
+            current[set.primary] = toUrl
             true
         }
         if (moved) {
             KiteLog.log(
                 "KiteDash",
-                "${shownUri(set.locations[from].url)} failed (${failure?.message}); its segments now come from " +
-                    shownUri(set.locations[to].url),
+                "${shownUri(fromUrl)} failed (${failure?.message}); its segments now come from ${shownUri(toUrl)}",
             )
         }
     }

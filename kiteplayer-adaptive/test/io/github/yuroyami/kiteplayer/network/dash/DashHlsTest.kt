@@ -77,6 +77,42 @@ class DashHlsTest {
         assertEquals(2, variants.count { "VIDEO-RANGE" !in it }, variants.joinToString("\n"))
     }
 
+    /**
+     * A trick play set, which holds keyframes for fast forward, is marked by an EssentialProperty this
+     * reader does not play, so it is left out rather than offered as the lowest quality (#622). An
+     * essential colour description, which the reader does understand, keeps its set.
+     */
+    @Test
+    fun aSetWithAnEssentialPropertyThePlayerDoesNotUnderstandIsLeftOut() {
+        val period = parse(
+            """
+            <MPD type="static" mediaPresentationDuration="PT4S">
+                <Period>
+                    <AdaptationSet id="1" contentType="video" mimeType="video/mp4" codecs="avc1.64001f">
+                        <SegmentTemplate media="v-${'$'}RepresentationID${'$'}-${'$'}Number${'$'}.m4s" initialization="v-${'$'}RepresentationID${'$'}.mp4" timescale="1" duration="2"/>
+                        <EssentialProperty schemeIdUri="urn:mpeg:mpegB:cicp:ColourPrimaries" value="1"/>
+                        <Representation id="hi" bandwidth="6000000" width="1920" height="1080"/>
+                        <Representation id="lo" bandwidth="400000" width="640" height="360"/>
+                        <Representation id="odd" bandwidth="300000" width="320" height="180">
+                            <EssentialProperty schemeIdUri="urn:example:unknown" value="1"/>
+                        </Representation>
+                    </AdaptationSet>
+                    <AdaptationSet id="2" contentType="video" mimeType="video/mp4" codecs="avc1.64001f" maxFrameRate="1/2">
+                        <EssentialProperty schemeIdUri="http://dashif.org/guidelines/trickmode" value="1"/>
+                        <SegmentTemplate media="t-${'$'}Number${'$'}.m4s" initialization="t.mp4" timescale="1" duration="8"/>
+                        <Representation id="trick" bandwidth="80000" width="320" height="180"/>
+                    </AdaptationSet>
+                </Period>
+            </MPD>
+            """.trimIndent(),
+        ).periods.single()
+        assertEquals(listOf("1"), period.adaptationSets.map { it.id }, "the trick play set was kept")
+        assertEquals(listOf("hi", "lo"), period.adaptationSets.single().representations.map { it.id })
+        val variants = DashHls.presentation(period).master.lines().filter { it.startsWith("#EXT-X-STREAM-INF:") }
+        assertEquals(2, variants.size, variants.joinToString("\n"))
+        assertTrue(variants.none { "BANDWIDTH=80000" in it }, variants.joinToString("\n"))
+    }
+
     /** A size the adaptation set states once holds for each of its representations, as Shaka Packager writes it (#623). */
     @Test
     fun aSizeOnTheAdaptationSetReachesItsRepresentations() {

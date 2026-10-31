@@ -358,7 +358,13 @@ public object DashManifestParser {
             DashPeriod(
                 baseUrl = periodBase.url,
                 durationMicros = period.attr("duration")?.let(::parseIsoDurationMicros),
-                adaptationSets = period.children("AdaptationSet").map { set ->
+                // An element whose EssentialProperty this reader does not understand is left out,
+                // as ISO/IEC 23009-1 asks (5.8.4.8). A trick play set says so through one, and played
+                // as a quality it was the lowest variant that a step down could pick (#622).
+                adaptationSets = period.children("AdaptationSet").filter(::essentialUnderstood).mapNotNull { set ->
+                    val representations = set.children("Representation")
+                    val understood = representations.filter(::essentialUnderstood)
+                    if (understood.isEmpty() && representations.isNotEmpty()) return@mapNotNull null
                     // Each level's BaseURL resolves against the level above it: MPD, Period,
                     // AdaptationSet, Representation (ISO/IEC 23009-1, 5.6.4).
                     val setBase = resolveBaseUrl(periodBase, set, policy, budget, alternatives)
@@ -371,7 +377,7 @@ public object DashManifestParser {
                         contentType = set.attr("contentType"),
                         mimeType = set.attr("mimeType"),
                         segmentTemplate = setTemplate?.template,
-                        representations = set.children("Representation").map { rep ->
+                        representations = understood.map { rep ->
                             parseRepresentation(
                                 rep, setBase, set, setSegmentList, setSegmentBase, setTemplate, policy, budget, urlLimits,
                                 alternatives,
@@ -529,6 +535,18 @@ public object DashManifestParser {
     }
 
     /** The two addresses DASH-IF has given the thumbnail grid property. */
+    /** Whether every `EssentialProperty` of [element] names a scheme this reader understands (#622). */
+    private fun essentialUnderstood(element: XmlElement): Boolean =
+        element.children("EssentialProperty").all { property ->
+            val scheme = property.attr("schemeIdUri")?.trim()?.lowercase() ?: return@all true
+            // The colour description is read from the bitstream as well, the tiles are read here,
+            // and a font to download only styles subtitles the player draws with its own fonts.
+            scheme in TILE_SCHEMES || scheme.startsWith(CICP_SCHEME_PREFIX) || scheme == DVB_FONT_DOWNLOAD_SCHEME
+        }
+
+    private const val CICP_SCHEME_PREFIX: String = "urn:mpeg:mpegb:cicp:"
+    private const val DVB_FONT_DOWNLOAD_SCHEME: String = "urn:dvb:dash:fontdownload:2014"
+
     private val TILE_SCHEMES = setOf("http://dashif.org/thumbnail_tile", "http://dashif.org/guidelines/thumbnail_tile")
 
     /** The transfer characteristics value [element] states, or null when it states none. */

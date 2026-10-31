@@ -101,10 +101,17 @@ macos() {
     kotlin test -p macosArm64 -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
         -m kiteplayer-output -m kiteplayer-rt \
         -m kiteplayer-libass -m kiteplayer-adaptive -m kiteplayer-network \
-        -m kiteplayer-ffmpeg -m kiteplayer
+        -m kiteplayer-ffmpeg -m kiteplayer -m kiteplayer-view
 }
 ios_simulator() {
-    kotlin test -p iosSimulatorArm64 -m kiteplayer-view -m kiteplayer-audioviz -m kiteplayer
+    kotlin test -p iosSimulatorArm64 -m kiteplayer-view -m kiteplayer-audioviz -m kiteplayer \
+        -m kiteplayer-compose-video
+}
+android_host() {
+    # The Android unit tests on the JVM, the media session's among them, which no step ran (#637).
+    kotlin test -p android -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
+        -m kiteplayer-output -m kiteplayer-compose-video -m kiteplayer-view -m kiteplayer-adaptive \
+        -m kiteplayer-network -m kiteplayer-audioviz -m kiteplayer-libass -m kiteplayer -m kiteplayer-ffmpeg
 }
 c_sanitizers() {
     # This reuses the plain build from base. When resuming here, that earlier build must exist.
@@ -161,7 +168,7 @@ sample() {
 # Generate first: no real-media suite may consume stale fixtures in a full Tier 2 run.
 STEPS=(base)
 if [ "$TIER" = tier2 ]; then
-    STEPS=(fixtures base build_logic publication macos ios_simulator c_sanitizers jvm web linux windows cross_compile sample)
+    STEPS=(fixtures base build_logic publication macos ios_simulator android_host c_sanitizers jvm web linux windows cross_compile sample)
 fi
 FROM="${FROM:-${STEPS[0]}}"
 case " ${STEPS[*]} " in

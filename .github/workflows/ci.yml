@@ -224,7 +224,7 @@ jobs:
           . scripts/test-env.sh
           ./kotlin test -p macosArm64 -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
             -m kiteplayer-rt -m kiteplayer-libass -m kiteplayer-adaptive -m kiteplayer-network \
-            -m kiteplayer-ffmpeg -m kiteplayer
+            -m kiteplayer-ffmpeg -m kiteplayer -m kiteplayer-view
           ./scripts/run-native-tests.sh -m kiteplayer-output -p macosArm64 --exclude-set no-audio-hardware
 
       # An isolated external Gradle consumer must retain optional registration after Native
@@ -310,7 +310,7 @@ jobs:
           . scripts/test-env.sh
           ./kotlin test -p iosSimulatorArm64 -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
             -m kiteplayer-rt -m kiteplayer-view -m kiteplayer-adaptive -m kiteplayer-network \
-            -m kiteplayer-libass -m kiteplayer-audioviz -m kiteplayer
+            -m kiteplayer-libass -m kiteplayer-audioviz -m kiteplayer -m kiteplayer-compose-video
           ./scripts/run-native-tests.sh -m kiteplayer-output -p iosSimulatorArm64 --exclude-set simulator-audio
 
       - name: Compile the iOS device targets
@@ -427,13 +427,15 @@ jobs:
               grep -o 'HOTPATH | .*' | grep -v 'HotPathGateTest' | sed 's/^HOTPATH //' || true
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # `-p android` runs the Android unit tests on the JVM, the Android host tests.
+      # `-p android` runs the Android unit tests on the JVM, the Android host tests. kiteplayer holds
+      # the media session's, and kiteplayer-ffmpeg the decoder choice's, which no job ran (#637).
       - name: Android host tests, media-free tests
         run: |
           . scripts/test-env.sh
           ./kotlin test -p android -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
             -m kiteplayer-output -m kiteplayer-compose-video -m kiteplayer-view -m kiteplayer-adaptive \
-            -m kiteplayer-network -m kiteplayer-audioviz -m kiteplayer-sample-shared -m kiteplayer-libass
+            -m kiteplayer-network -m kiteplayer-audioviz -m kiteplayer-sample-shared -m kiteplayer-libass \
+            -m kiteplayer -m kiteplayer-ffmpeg
 
       - name: No class compiled by two published modules
         run: |

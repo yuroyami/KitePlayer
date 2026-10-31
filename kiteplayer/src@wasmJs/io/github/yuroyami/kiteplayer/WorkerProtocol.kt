@@ -950,6 +950,11 @@ private fun encodeError(error: PlaybackError): JsAny = record {
             put("uri", error.uri)
             put("detail", error.detail)
         }
+        is PlaybackError.DrmUnsupported -> {
+            kind("DrmUnsupported")
+            put("uri", error.uri)
+            put("system", error.system)
+        }
         is PlaybackError.NoPlayableStream -> {
             kind("NoPlayableStream")
             put("streams", error.streams.encodeEach(::encodeTrack))
@@ -1772,6 +1777,7 @@ private fun decodeError(o: JsAny): PlaybackError? = when (o.str("t")) {
     )
     "SourceStalled" -> PlaybackError.SourceStalled(o.str("uri") ?: missing("uri"), o.micros("stalledFor") ?: missing("stalledFor"))
     "NotMedia" -> PlaybackError.NotMedia(o.str("uri") ?: missing("uri"), o.str("detail"))
+    "DrmUnsupported" -> PlaybackError.DrmUnsupported(o.str("uri") ?: missing("uri"), o.str("system"))
     "NoPlayableStream" -> PlaybackError.NoPlayableStream(o.list("streams", ::decodeTrack).orEmpty())
     "DecoderFailed" -> PlaybackError.DecoderFailed(o.str("codec") ?: missing("codec"), o.str("detail").orEmpty())
     "RuntimeCompromised" -> PlaybackError.RuntimeCompromised(o.str("detail").orEmpty())

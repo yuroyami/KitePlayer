@@ -234,4 +234,17 @@ class HlsPlaylistsTest {
             "",
         ).joinToString("\n")
     }
+
+    /** Which key lines are protection a player refuses, and which are keys it reads (#624). */
+    @Test
+    fun aDrmKeyIsRefusedAndAClearKeyIsRead() {
+        fun refused(line: String) = hlsDrmRefusal("#EXTM3U\n$line\n", "x")?.error as? io.github.yuroyami.kiteplayer.PlaybackError.DrmUnsupported
+        assertEquals(null, refused("#EXT-X-KEY:METHOD=AES-128,URI=\"https://cdn.test/key\""))
+        assertEquals(null, refused("#EXT-X-KEY:METHOD=AES-128,URI=\"key.bin\",KEYFORMAT=\"identity\""))
+        assertEquals(null, refused("#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"https://cdn.test/key\""))
+        assertEquals(null, refused("#EXT-X-KEY:METHOD=NONE"))
+        assertEquals("PlayReady", refused("#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"data:x\",KEYFORMAT=\"com.microsoft.playready\"")?.system)
+        assertEquals("FairPlay", refused("#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"skd://k\"")?.system)
+        assertEquals("SAMPLE-AES-CTR", refused("#EXT-X-KEY:METHOD=SAMPLE-AES-CTR,URI=\"https://k\"")?.system)
+    }
 }

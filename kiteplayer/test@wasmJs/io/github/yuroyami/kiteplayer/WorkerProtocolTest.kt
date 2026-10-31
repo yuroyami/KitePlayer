@@ -258,6 +258,8 @@ class WorkerProtocolTest {
         PlaybackError.SchemeUnsupported("srt://example.com:9000", "srt", "SRT needs libsrt"),
         PlaybackError.SchemeUnsupported("rtsp://camera/stream", "rtsp"),
         PlaybackError.NotMedia("https://example.com/x", "no stream"),
+        PlaybackError.DrmUnsupported("https://example.com/drm.m3u8", "Widevine"),
+        PlaybackError.DrmUnsupported("https://example.com/drm.m3u8"),
         PlaybackError.NoPlayableStream(tracks.all),
         PlaybackError.DecoderFailed("hevc", "no decoder"),
         PlaybackError.RuntimeCompromised("teardown"),
@@ -447,7 +449,7 @@ class WorkerProtocolTest {
             val message = WorkerMessage.Event(PlayerEvent.Failed(error))
             assertEquals(message, message.roundTrip(), "the error $error changed on the way")
         }
-        assertEquals(11, errors.map { it::class }.distinct().size, "every kind of error is here")
+        assertEquals(12, errors.map { it::class }.distinct().size, "every kind of error is here")
     }
 
     @Test

@@ -35,6 +35,7 @@ class SecretFreeTextTest {
             PlaybackError.SourceStalled(signed, 30.seconds),
             PlaybackError.NotMedia(signed),
             PlaybackError.SchemeUnsupported(signed, "https", "for $signed"),
+            PlaybackError.DrmUnsupported(signed, "Widevine"),
         )
         for (error in errors) {
             assertFalse("SECRET" in error.message, error.message)

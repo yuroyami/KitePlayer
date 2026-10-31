@@ -12,6 +12,15 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Added
 
+- `PlaybackError.DrmUnsupported(uri, system)` refuses media protected by digital rights management
+  before any of it decodes (#624). An HLS stream that names a Widevine, PlayReady or FairPlay key,
+  in a master's `EXT-X-SESSION-KEY` or a media playlist's `EXT-X-KEY`, or uses `SAMPLE-AES-CTR`,
+  used to play as noise or end with `SourceUnavailable`, because FFmpeg took the first bytes of a
+  PSSH box as an AES key and read `SAMPLE-AES-CTR` as no encryption. A DASH manifest whose every
+  picture and sound set is encrypted now fails with the same error in place of
+  `DashUnsupportedException`, so code that caught that exception for encryption must catch
+  `PlaybackException` instead. The error names the system, so an app can say that protected
+  content is not supported, or hand the item to a platform player.
 - `KitePlayerJava` has a future for every call that suspends again (#650): `setItemDetailsAsync`,
   `readPlaylistAsync`, `openPlaylistAsync`, `thumbnailAtAsync`, `seekToSubtitleLineAsync` and
   `stepSubtitleDelayAsync`, the last two in milliseconds. `KitePlayerJava.marker(positionMillis,

@@ -3,6 +3,8 @@ package io.github.yuroyami.kiteplayer.network.dash
 import io.github.yuroyami.kiteplayer.KitePlayerInternalApi
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.PlaybackError
+import io.github.yuroyami.kiteplayer.PlaybackException
 import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.github.yuroyami.kiteplayer.SourceRefusal
 import io.github.yuroyami.kiteplayer.network.xml.XmlLimits
@@ -199,10 +201,14 @@ public object DashDoor {
         for ((index, each) in manifest.periods.withIndex()) {
             val media = each.adaptationSets.filter { it.isVideo() || it.isAudio() }
             if (media.isNotEmpty() && media.all { it.isProtected }) {
-                val schemes = media.flatMap { it.contentProtectionSchemes }.distinct().joinToString(", ")
-                throw DashUnsupportedException(
-                    "${shownUri(mpdUrl)} is encrypted" + (if (manifest.periods.size > 1) " in Period ${index + 1}" else "") +
-                        " ($schemes), and digital rights management is not supported",
+                // The typed refusal the HLS path gives too, so an app tells protection apart (#624).
+                val schemes = media.flatMap { it.contentProtectionSchemes }.distinct()
+                val system = schemes.firstNotNullOfOrNull(::drmSystemOfScheme) ?: schemes.joinToString(", ")
+                throw PlaybackException(
+                    PlaybackError.DrmUnsupported(
+                        mpdUrl,
+                        system + (if (manifest.periods.size > 1) " in Period ${index + 1}" else ""),
+                    ),
                 )
             }
         }
@@ -374,3 +380,12 @@ public object DashDoor {
 
 /** [uri] as a message may show it: with no credentials and no query. */
 internal fun shownUri(uri: String): String = MediaItem(uri).label
+
+/** The DRM system a `ContentProtection` scheme names, by its common name, or null for a scheme that names none. */
+private fun drmSystemOfScheme(scheme: String): String? = when (scheme.lowercase()) {
+    "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed" -> "Widevine"
+    "urn:uuid:9a04f079-9840-4286-ab92-e65be0885f95", "urn:uuid:79f0049a-4098-8642-ab92-e65be0885f95" -> "PlayReady"
+    "urn:uuid:94ce86fb-07ff-4f43-adb8-93d2fa968ca2" -> "FairPlay"
+    "urn:uuid:e2719d58-a985-b3c9-781a-b030af78d30e" -> "ClearKey"
+    else -> null
+}

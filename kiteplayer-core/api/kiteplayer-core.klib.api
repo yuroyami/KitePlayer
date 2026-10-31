@@ -5223,6 +5223,23 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackError.DecoderFailed.hashCode|hashCode(){}[0]
     }
 
+    final class DrmUnsupported : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.DrmUnsupported|null[0]
+        constructor <init>(kotlin/String, kotlin/String? = ...) // io.github.yuroyami.kiteplayer/PlaybackError.DrmUnsupported.<init>|<init>(kotlin.String;kotlin.String?){}[0]
+
+        final val message // io.github.yuroyami.kiteplayer/PlaybackError.DrmUnsupported.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.DrmUnsupported.message.<get-message>|<get-message>(){}[0]
+        final val system // io.github.yuroyami.kiteplayer/PlaybackError.DrmUnsupported.system|{}system[0]
+            final fun <get-system>(): kotlin/String? // io.github.yuroyami.kiteplayer/PlaybackError.DrmUnsupported.system.<get-system>|<get-system>(){}[0]
+        final val uri // io.github.yuroyami.kiteplayer/PlaybackError.DrmUnsupported.uri|{}uri[0]
+            final fun <get-uri>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.DrmUnsupported.uri.<get-uri>|<get-uri>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackError.DrmUnsupported.component1|component1(){}[0]
+        final fun component2(): kotlin/String? // io.github.yuroyami.kiteplayer/PlaybackError.DrmUnsupported.component2|component2(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/String? = ...): io.github.yuroyami.kiteplayer/PlaybackError.DrmUnsupported // io.github.yuroyami.kiteplayer/PlaybackError.DrmUnsupported.copy|copy(kotlin.String;kotlin.String?){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackError.DrmUnsupported.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackError.DrmUnsupported.hashCode|hashCode(){}[0]
+    }
+
     final class Internal : io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami.kiteplayer/PlaybackError.Internal|null[0]
         constructor <init>(kotlin/String, kotlin/Throwable? = ...) // io.github.yuroyami.kiteplayer/PlaybackError.Internal.<init>|<init>(kotlin.String;kotlin.Throwable?){}[0]
 

@@ -60,6 +60,19 @@ public sealed class PlaybackError {
         override val message: String get() = "no data from ${redactUri(uri)} for $stalledFor"
     }
 
+    /**
+     * The media is protected by digital rights management, which this player does not play, by
+     * decision (#624). [system] names the protection when the media states it, such as Widevine,
+     * FairPlay, PlayReady or `SAMPLE-AES-CTR`, and is null when it does not. Refused before any of
+     * the media is decoded, so an application can say that protected content is not supported, or
+     * hand the item to a platform player, rather than show noise.
+     */
+    public data class DrmUnsupported(val uri: String, val system: String? = null) : PlaybackError() {
+        override val message: String
+            get() = "${redactUri(uri)} is protected" + (system?.let { " by $it" } ?: "") +
+                ", and digital rights management is not supported"
+    }
+
     /** The bytes were reached and are not media the demuxer recognises. */
     public data class NotMedia(val uri: String, val detail: String? = null) : PlaybackError() {
         override val message: String

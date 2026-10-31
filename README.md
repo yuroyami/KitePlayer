@@ -520,8 +520,10 @@ case in detail.
 ## A few limitations to know about
 
 - KitePlayer does not play media protected by DRM (digital rights management). It skips encrypted
-  DASH adaptation sets. When every audio and video set of a DASH manifest is encrypted, it refuses
-  the manifest with `DashUnsupportedException`.
+  DASH adaptation sets. When every audio and video set of a DASH manifest is encrypted, or an HLS
+  stream names a Widevine, PlayReady or FairPlay key or uses `SAMPLE-AES-CTR`, the open fails with
+  `PlaybackError.DrmUnsupported`, which names the system, so an app can say so or hand the item to
+  a platform player.
 - The web build plays a much smaller set of formats than the other platforms, because its codec
   module is a much smaller FFmpeg. It opens MP4 and MOV, Matroska and WebM, MPEG-TS, MP3, raw AAC,
   FLAC, HLS and WebVTT, and decodes H.264, HEVC, VP9, AAC, MP3, FLAC, Opus, Vorbis and PCM. So an

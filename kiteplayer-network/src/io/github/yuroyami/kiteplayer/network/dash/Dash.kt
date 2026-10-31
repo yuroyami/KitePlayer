@@ -216,7 +216,9 @@ public object Dash {
      * [manifest]. A segment or file behind a refused redirect fails its read with
      * [DashUrlRefusedException].
      *
-     * Throws [DashUnsupportedException] for an encrypted manifest, and, when the HLS path cannot
+     * Throws [io.github.yuroyami.kiteplayer.PlaybackException] with
+     * [io.github.yuroyami.kiteplayer.PlaybackError.DrmUnsupported] for an encrypted manifest (#624),
+     * and [DashUnsupportedException], when the HLS path cannot
      * carry the segments, for more than one Period, because the one stream would stop after the
      * first, for a live manifest, and for audio in an adaptation set of its own, because the one
      * stream would play that video silent.

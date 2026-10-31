@@ -70,6 +70,8 @@ internal const val MAX_PLAYLIST_BYTES: Int = 16 * 1024 * 1024
 internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job, read: String? = null): HlsOpen {
     val base = io.location ?: item.uri
     val text = read ?: readPlaylist(io, item.uri).decodeToString()
+    // A master that names a protected session key is refused before any variant is read (#624).
+    hlsDrmRefusal(text, item.uri)?.let { throw it }
     val master = keepOneHlsVariant(text, item.demux.maxBitrate, item.demux.maxVideoHeight, item.demux.variant, item.demux.fit, ::hlsCodecDecodable)
     val ledger = HlsLedger(item.uri)
     // The kept variant's backups stand in for it when an address fails (#440).
@@ -161,7 +163,12 @@ private fun openRelatedBridge(
         }
         times.opened(address)
         // A playlist among the addresses, a variant's or a live reload, gives its dates (#444).
-        val dated = PlaylistDates(LedgeredMediaIo(related, named(), ledger), address, related.location ?: address, times)
+        val shown = named()
+        val dated = PlaylistDates(LedgeredMediaIo(related, shown, ledger), address, related.location ?: address, times) { text ->
+            // A media playlist whose keys are protected by digital rights management fails its
+            // read, so FFmpeg decrypts nothing with the wrong key, and the open says why (#624).
+            hlsDrmRefusal(text, shown)?.let { throw ledger.refuse(it) }
+        }
         BlockingMediaIo(dated, lifetime)
     }
 
@@ -259,6 +266,8 @@ internal class PlaylistDates(
     private val address: String,
     private val base: String,
     private val times: HlsTimeOfDay,
+    /** Reads the whole text of a playlist as it ends, and may refuse it by throwing. */
+    private val check: (String) -> Unit = {},
 ) : MediaIo {
     /** The text so far while it may be a playlist, and null once it is not or once it was read. */
     private var copy: ByteArray? = ByteArray(0)
@@ -275,7 +284,9 @@ internal class PlaylistDates(
         when {
             count < 0 -> {
                 copy = null
-                times.read(address, kept.decodeToString(0, copied), base)
+                val text = kept.decodeToString(0, copied)
+                check(text)
+                times.read(address, text, base)
             }
             count > 0 -> keep(kept, into, offset, count)
         }
@@ -322,6 +333,18 @@ internal class PlaylistDates(
  */
 internal class HlsLedger(private val label: String) {
     private val failuresInARow = atomic(0)
+
+    /** A playlist the stream named that is protected by digital rights management, once one was read (#624). */
+    private val protectedBy = atomic<PlaybackException?>(null)
+
+    /** The refusal of a protected playlist, which the open and the reads throw in place of what FFmpeg made of it. */
+    val refusal: PlaybackException? get() = protectedBy.value
+
+    /** Records [refusal] for the stream, and answers it for the read to throw. */
+    fun refuse(refusal: PlaybackException): PlaybackException {
+        protectedBy.compareAndSet(null, refusal)
+        return protectedBy.value ?: refusal
+    }
     private val lastFailure = atomic<String?>(null)
     private val lock = SynchronizedObject()
 
@@ -357,6 +380,7 @@ internal class HlsLedger(private val label: String) {
 
     /** The error for a stream that ended while its last addresses failed, or null when it ended whole. */
     fun failureAtEnd(): PlaybackException? {
+        refusal?.let { return it }
         val failures = failuresInARow.value
         if (failures == 0) return null
         return PlaybackException(
@@ -371,4 +395,41 @@ internal class HlsLedger(private val label: String) {
     private companion object {
         const val MAX_EARLY_WARNINGS = 16
     }
+}
+
+/**
+ * The refusal of an HLS playlist protected by digital rights management, or null for one this
+ * player plays (#624). A key line refuses when its method is `SAMPLE-AES-CTR`, which FFmpeg reads
+ * as no encryption at all, when its `KEYFORMAT` is not `identity`, as Widevine, PlayReady and
+ * FairPlay write theirs, or when its key is at an address of another kind than http, https or
+ * data, as FairPlay's `skd:` is. FFmpeg keeps the last key line of a segment whatever its format, so
+ * one protected line is enough to refuse, even beside one it could read.
+ */
+internal fun hlsDrmRefusal(text: String, label: String): PlaybackException? {
+    for (raw in text.lineSequence()) {
+        val line = raw.trim()
+        if (!line.startsWith("#EXT-X-KEY:") && !line.startsWith("#EXT-X-SESSION-KEY:")) continue
+        val attributes = parseHlsAttributes(line.substringAfter(':'))
+        val method = attributes["METHOD"]?.uppercase() ?: continue
+        if (method == "NONE") continue
+        val format = attributes["KEYFORMAT"]?.trim()?.takeIf { it.isNotEmpty() } ?: "identity"
+        val uri = attributes["URI"].orEmpty()
+        val scheme = uri.substringBefore(':', "").lowercase().takeIf { ':' in uri && it.all { c -> c.isLetterOrDigit() || c in "+-." } }
+        val system = when {
+            !format.equals("identity", ignoreCase = true) -> drmSystemOf(format)
+            scheme != null && scheme !in setOf("http", "https", "data") -> if (scheme == "skd") "FairPlay" else "a key at a $scheme: address"
+            method == "SAMPLE-AES-CTR" -> "SAMPLE-AES-CTR"
+            else -> null
+        } ?: continue
+        return PlaybackException(PlaybackError.DrmUnsupported(label, system))
+    }
+    return null
+}
+
+/** The protection a `KEYFORMAT` names, by its common name where it has one. */
+private fun drmSystemOf(format: String): String = when (format.lowercase()) {
+    "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed" -> "Widevine"
+    "com.apple.streamingkeydelivery" -> "FairPlay"
+    "com.microsoft.playready", "urn:uuid:9a04f079-9840-4286-ab92-e65be0885f95" -> "PlayReady"
+    else -> format
 }

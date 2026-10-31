@@ -138,19 +138,29 @@ internal suspend fun openItem(item: MediaItem, listDepth: Int = 0): OpenedItem {
             // A file still being written is read on past its end while the source reads packets (#430).
             val growing = if (hls == null) item.growth?.let { GrowingMediaIo(io, it.endsAfter) } else null
             val bridge = BlockingMediaIo(hls?.playlist ?: growing ?: io, lifetime)
-            val source = openCancellably({ cancel.interrupt(); bridge.interrupt() }) {
-                if (hls == null) {
-                    MediaSource.open(bridge, options, cancel)
-                } else {
-                    MediaSource.open(
-                        bridge,
-                        options + hls.options(item),
-                        cancel,
-                        url = hls.url,
-                        mimeType = HLS_MEDIA_TYPE,
-                        nestedOpener = hls.opener,
-                    )
+            val source = try {
+                openCancellably({ cancel.interrupt(); bridge.interrupt() }) {
+                    if (hls == null) {
+                        MediaSource.open(bridge, options, cancel)
+                    } else {
+                        MediaSource.open(
+                            bridge,
+                            options + hls.options(item),
+                            cancel,
+                            url = hls.url,
+                            mimeType = HLS_MEDIA_TYPE,
+                            nestedOpener = hls.opener,
+                        )
+                    }
                 }
+            } catch (failure: Throwable) {
+                // A protected playlist the open met says so, in place of what FFmpeg made of it (#624).
+                if (failure !is CancellationException) hls?.ledger?.refusal?.let { throw it }
+                throw failure
+            }
+            hls?.ledger?.refusal?.let { refusal ->
+                runCatching { source.close() }
+                throw refusal
             }
             OpenedItem(
                 source, bridge, hls?.ledger, hls?.variants.orEmpty(), hls?.selectedVariant,

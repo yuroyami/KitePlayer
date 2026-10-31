@@ -157,6 +157,8 @@ internal fun readSwitchablePlaylist(text: String, base: String, keepUpToAMap: Bo
                 val attributes = parseHlsAttributes(line.substringAfter(':'))
                 val method = attributes["METHOD"]
                 if (method != "NONE" && method != "AES-128") return null
+                // A key of another format is for a DRM system, which reaches FFmpeg as written, to be refused (#624).
+                if (method != "NONE" && !(attributes["KEYFORMAT"] ?: "identity").equals("identity", ignoreCase = true)) return null
                 val uri = attributes["URI"]?.let { Playlists.resolve(base, it) }
                 key = if (method == "NONE") "" else (attributes - "URI").entries.joinToString(",") { "${it.key}=${it.value}" } + ",URI=$uri"
                 keyAddress = uri.takeIf { method != "NONE" }

@@ -679,6 +679,19 @@ internal class PlaybackCore(
             is SubtitleBytes.Read -> read.bytes
             is SubtitleBytes.Refused -> return ExternalSubtitleParse.Failed(read.reason)
         }
+        // Decoding and parsing do not suspend, and on the actor's lane a large file held every command
+        // until it was read: a seek bar stopped and a pause waited for the parse (#594).
+        return withContext(dispatchers.parse) { parseSubtitleBytes(parser, bytes, sourceFile, id, report) }
+    }
+
+    /** [bytes] of [sourceFile] decoded and parsed, on the parse lane. */
+    private suspend fun parseSubtitleBytes(
+        parser: io.github.yuroyami.kiteplayer.spi.SubtitleFileParser,
+        bytes: ByteArray,
+        sourceFile: SubtitleSource,
+        id: TrackId,
+        report: (PlaybackWarning) -> Unit,
+    ): ExternalSubtitleParse {
         // The encoding is decided from the bytes, not assumed. A file that needed a guess says so,
         // because a viewer looking at mojibake can act on "I read this as windows-1252" and cannot
         // act on silence. The East Asian tables are the parser's, because they live above the core.

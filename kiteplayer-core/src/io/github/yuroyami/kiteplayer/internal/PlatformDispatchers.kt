@@ -76,5 +76,8 @@ internal class SharedLaneDispatchers(
     @kotlinx.coroutines.ExperimentalCoroutinesApi
     override val release: CoroutineContext = blocking.limitedParallelism(1)
 
+    // Computation, and serial, so two files parse one after the other and never on the actor.
+    override val parse: CoroutineContext = calm.limitedParallelism(1)
+
     override fun close() {}
 }

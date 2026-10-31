@@ -59,6 +59,13 @@ internal interface PlaybackDispatchers : AutoCloseable {
      */
     val release: CoroutineContext get() = session
 
+    /**
+     * Where an external subtitle file is decoded and parsed, off the actor, whose lane a large file
+     * otherwise held for up to a second (#594). The default answers with the session lane, which
+     * is right for the single-threaded runtimes and for tests, as for [release].
+     */
+    val parse: CoroutineContext get() = session
+
     companion object {
         /**
          * Every worker on one context.

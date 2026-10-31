@@ -228,4 +228,61 @@ class SincResamplerTest {
             "a 1 kHz tone is far below the new Nyquist and must survive at full amplitude, got $kept",
         )
     }
+
+    /**
+     * How far below a tone the resampler's own noise sits, in dB: the residual after a sine at
+     * [hz] is fitted over the middle second of [output], at [rate].
+     */
+    private fun noiseBelowTone(output: FloatArray, count: Int, rate: Int, hz: Double): Double {
+        val from = count / 4
+        val until = count * 3 / 4
+        // Least squares for a * sin + b * cos + c, by its normal equations.
+        val m = Array(3) { DoubleArray(3) }
+        val v = DoubleArray(3)
+        for (n in from until until) {
+            val angle = 2.0 * PI * hz * n / rate
+            val basis = doubleArrayOf(sin(angle), kotlin.math.cos(angle), 1.0)
+            for (i in 0 until 3) {
+                v[i] += basis[i] * output[n]
+                for (j in 0 until 3) m[i][j] += basis[i] * basis[j]
+            }
+        }
+        for (pivot in 0 until 3) {
+            for (row in pivot + 1 until 3) {
+                val factor = m[row][pivot] / m[pivot][pivot]
+                for (col in pivot until 3) m[row][col] -= factor * m[pivot][col]
+                v[row] -= factor * v[pivot]
+            }
+        }
+        val fit = DoubleArray(3)
+        for (row in 2 downTo 0) {
+            var sum = v[row]
+            for (col in row + 1 until 3) sum -= m[row][col] * fit[col]
+            fit[row] = sum / m[row][row]
+        }
+        var residual = 0.0
+        for (n in from until until) {
+            val angle = 2.0 * PI * hz * n / rate
+            val error = output[n] - (fit[0] * sin(angle) + fit[1] * kotlin.math.cos(angle) + fit[2])
+            residual += error * error
+        }
+        val signal = (fit[0] * fit[0] + fit[1] * fit[1]) / 2.0
+        return 10.0 * kotlin.math.log10(signal / (residual / (until - from)))
+    }
+
+    /**
+     * A 10 kHz tone from 44.1 to 48 kHz carries no more noise than the filter itself leaves (#661).
+     * Snapped to one of 512 phase rows, the timing error put it 62 dB down, where the filter
+     * allows about 94.
+     */
+    @Test
+    fun aHighToneCarriesOnlyTheFiltersOwnNoise() {
+        val resampler = resampler(44_100, 48_000)
+        val frames = 88_200
+        val input = tone(frames, 44_100, hz = 10_000.0)
+        val output = FloatArray(resampler.outputCapacity(frames))
+        val produced = resampler.process(input, frames, output)
+        val below = noiseBelowTone(output, produced, 48_000, 10_000.0)
+        assertTrue(below >= 85.0, "the resampler's noise sits only $below dB under a 10 kHz tone")
+    }
 }

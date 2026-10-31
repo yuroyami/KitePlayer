@@ -31,15 +31,14 @@ class CacheAllocationTest {
     @Test
     fun readingThroughTheCacheAllocatesAboutWhatItKeeps() {
         val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
-        val thread = Thread.currentThread().id
         val cache = CachingMediaIo(EightKibSource(), IoCachePolicy())
         val into = ByteArray(64 * 1024)
         runBlocking { cache.read(into, 0, into.size) }
-        val before = threads.getThreadAllocatedBytes(thread)
+        val before = threads.currentThreadAllocatedBytes
         runBlocking {
             while (cache.read(into, 0, into.size) >= 0) Unit
         }
-        val allocated = threads.getThreadAllocatedBytes(thread) - before
+        val allocated = threads.currentThreadAllocatedBytes - before
         // 64 MiB of chunks at most, and the coroutine machinery of 8,192 reads. A chunk for each
         // read made about 2.2 GB.
         assertTrue(allocated < 200L * 1024 * 1024, "reading 64 MiB through the cache allocated ${allocated / (1024 * 1024)} MiB")

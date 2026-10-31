@@ -81,7 +81,10 @@ Matroska editions with linked files, 360 degree video, and `kiteplayer-compose` 
 come with the next release, and code that uses them does not compile against 0.3.0.
 
 You don't install FFmpeg (it comes inside the artifacts), and there is no Gradle plugin to apply.
-On Android, every artifact needs `minSdk` 26. To build a smaller stack of your own, the
+On Android, every artifact needs `minSdk` 26, and your app must compile against SDK 37.2 or later
+(`compileSdk` 37 with minor API level 2), or the Android Gradle plugin refuses the build when it
+checks the AAR metadata. The Compose, OkHttp and KiteFFmpeg artifacts that KitePlayer brings in
+ask for 37 on their own. To build a smaller stack of your own, the
 [module contract](docs/module-contract.md) explains what each module brings in.
 
 ### What else you need

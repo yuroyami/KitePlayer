@@ -195,6 +195,9 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- The README now says that an Android app must compile against SDK 37.2 or later (#613). Every
+  Android artifact of 0.3.0 carries that floor in its AAR metadata, and the install section named
+  only `minSdk` 26, so an app on `compileSdk` 36 failed its first build with no warning.
 - The libass adapter libraries leave the chain's debug info out (#615). It was about a third of
   each published library, 1.1 MB for each Android ABI, and an app built without the NDK shipped
   it as it was. The symbol tables stay, so a native crash still names its functions.

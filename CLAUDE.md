@@ -353,9 +353,10 @@ Each line is something that bit someone. Delete a line when it stops being true.
   and the C sink adds it to every anchor. The buffer and the safety offset are already in the
   timestamp, so adding them, as mpv does, counts them twice. A MacBook Air's own speakers report
   28 ms, so the figure is not only for Bluetooth (#495).
-- Pause consumes the final device anchor before freezing clocks, so a late callback cannot
-  re-anchor a frozen clock, and resume re-arms a timestamp floor so a pre-pause device timestamp
-  can never anchor the clock afterwards.
+- A paused clock takes a device anchor only as it stands now, its time less what is still to
+  play before it, and only when that moves the clock back, so an anchor dated a buffer ahead
+  cannot push a frozen clock past the sound heard (#646), and resume re-arms a timestamp floor so
+  a pre-pause device timestamp can never anchor the clock afterwards.
 - The C real-time island stays C. The device callback has no allocator, lock, log or framework
   call, proven by disassembly through the render check script, and nothing managed ever runs on the
   device thread. The Kotlin ring is the C ring's differential oracle; never delete the portable

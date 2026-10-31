@@ -8955,8 +8955,8 @@ internal class PlaybackCore(
         session.schedulerMode.value = SCHEDULER_IDLE
         // The timeline stops where the media does. A clock left running reads on from wall time, so a
         // player sitting on its last frame would report a position further past the duration the longer
-        // it was left there. The final device anchor is consumed first, exactly as a pause does it, so a
-        // late callback cannot re-anchor a clock that is already frozen.
+        // it was left there. The final device anchor is consumed first, so the clock stops on the last
+        // sound; once frozen, an anchor can only move it back to what was heard, never ahead (#646).
         session.audio?.anchorClock()
         session.audio?.pause()
         session.furthestPositionUs = maxOf(session.furthestPositionUs, currentPosition().micros)

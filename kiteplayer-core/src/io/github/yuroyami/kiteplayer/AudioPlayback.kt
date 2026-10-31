@@ -714,13 +714,32 @@ public class AudioPlayback(
         if (playout.micros >= joinBoundaryUs) join = Join.Crossed
     }
 
+    /**
+     * Applies the device's latest anchor to the clock.
+     *
+     * An anchor dates the end of what the device took, which can be a whole buffer ahead of the
+     * ear. A running clock reads it in time; a paused clock reads its anchor as it is, so an anchor
+     * still to come moved the paused position that far ahead of the sound, 130 ms on Android
+     * (#646). A paused clock therefore takes the anchor as it stands now, its time less what is
+     * still to play before it, and only when that moves it back: a device paused before it played
+     * what it was handed never plays it, while at the end of a drain or a fade the clock ran on
+     * past the last sound and the anchor brings it back to it.
+     */
     private fun anchorLocked() {
         val anchor = ring?.anchor() ?: return
         anchorFloorNanos?.let { floor ->
             if (anchor.audibleAtNanos <= floor) return
             anchorFloorNanos = null
         }
-        playoutClock.setAt(anchor.pts, generation, anchor.audibleAtNanos)
+        if (playoutClock.paused) {
+            val now = clock.nanos()
+            val toCome = (anchor.audibleAtNanos - now).coerceAtLeast(0L) / 1_000L
+            val heardNow = anchor.pts.micros - toCome
+            val frozen = playoutClock.nowOrNull()?.micros
+            if (frozen == null || heardNow < frozen) playoutClock.setAt(Pts(heardNow), generation, now)
+        } else {
+            playoutClock.setAt(anchor.pts, generation, anchor.audibleAtNanos)
+        }
         // The clock reads up to the device's latency behind the anchor, so lines are kept for a
         // generous margin before it.
         timeline.prune(anchor.pts.micros - TIMELINE_KEEP_US)

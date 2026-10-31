@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.network
 
+import io.github.yuroyami.kiteplayer.KitePlayerInternalApi
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.MediaIoResolver
@@ -120,11 +121,15 @@ public class KtorMediaIo private constructor(
     private val stored: StoredSpans? = null,
     /** The `Last-Modified` of a stored resource with no entity tag, which then guards its ranged requests. */
     private val lastModified: String? = null,
+    /** The byte the first response starts at, past zero for a reader opened at an offset (#619). */
+    startsAt: Long = 0L,
+    /** Where the first response ends when it answered a closed range, exclusive, or null for the end. */
+    firstBodyEnd: Long? = null,
 ) : MediaIo {
 
     /** Finds the segments an HLS playlist names as its bytes pass. A stored segment is never a playlist. */
     private val names: PlaylistNames? =
-        if (reuse != null && stored == null) PlaylistNames(reuse, listOf(uri, location).distinct()) else null
+        if (reuse != null && stored == null && startsAt == 0L) PlaylistNames(reuse, listOf(uri, location).distinct()) else null
 
     /** True when this reader's open keeps segments in a store, so an address may be opened as one. */
     internal val keepsSegments: Boolean get() = reuse?.usable == true
@@ -141,11 +146,14 @@ public class KtorMediaIo private constructor(
     // What messages name instead of the URI, whose query may carry a signature (#241).
     private val shown = shownUri(uri)
 
-    private var position = 0L
+    private var position = startsAt
     private var warningSink: (PlaybackWarning) -> Unit = {}
     private var body: ByteReadChannel? = firstBody
     private var bodyJob: Job? = firstJob
-    private var bodyPosition = 0L
+    private var bodyPosition = startsAt
+
+    /** The end of a first response that answered a closed range; reading on past it asks again (#619). */
+    private var rangeEnd: Long? = firstBodyEnd
 
     /**
      * Set by [close] and checked by every entry point.
@@ -212,22 +220,71 @@ public class KtorMediaIo private constructor(
     override suspend fun openRelated(uri: String): MediaIo? = openRelated(uri, redirects)
 
     /**
+     * A reader of [uri] whose first request asks for the bytes from [offset], [length] of them
+     * when known, so a byte range segment costs one request rather than a probe from byte 0 and a
+     * second request at the first read (#619). An address the segment store keeps is opened whole
+     * and positioned, because the store holds whole responses. A server that ignores the range
+     * answers from byte 0, and the reader then seeks as before.
+     */
+    @KitePlayerInternalApi
+    override suspend fun openRelated(uri: String, offset: Long, length: Long?): MediaIo? =
+        openRelatedAt(uri, redirects, offset, length)
+
+    /** [openRelated] at [offset] with every redirect checked by [rule], as the DASH door opens a range (#619). */
+    internal suspend fun openRelatedAt(uri: String, rule: RedirectRule?, offset: Long, length: Long?): KtorMediaIo? {
+        if (closed) throw KtorMediaIoException("openRelated after close on $shown")
+        if (!uri.isHttpUri()) return null
+        // The store holds whole responses, so an address it keeps opens whole and is positioned.
+        val whole = (offset == 0L && length == null) || keeperFor(uri, segment = false) != null
+        val opened = if (whole) {
+            openRelated(uri, rule)
+        } else {
+            openRelated(uri, rule, from = offset, until = length?.takeIf { it > 0 }?.let { offset + it - 1 })
+        } ?: return null
+        return opened.positionedAt(offset)
+    }
+
+    /** This reader at [offset]: a server that ignored the range answered from byte 0, so it seeks. */
+    private suspend fun positionedAt(offset: Long): KtorMediaIo {
+        if (position == offset) return this
+        try {
+            seek(offset)
+        } catch (failure: Throwable) {
+            close()
+            throw failure
+        }
+        return this
+    }
+
+    /** The segment store's entry for [uri] when the store keeps it (#547), or null. */
+    private fun keeperFor(uri: String, segment: Boolean): SegmentReuse? =
+        reuse?.takeIf { it.usable && !it.isKey(uri) && (segment || it.isSegment(uri)) }
+
+    /**
      * [openRelated], with every redirect of the new reader checked by [rule] instead of this
      * reader's own. The DASH door opens a manifest's segments this way when the automatic
      * transport found the manifest (#400).
      */
-    internal suspend fun openRelated(uri: String, rule: RedirectRule?, segment: Boolean = false): KtorMediaIo? {
+    internal suspend fun openRelated(
+        uri: String,
+        rule: RedirectRule?,
+        segment: Boolean = false,
+        /** The first byte to ask for, past zero only with no store (#619). */
+        from: Long = 0L,
+        /** The last byte to ask for, inclusive, or null for the end. */
+        until: Long? = null,
+    ): KtorMediaIo? {
         if (closed) throw KtorMediaIoException("openRelated after close on $shown")
         if (!uri.isHttpUri()) return null
         // Only an address that a manifest or a finished playlist named as a segment meets the store (#547).
-        val keeps = reuse?.takeIf { it.usable && !it.isKey(uri) && (segment || it.isSegment(uri)) }
+        val keeps = keeperFor(uri, segment).takeIf { from == 0L && until == null }
         var attempts = 0
         while (true) {
             val failure = try {
                 val opened = if (keeps != null) {
                     openStored(uri, rule, keeps)
                 } else {
-                    open(uri, client, ownsClient = false, related.headersFor(uri), related, policy, rule, meter, reuse)
+                    open(uri, client, ownsClient = false, related.headersFor(uri), related, policy, rule, meter, reuse, from = from, until = until)
                 }
                 return opened.also { it.setWarningSink(warningSink) }
             } catch (failure: Throwable) {
@@ -385,7 +442,17 @@ public class KtorMediaIo private constructor(
             dropBody()
             throw KtorMediaIoException("no bytes for ${policy.readTimeout} at byte $position", retryable = true)
         }
-        if (pulled < 0) return endOfBody(knownSize)
+        if (pulled < 0) {
+            // A first response that answered a closed range ends where it was asked to; a read past
+            // it asks again from there, which is no dropped connection (#619).
+            val end = rangeEnd
+            if (end != null && bodyPosition == end && position == end) {
+                rangeEnd = null
+                dropBody()
+                return readOnce(into, offset, length)
+            }
+            return endOfBody(knownSize)
+        }
         // One call gives one segment of the channel's buffer, at most 8 KiB, so take what else is
         // already buffered in the same read, which saves the bridge a round per segment (#649).
         // The block form never suspends: it answers -1 when nothing is buffered.
@@ -690,6 +757,29 @@ public class KtorMediaIo private constructor(
             )
         }
 
+        /**
+         * A reader of [uri] at [offset] whose first request asks for that range, [length] bytes
+         * of it when known (#619), on a [client] the caller keeps. A server that ignores the range
+         * answers from byte 0, and the reader then seeks.
+         */
+        internal suspend fun openAt(
+            uri: String,
+            client: HttpClient,
+            policy: HttpReaderPolicy,
+            redirects: RedirectRule?,
+            meter: DownloadMeter,
+            offset: Long,
+            length: Long?,
+        ): KtorMediaIo {
+            val login = basicLogin(uri)
+            val requested = login?.uri ?: uri
+            val headers = login?.let { withLogin(emptyMap(), it) } ?: emptyMap()
+            val related = RelatedRequests(requested, emptyMap(), headers)
+            val until = length?.takeIf { it > 0 }?.let { offset + it - 1 }
+            return open(requested, client, ownsClient = false, headers, related, policy, redirects, meter, from = offset, until = until)
+                .positionedAt(offset)
+        }
+
         /** Probes [uri] on [http], which the new reader closes when it [ownsClient]. */
         private suspend fun open(
             uri: String,
@@ -703,10 +793,14 @@ public class KtorMediaIo private constructor(
             reuse: SegmentReuse? = null,
             /** The stored entry of [uri], when it is a segment the store keeps. */
             plan: StorePlan? = null,
+            /** The first byte the probe asks for (#619). */
+            from: Long = 0L,
+            /** The last byte the probe asks for, inclusive, or null for the end. */
+            until: Long? = null,
         ): KtorMediaIo {
             // An address that the media names can carry a login of its own, as the item's can.
             basicLogin(uri)?.let { login ->
-                return open(login.uri, http, ownsClient, withLogin(headers, login), related, policy, redirects, meter, reuse, plan)
+                return open(login.uri, http, ownsClient, withLogin(headers, login), related, policy, redirects, meter, reuse, plan, from, until)
             }
             val shown = shownUri(uri)
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -721,7 +815,7 @@ public class KtorMediaIo private constructor(
                             mark()
                             headers.forEach { (key, value) -> header(key, value) }
                             askForTitles(headers)
-                            header(HttpHeaders.Range, "bytes=0-")
+                            header(HttpHeaders.Range, if (from == 0L && until == null) "bytes=0-" else "bytes=$from-${until ?: ""}")
                             // A stale stored segment asks whether it changed, and a 304 keeps its bytes (#547).
                             plan?.condition()?.let { (name, value) -> header(name, value) }
                         }.execute { response ->
@@ -754,12 +848,12 @@ public class KtorMediaIo private constructor(
                             val station = stationTagsOf(response.headers)
                             when (response.status) {
                                 HttpStatusCode.PartialContent -> {
-                                    // Content-Range: bytes 0-last/total, total possibly "*". A range that
-                                    // does not start at zero would be read as the start of the file (#283).
+                                    // Content-Range: bytes from-last/total, total possibly "*". A range that
+                                    // does not start where it was asked would be read at the wrong byte (#283).
                                     val range = parseContentRange(response.headers[HttpHeaders.ContentRange])
-                                    if (range == null || range.first != 0L) {
+                                    if (range == null || range.first != from) {
                                         throw KtorMediaIoException(
-                                            "cannot open $shown: it answered the read from byte 0 with the range " +
+                                            "cannot open $shown: it answered the read from byte $from with the range " +
                                                 "${response.headers[HttpHeaders.ContentRange]}",
                                         )
                                     }
@@ -770,6 +864,7 @@ public class KtorMediaIo private constructor(
                                         Probe(
                                             range.complete, seekable = interval == null, tag, location, type, date, live = false, interval, station,
                                             lastModified = response.headers[HttpHeaders.LastModified], stored = kept,
+                                            startsAt = from, endsAt = if (until != null) range.last + 1 else null,
                                         ),
                                     )
                                 }
@@ -838,6 +933,8 @@ public class KtorMediaIo private constructor(
                 reuse = reuse,
                 stored = answer.stored,
                 lastModified = answer.lastModified.takeIf { answer.stored != null },
+                startsAt = answer.startsAt,
+                firstBodyEnd = answer.endsAt,
             )
         }
     }
@@ -935,6 +1032,10 @@ private class Probe(
     val stored: StoredSpans? = null,
     /** False for a 304, whose bytes are the stored ones. */
     val hasBody: Boolean = true,
+    /** The byte the response starts at (#619). */
+    val startsAt: Long = 0L,
+    /** Where a response to a closed range ends, exclusive, or null. */
+    val endsAt: Long? = null,
 )
 
 /** The headers of [response] that decide whether and how long the segment store keeps it. */

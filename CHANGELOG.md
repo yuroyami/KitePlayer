@@ -195,6 +195,14 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- A byte range segment of an HLS or DASH stream costs one HTTP request instead of two (#619). The
+  Ktor reader probed every address from byte 0 and asked again from the segment's offset at the
+  first read, so each segment of a byte range ladder, of a `SegmentBase` DASH item and of a ranged
+  TTML subtitle segment cost a probe and, on HTTP/1.1, a new connection. `MediaIo` has a new
+  `openRelated(uri, offset, length)`, behind `KitePlayerInternalApi`, whose default opens and
+  seeks, and the Ktor reader answers it with one ranged request. `DashTransport.openRange` and the
+  `openRange` parameter of `DashDoor.readerIfManifest` carry it for DASH. An address the segment
+  store keeps still opens whole, because the store holds whole responses.
 - On Android the peak limiter no longer squeezes loud passages at a lowered volume (#612). The
   track applies the volume after its buffer there, so the ring played at unity and limited every
   volume as full volume: a downmix peak of 1.6 at half volume was pulled down by about 4 dB,

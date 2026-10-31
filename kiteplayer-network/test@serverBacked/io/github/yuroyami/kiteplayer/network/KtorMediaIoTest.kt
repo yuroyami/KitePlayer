@@ -79,6 +79,38 @@ class KtorMediaIoTest {
     }
 
     /**
+     * A related reader opened at an offset sends its range with its first request (#619). It
+     * probed from byte 0 and then asked again from the offset at the first read, so every byte
+     * range segment of the HLS and DASH switch cost two requests and on HTTP/1.1 two connections.
+     */
+    @Test
+    @OptIn(io.github.yuroyami.kiteplayer.KitePlayerInternalApi::class)
+    fun aRangedRelatedOpenSendsOneRequestWithItsRange() = runBlocking {
+        val bytes = content(2_000_000)
+        val ranges = mutableListOf<String>()
+        val port = serve(bytes, ranges = ranges)
+        val item = KtorMediaIo.open("http://127.0.0.1:$port/media")
+        try {
+            ranges.clear()
+            val related = checkNotNull(item.openRelated("http://127.0.0.1:$port/media", 1_000_000L, 1_000L))
+            try {
+                val read = readFully(related as KtorMediaIo, 1_000)
+                assertTrue(read.contentEquals(bytes.copyOfRange(1_000_000, 1_001_000)), "the range must arrive exactly")
+                assertEquals(listOf("bytes=1000000-1000999"), ranges.toList(), "one request, carrying the range")
+                assertEquals(bytes.size.toLong(), related.size, "the size comes from Content-Range")
+                // A read past the range asks again, from where it stands, with no reconnect.
+                val more = readFully(related, 10)
+                assertTrue(more.contentEquals(bytes.copyOfRange(1_001_000, 1_001_010)))
+                assertEquals("bytes=1001000-", ranges.last())
+            } finally {
+                related.close()
+            }
+        } finally {
+            item.close()
+        }
+    }
+
+    /**
      * A read takes every byte the response has already buffered, not one 8 KiB segment of it
      * (#649), so the bridge to FFmpeg runs one round per buffer rather than one per segment.
      */

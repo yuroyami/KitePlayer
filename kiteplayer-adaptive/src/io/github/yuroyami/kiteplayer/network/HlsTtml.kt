@@ -149,12 +149,13 @@ internal class HlsTtmlMediaIo(
 
     /** The bytes of [url], or of its [range] of it, at most [limit] of them. */
     private suspend fun read(url: String, range: LongRange?, limit: Long): ByteArray {
-        val io = upstream.openRelated(url) ?: throw IllegalStateException("${shownUri(url)} could not be opened")
+        val wanted = range?.let { it.last - it.first + 1 }
+        if (wanted != null && wanted > limit) throw IllegalStateException("${shownUri(url)} asks for $wanted bytes, and the ceiling is $limit")
+        // A ranged segment asks for its range with its first request (#619).
+        val opened = if (range == null) upstream.openRelated(url) else upstream.openRelated(url, range.first, wanted)
+        val io = opened ?: throw IllegalStateException("${shownUri(url)} could not be opened")
         try {
-            if (range == null) return readAllBounded(io, limit, "the subtitle segment at ${shownUri(url)}")
-            val wanted = range.last - range.first + 1
-            if (wanted > limit) throw IllegalStateException("${shownUri(url)} asks for $wanted bytes, and the ceiling is $limit")
-            if (range.first > 0) io.seek(range.first)
+            if (range == null || wanted == null) return readAllBounded(io, limit, "the subtitle segment at ${shownUri(url)}")
             val out = ByteArray(wanted.toInt())
             var filled = 0
             while (filled < out.size) {

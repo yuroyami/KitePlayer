@@ -39,6 +39,8 @@ internal class CachingMediaIo(
 
     /** A related reader skips this cache: a segment is read once, from start to end. */
     override suspend fun openRelated(uri: String): MediaIo? = upstream.openRelated(uri)
+    @io.github.yuroyami.kiteplayer.KitePlayerInternalApi
+    override suspend fun openRelated(uri: String, offset: Long, length: Long?): MediaIo? = upstream.openRelated(uri, offset, length)
 
     /**
      * The window's bytes, in chunks of [chunkSize]. Every chunk but the last is full, so the chunk

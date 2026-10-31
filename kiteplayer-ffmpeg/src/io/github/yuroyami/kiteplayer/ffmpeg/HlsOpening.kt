@@ -92,6 +92,13 @@ internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job, read: 
                 )
             },
             openAddress = { address -> if (failover.isEmpty) io.openRelated(address) else failover.open(address) { io.openRelated(it) } },
+            openAddressAt = { address, offset, length ->
+                if (failover.isEmpty) {
+                    io.openRelated(address, offset, length)
+                } else {
+                    failover.open(address) { io.openRelated(it, offset, length) }
+                }
+            },
         )
     } else {
         null
@@ -224,6 +231,7 @@ internal class PlaylistMediaIo(private val bytes: ByteArray, private val owner: 
     }
 
     override suspend fun openRelated(uri: String): MediaIo? = owner.openRelated(uri)
+    override suspend fun openRelated(uri: String, offset: Long, length: Long?): MediaIo? = owner.openRelated(uri, offset, length)
 
     override fun close() = owner.close()
 }

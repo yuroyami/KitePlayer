@@ -69,6 +69,7 @@ internal class SniffedMediaIo private constructor(
     override fun setWarningSink(sink: (PlaybackWarning) -> Unit) = upstream.setWarningSink(sink)
 
     override suspend fun openRelated(uri: String): MediaIo? = upstream.openRelated(uri)
+    override suspend fun openRelated(uri: String, offset: Long, length: Long?): MediaIo? = upstream.openRelated(uri, offset, length)
 
     override fun networkBitsPerSecond(): Long? = upstream.networkBitsPerSecond()
 

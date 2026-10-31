@@ -438,6 +438,31 @@ public interface MediaIo : AutoCloseable {
     public suspend fun openRelated(uri: String): MediaIo? = null
 
     /**
+     * A new reader for the bytes of [uri] from [offset] on, [length] of them when the caller
+     * knows how many it reads, already positioned at [offset] (#619). Null as [openRelated] is.
+     *
+     * A segment named by a byte range needs only that range, and a reader that sends its range
+     * with its first request saves the probe [openRelated] then [seek] would cost, one request per
+     * segment and on HTTP/1.1 a new connection. The default opens with [openRelated] and seeks, so
+     * a reader that cannot do better answers the same bytes. A reader that wraps another forwards
+     * this as it forwards [openRelated]. The reader may hand back more than [length] bytes; the
+     * caller stops reading where it means to.
+     */
+    @KitePlayerInternalApi
+    public suspend fun openRelated(uri: String, offset: Long, length: Long?): MediaIo? {
+        val opened = openRelated(uri) ?: return null
+        if (offset != 0L) {
+            try {
+                opened.seek(offset)
+            } catch (failure: Throwable) {
+                opened.close()
+                throw failure
+            }
+        }
+        return opened
+    }
+
+    /**
      * How fast the network delivers this reader's bytes, in bits per second, or null when the
      * reader does not measure it or has not measured enough yet. The default answers null.
      *

@@ -1112,6 +1112,7 @@ abstract interface io.github.yuroyami.kiteplayer/MediaIo : kotlin/AutoCloseable 
     open fun takeRefusal(): io.github.yuroyami.kiteplayer/SourceRefusal? // io.github.yuroyami.kiteplayer/MediaIo.takeRefusal|takeRefusal(){}[0]
     open fun takeTags(): kotlin.collections/Map<kotlin/String, kotlin/String>? // io.github.yuroyami.kiteplayer/MediaIo.takeTags|takeTags(){}[0]
     open suspend fun openRelated(kotlin/String): io.github.yuroyami.kiteplayer/MediaIo? // io.github.yuroyami.kiteplayer/MediaIo.openRelated|openRelated(kotlin.String){}[0]
+    open suspend fun openRelated(kotlin/String, kotlin/Long, kotlin/Long?): io.github.yuroyami.kiteplayer/MediaIo? // io.github.yuroyami.kiteplayer/MediaIo.openRelated|openRelated(kotlin.String;kotlin.Long;kotlin.Long?){}[0]
 
     final object Companion // io.github.yuroyami.kiteplayer/MediaIo.Companion|null[0]
 }

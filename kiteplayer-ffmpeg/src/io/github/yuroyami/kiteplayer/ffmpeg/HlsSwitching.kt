@@ -296,6 +296,13 @@ internal class HlsVariantSwitch(
     initial: Int,
     private val choose: () -> Int,
     private val openAddress: suspend (String) -> MediaIo?,
+    /**
+     * [openAddress] at a byte offset, positioned there, whose first request may carry the range
+     * (#619). The default opens and seeks, which costs a byte range segment two requests.
+     */
+    private val openAddressAt: suspend (String, Long, Long?) -> MediaIo? = { address, offset, _ ->
+        openAddress(address)?.also { opened -> if (offset != 0L) seekOrClose(opened, offset) }
+    },
 ) {
     private val lock = Mutex()
     private val target = atomic(initial)
@@ -357,6 +364,13 @@ internal class HlsVariantSwitch(
         address.startsWith(INIT) -> lock.withLock { init }?.let { opened(it) }
         address.startsWith(SEGMENT) -> segment(address)
         else -> null
+    }
+
+    /** A window of [length] bytes from [offset] of [address], or all of it, opened at its range (#619). */
+    private suspend fun sliceOf(address: String, offset: Long, length: Long?): MediaIo? {
+        if (offset == 0L && length == null) return openAddress(address)
+        val upstream = openAddressAt(address, offset, length) ?: return null
+        return SliceMediaIo(upstream, offset, length)
     }
 
     /**
@@ -443,7 +457,7 @@ internal class HlsVariantSwitch(
 
     /** A reader of the initialization [of], in plain bytes. */
     private suspend fun opened(of: HlsInit): MediaIo? {
-        val reader = slice(openAddress(of.address), of.offset, of.length) ?: return null
+        val reader = sliceOf(of.address, of.offset, of.length) ?: return null
         if (of.key.isEmpty()) return reader
         val bytes = try {
             readWhole(reader, MAX_INIT_BYTES, of.address)
@@ -552,7 +566,7 @@ internal class HlsVariantSwitch(
             encrypted = init != null && found.second.key.isNotEmpty()
             found.second
         }
-        val reader = slice(openAddress(segment.address), segment.offset, segment.length) ?: return null
+        val reader = sliceOf(segment.address, segment.offset, segment.length) ?: return null
         val plans = plan
         val renumbered = numbers
         if (plans == null && renumbered == null && !encrypted) return reader
@@ -674,15 +688,13 @@ private suspend fun readWhole(reader: MediaIo, limit: Long, name: String): ByteA
 }
 
 /** [upstream] from [offset] on for [length] bytes, or all of it. Null stays null. */
-private suspend fun slice(upstream: MediaIo?, offset: Long, length: Long?): MediaIo? {
-    if (upstream == null || (offset == 0L && length == null)) return upstream
+private suspend fun seekOrClose(opened: MediaIo, offset: Long) {
     try {
-        if (offset != 0L) upstream.seek(offset)
+        opened.seek(offset)
     } catch (failure: Throwable) {
-        upstream.close()
+        opened.close()
         throw failure
     }
-    return SliceMediaIo(upstream, offset, length)
 }
 
 /** A window of [upstream], already at [offset]. Closing it closes [upstream]. */

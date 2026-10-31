@@ -261,6 +261,9 @@ public object Dash {
                             KtorMediaIo.open(url, client, emptyMap(), readerPolicy, redirects, meter = meter).use { it.date }
                         },
                         bitsPerSecond = meter::bitsPerSecond,
+                        openRange = { url, offset, length ->
+                            KtorMediaIo.openAt(url, client, readerPolicy, redirects, meter, offset, length)
+                        },
                     ),
                 )
             },
@@ -296,6 +299,7 @@ public object Dash {
             maxSegmentBytes = maxSegmentBytes,
             // The manifest names its segments itself, so the reader need not find them in a playlist (#547).
             openSegment = if (io.keepsSegments) ({ url -> io.openRelated(url, redirects, segment = true) }) else null,
+            openRange = { url, offset, length -> io.openRelatedAt(url, redirects, offset, length) },
         )
     }
 }

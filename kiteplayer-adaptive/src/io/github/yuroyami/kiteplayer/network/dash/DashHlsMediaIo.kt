@@ -71,6 +71,8 @@ internal class DashHlsMediaIo(
      * (#547), or null for a transport with no store. Only a presentation that has ended uses it.
      */
     private val openSegment: (suspend (String) -> MediaIo)? = null,
+    /** A reader at a byte offset whose first request carries the range (#619), or null to open and seek. */
+    private val openRange: (suspend (String, Long, Long?) -> MediaIo)? = null,
 ) : MediaIo {
 
     private val master = presentation.master.encodeToByteArray()
@@ -780,9 +782,18 @@ internal class DashHlsMediaIo(
             throw DashUnsupportedException("${shownUri(file)} asks for $length bytes at once, and the limit is $MAX_INDEX_BYTES")
         }
         val wanted = length.coerceAtLeast(0L).toInt()
-        val io = openOriginal(DashManifestParser.requireAllowed(manifestUrl, file, policy))
+        val allowed = DashManifestParser.requireAllowed(manifestUrl, file, policy)
+        // A store keeps whole responses, so a presentation that reads through one opens whole (#547).
+        val ranged = openRange?.takeIf { openSegment == null || manifest.isDynamic }
+        val io = ranged?.invoke(allowed, range.first, wanted.toLong()) ?: openOriginal(allowed).also { opened ->
+            try {
+                if (range.first > 0) opened.seek(range.first)
+            } catch (failure: Throwable) {
+                opened.close()
+                throw failure
+            }
+        }
         try {
-            if (range.first > 0) io.seek(range.first)
             val out = ByteArray(wanted)
             var filled = 0
             while (filled < wanted) {

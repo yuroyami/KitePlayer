@@ -209,6 +209,46 @@ class HlsSwitchingTest {
         for (name in listOf("low", "high", "hevc")) for (n in 0..2) files["https://cdn.test/$name-$n.ts"] = "$name $n"
     }
 
+    /**
+     * A byte range segment is opened at its range, so a reader that can send the range with its
+     * first request costs one request for it rather than a probe and a second request (#619).
+     */
+    @Test
+    fun aByteRangeSegmentIsOpenedAtItsRange() = runTest {
+        fun ranged(name: String) = "#EXTM3U\n#EXT-X-VERSION:4\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:7\n" +
+            "#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:2.0,\n#EXT-X-BYTERANGE:5@10\n$name.ts\n#EXTINF:2.0,\n#EXT-X-BYTERANGE:5\n$name.ts\n#EXT-X-ENDLIST\n"
+        val files = mutableMapOf(
+            "https://cdn.test/low.m3u8" to ranged("low"),
+            "https://cdn.test/high.m3u8" to ranged("high"),
+            "https://cdn.test/hevc.m3u8" to ranged("hevc"),
+        )
+        val whole = "0123456789abcdefghijklmnop".encodeToByteArray()
+        val plain = mutableListOf<String>()
+        val atRange = mutableListOf<Triple<String, Long, Long?>>()
+        val switch = HlsVariantSwitch(
+            addresses = listOf("https://cdn.test/low.m3u8", "https://cdn.test/high.m3u8", "https://cdn.test/hevc.m3u8"),
+            traits = traits,
+            initial = 0,
+            choose = { 0 },
+            openAddress = { address ->
+                plain += address
+                files[address]?.let { Text(it, address, mutableListOf()) } ?: BytesMediaIo(whole, address)
+            },
+            openAddressAt = { address, offset, length ->
+                atRange += Triple(address, offset, length)
+                BytesMediaIo(whole, address).also { it.seek(offset) }
+            },
+        )
+        assertNotNull(switch.open(HlsVariantSwitch.PLAYLIST)).text()
+        assertEquals("abcde", assertNotNull(switch.open("https://kite-hls.invalid/segment/7.ts")).text())
+        assertEquals("fghij", assertNotNull(switch.open("https://kite-hls.invalid/segment/8.ts")).text())
+        assertEquals(
+            listOf(Triple("https://cdn.test/low.ts", 10L, 5L as Long?), Triple("https://cdn.test/low.ts", 15L, 5L as Long?)),
+            atRange.toList(),
+        )
+        assertTrue(plain.none { it.endsWith(".ts") }, "a ranged segment must not open whole: $plain")
+    }
+
     @Test
     fun aSegmentAddressGivesTheBytesOfTheVariantThatPlaysWhenItIsAsked() = runTest {
         val stream = Stream(files())

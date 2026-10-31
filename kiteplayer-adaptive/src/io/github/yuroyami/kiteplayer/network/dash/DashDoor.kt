@@ -38,6 +38,11 @@ public class DashTransport(
      * may keep in a segment store (#547), or null, the default, for a transport with no store.
      */
     public val openSegment: (suspend (url: String) -> MediaIo)? = null,
+    /**
+     * [open] at a byte offset, `length` bytes of it when known, whose first request carries that
+     * range (#619), or null, the default, for a transport that opens and then seeks.
+     */
+    public val openRange: (suspend (url: String, offset: Long, length: Long?) -> MediaIo)? = null,
 )
 
 /**
@@ -60,6 +65,9 @@ internal fun DashTransport.failingOver(failover: DashFailover, mpdUrl: String, p
         openSegment = inner.openSegment?.let { segment ->
             { url -> failover.open(url) { target -> segment(checked(url, target)) } }
         },
+        openRange = inner.openRange?.let { ranged ->
+            { url, offset, length -> failover.open(url) { target -> ranged(checked(url, target), offset, length) } }
+        },
     )
 }
 
@@ -74,6 +82,7 @@ private class ReleasingMediaIo(private val inner: MediaIo, private val release: 
     override suspend fun seek(position: Long) = inner.seek(position)
     override fun setWarningSink(sink: (PlaybackWarning) -> Unit) = inner.setWarningSink(sink)
     override suspend fun openRelated(uri: String): MediaIo? = inner.openRelated(uri)
+    override suspend fun openRelated(uri: String, offset: Long, length: Long?): MediaIo? = inner.openRelated(uri, offset, length)
     override fun takeRefusal(): SourceRefusal? = inner.takeRefusal()
     override fun networkBitsPerSecond(): Long? = inner.networkBitsPerSecond()
 
@@ -144,7 +153,8 @@ public object DashDoor {
      * [open], which answers null for an address it does not take and judges every redirect itself.
      * [dateOf] reads the `Date` header of a reader that [open] made. The returned reader closes
      * [io] with it. [openSegment] is [open] for a segment the manifest named, when the transport
-     * keeps segments in a store (#547).
+     * keeps segments in a store (#547). [openRange] is [open] at a byte offset whose first request
+     * carries the range (#619), or null to open and seek.
      */
     public suspend fun readerIfManifest(
         io: MediaIo,
@@ -155,6 +165,7 @@ public object DashDoor {
         maxManifestBytes: Long = MAX_MANIFEST_BYTES,
         maxSegmentBytes: Long = MAX_SEGMENT_BYTES,
         openSegment: (suspend (url: String) -> MediaIo?)? = null,
+        openRange: (suspend (url: String, offset: Long, length: Long?) -> MediaIo?)? = null,
     ): MediaIo? {
         val location = io.location
         if (!DashDetection.declared(io.contentType, location)) {
@@ -184,6 +195,11 @@ public object DashDoor {
                 refusal = io::takeRefusal,
                 openSegment = openSegment?.let { segment ->
                     { url -> segment(url) ?: throw DashUrlRefusedException("${shownUri(url)} is not an http or https address") }
+                },
+                openRange = openRange?.let { ranged ->
+                    { url, offset, length ->
+                        ranged(url, offset, length) ?: throw DashUrlRefusedException("${shownUri(url)} is not an http or https address")
+                    }
                 },
             ),
         )
@@ -335,6 +351,7 @@ public object DashDoor {
             release = transport.release,
             refusal = transport.refusal,
             openSegment = transport.openSegment,
+            openRange = transport.openRange,
         )
     }
 

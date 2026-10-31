@@ -44,7 +44,7 @@ device has one) a hardware decoder. Here is what each platform gives you today:
 
 | | Android | iOS | macOS | Desktop JVM | Web |
 | --- | :---: | :---: | :---: | :---: | :---: |
-| **Hardware decoding** | H.264, HEVC | H.264, HEVC, AV1 | H.264, HEVC, AV1 | On a Mac | |
+| **Hardware decoding** | H.264, HEVC, VP9, AV1 | H.264, HEVC, AV1 | H.264, HEVC, AV1 | On a Mac, and Direct3D 11 on Windows | |
 | **HDR on an HDR screen** | In `KitePlayerView` | ✓ | ✓ | | |
 | **HLS and DASH** | ✓ | ✓ | ✓ | ✓ | In a web worker |
 | **Video in** | Compose, `View` | Compose, `UIView` | AppKit | Compose, AWT | `<canvas>` |
@@ -52,7 +52,9 @@ device has one) a hardware decoder. Here is what each platform gives you today:
 | **Picture-in-picture** | ✓ | ✓ | ✓ | A floating window | ✓ |
 
 An empty cell means the player falls back to something else: software decoding, or HDR tone mapped
-for a standard screen. The engine alone also builds for Linux and Windows native, tvOS and watchOS,
+for a standard screen. On Android, VP9 and AV1 decode in hardware through the view's direct
+MediaCodec path, and H.264 and HEVC through FFmpeg as well. The Direct3D 11 route on Windows is on
+by default but has not yet run on a real Windows GPU, which #101 tracks. The engine alone also builds for Linux and Windows native, tvOS and watchOS,
 where your app supplies the missing parts ([Platforms](#platforms) lists them).
 
 > [!NOTE]

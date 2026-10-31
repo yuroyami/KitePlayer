@@ -305,6 +305,23 @@ class AudioPlaybackTest {
         audio.close()
     }
 
+    /** A closed audio path does not open its sink again (#693). On Apple that open succeeded and nothing released it. */
+    @Test
+    fun aClosedAudioPathDoesNotOpenItsSinkAgain() = runTest {
+        var opens = 0
+        val sink = object : AudioSink by FakeAudioSink() {
+            override suspend fun open(request: AudioFormat, render: AudioRenderCallback): AudioFormat {
+                opens++
+                return request
+            }
+        }
+        val audio = AudioPlayback(sink, TestClock())
+        audio.open(format(2))
+        audio.close()
+        assertFailsWith<IllegalStateException> { audio.open(format(2)) }
+        assertEquals(1, opens, "the closed path opened its sink again")
+    }
+
     private companion object {
         /** 50 ms at 48 kHz: two of them fit in a ring that is never read. */
         const val FRAMES_PER_TAP = 2_400

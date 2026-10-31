@@ -323,6 +323,17 @@ class WebAudioSinkTest {
         sink.close()
     }
 
+    /** A closed sink does not open again, as the Android and desktop sinks refuse it (#693). */
+    @Test
+    fun aClosedSinkRefusesToOpenAgain() = runTest {
+        val device = FakeDevice()
+        val sink = newSink(device)
+        sink.open(request, PatternCallback())
+        sink.close()
+        val refusal = runCatching { sink.open(request, PatternCallback()) }.exceptionOrNull()
+        assertTrue(refusal is IllegalStateException, "a closed sink opened again: $refusal")
+    }
+
     /** No platform figure means nothing to filter, and saying Estimated would invent confidence. */
     @Test
     fun latencyQualityIsHonestAboutWhatThePlatformOffers() = runTest {

@@ -300,10 +300,16 @@ public class AudioPlayback(
     /**
      * Opens the device and sizes the ring for it.
      *
+     * A closed instance does not open again: a new audio path needs a new `AudioPlayback`.
+     *
      * @param request the format the decoder produces.
      * @return the format the device accepted. Resample to this before calling [submit].
+     * @throws IllegalStateException when this path is already open, or is closed.
      */
     public suspend fun open(request: AudioFormat): AudioFormat {
+        // Before the sink: close cleared the ring, so an open after it passed the check below and
+        // opened the closed sink again, which on Apple succeeded and could never be released (#693).
+        check(!closed) { "this AudioPlayback is closed; a new audio path needs a new one" }
         check(ring == null) { "this audio path is already open" }
 
         // The device and the ring, opened together, because the ring's format is the format the device

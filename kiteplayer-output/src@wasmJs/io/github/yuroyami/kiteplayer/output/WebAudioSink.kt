@@ -54,6 +54,7 @@ internal class WebAudioSink(
     private var block: InterleavedBlock? = null
     private var accepted: AudioFormat? = null
     private var reportedUnderrunFrames = 0
+    private var closed = false
 
     private val _events = MutableSharedFlow<AudioSinkEvent>(extraBufferCapacity = 8)
     override val events: Flow<AudioSinkEvent> = _events
@@ -63,6 +64,9 @@ internal class WebAudioSink(
      * back. A sink never converts, so nothing here touches the samples.
      */
     override suspend fun open(request: AudioFormat, render: AudioRenderCallback): AudioFormat {
+        // As the Android and desktop sinks refuse it: close closed the device, and an open after it
+        // kept its state beside a device that no longer plays (#693).
+        check(!closed) { "WebAudioSink is closed" }
         val format = AudioFormat(
             sampleRate = device.sampleRate,
             channels = device.channels,
@@ -120,6 +124,7 @@ internal class WebAudioSink(
     }
 
     override fun close() {
+        closed = true
         feeder?.cancel()
         feeder = null
         render = null

@@ -172,6 +172,11 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- A device or decoder release that never returns during a stop, a failed worker or a rebuild no
+  longer makes a later `closeAndAwait()` wait for ever (#590). Only the release that close starts
+  had a deadline; every other release ran on the player's own loop with none, so the loop never
+  read its next command. Each now runs on the release lane under the close deadline. Past it the
+  player warns `ResourcesNotReleased`, goes on, and a close reports `RuntimeCompromised` at once.
 - A `CancellationException` thrown by an app's own subtitle reader, or by a decoder factory, no
   longer closes the whole player (#589). An app's `withTimeout` around its HTTP call is an
   ordinary way to throw one, and the player read it as its own end, published

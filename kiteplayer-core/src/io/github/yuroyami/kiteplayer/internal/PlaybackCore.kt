@@ -12266,6 +12266,12 @@ internal class PlaybackCore(
                 release.sessions.forEach { releaseReporting(it) }
                 ReleaseOutcome.Overran
             }
+            // A release of an earlier teardown is still running past its deadline (#590): this
+            // close cannot prove anything finished, whatever it releases itself.
+            teardownWedged.value -> {
+                if (!release.isEmpty) awaitRelease(release)
+                ReleaseOutcome.Overran
+            }
             release.isEmpty -> ReleaseOutcome.Released
             else -> awaitRelease(release)
         }
@@ -12605,7 +12611,45 @@ internal class PlaybackCore(
     private suspend fun teardownSession() {
         coverArtState.value = null
         dropPending(null)
-        releaseSession(detachSession() ?: return)
+        releaseWithinDeadline(detachSession() ?: return)
+    }
+
+    /**
+     * Releases [detached] on the release lane and waits at most [closeDeadline] for it, as close
+     * releases its own (#590). Every other teardown, a stop's, a failed worker's or a rebuild's,
+     * used to release inline on the actor with no deadline, so a device stop that never returned
+     * kept the actor from its mailbox and a later close waited for ever. Past the deadline the
+     * runtime is marked wedged and the actor goes on: the release keeps running, and a close
+     * reports the compromised runtime at once. Once wedged, a later release is started and not
+     * waited for, since it queues behind the one that wedged. A release that throws inside the
+     * deadline throws here, as it did inline.
+     */
+    private suspend fun releaseWithinDeadline(detached: OpenSession) {
+        // A zero budget is the tests' override that forces a compromised close, not a stop's.
+        if (closeDeadline <= Duration.ZERO) {
+            releaseSession(detached)
+            return
+        }
+        var thrown: Throwable? = null
+        val release = GlobalScope.launch(context = dispatchers.release + CoroutineName("kiteplayer-session-release")) {
+            thrown = try {
+                releaseSession(detached)
+                null
+            } catch (failure: Throwable) {
+                failure
+            }
+        }
+        if (teardownWedged.value) return
+        if (withTimeoutOrNull(closeDeadline) { release.join() } == null) {
+            teardownWedged.value = true
+            warn(
+                PlaybackWarning.ResourcesNotReleased(
+                    "a session release did not finish within $closeDeadline and is still running",
+                ),
+            )
+            return
+        }
+        thrown?.let { throw it }
     }
 
     /**

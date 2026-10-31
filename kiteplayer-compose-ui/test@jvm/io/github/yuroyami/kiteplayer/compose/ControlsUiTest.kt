@@ -184,6 +184,33 @@ class ControlsUiTest {
         return "subtitles at ${target.snapshot.value.subtitlePosition}"
     }
 
+    /** The controls stay as long as an accessibility service recommends, the user's time to take action (#653). */
+    @Test
+    fun theControlsWaitAsLongAsAScreenReaderAsks() = runComposeUiTest {
+        mainClock.autoAdvance = false
+        val target = ScriptedTarget(everything.copy(status = PlaybackStatus.Playing, playRequested = true))
+        val twoMinutes = object : androidx.compose.ui.platform.AccessibilityManager {
+            override fun calculateRecommendedTimeoutMillis(
+                originalTimeoutMillis: Long,
+                containsIcons: Boolean,
+                containsText: Boolean,
+                containsControls: Boolean,
+            ): Long = 120_000
+        }
+        setContent {
+            CompositionLocalProvider(androidx.compose.ui.platform.LocalAccessibilityManager provides twoMinutes) {
+                val source = remember { target.source() }
+                val shown = remember { ControlsVisibility() }
+                ControlsTimeout(shown, source.snapshot.playRequested, 3.seconds)
+                Controls(source, Modifier.size(640.dp, 360.dp), shown, DefaultControlsStyle, DefaultControlsLabels, onFullScreen = {}, onPictureInPicture = {})
+            }
+        }
+        mainClock.advanceTimeBy(5_000)
+        onNodeWithContentDescription("Pause").assertExists()
+        mainClock.advanceTimeBy(120_000)
+        onNodeWithContentDescription("Pause").assertDoesNotExist()
+    }
+
     @Test
     fun `a paused player keeps its controls`() = runComposeUiTest {
         mainClock.autoAdvance = false

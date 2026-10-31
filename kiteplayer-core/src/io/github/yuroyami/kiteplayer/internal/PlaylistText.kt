@@ -15,7 +15,8 @@ internal object PlaylistText {
         val start = body.trimStart()
         return when {
             start.startsWith("[playlist]", ignoreCase = true) -> pls(body, base)
-            start.startsWith("<?xml") || start.startsWith("<playlist") -> xspf(body, base)
+            // Markup is XSPF or nothing, whatever prefix its elements carry (#490).
+            start.startsWith("<") -> XspfReader.read(body, base)
             isCueSheet(body) -> cueSheet(body, base)
             else -> m3u(body, base)
         }
@@ -101,87 +102,6 @@ internal object PlaylistText {
         }
         return files.keys.sorted().map { n -> MediaItem(uri = playlistAddress(base, files.getValue(n)), title = titles[n]) }
     }
-
-    /**
-     * Each `<track>` of an XSPF list with a `<location>`, read as the well-formed XML the format
-     * requires: the first location, and the title, creator and album beside it.
-     */
-    private fun xspf(text: String, base: String): List<MediaItem>? {
-        if (!text.contains("<playlist")) return null
-        val items = mutableListOf<MediaItem>()
-        var at = 0
-        while (true) {
-            val open = TRACK_OPEN.find(text, at) ?: break
-            val close = text.indexOf("</track>", open.range.last + 1)
-            if (close < 0) break
-            val track = text.substring(open.range.last + 1, close)
-            at = close + "</track>".length
-            val location = element(track, "location") ?: continue
-            items += MediaItem(
-                uri = playlistAddress(base, location),
-                title = element(track, "title"),
-                artist = element(track, "creator"),
-                album = element(track, "album"),
-            )
-        }
-        return items
-    }
-
-    /** The decoded text of the first [name] element in [xml], or null when it has none or it is empty. */
-    private fun element(xml: String, name: String): String? {
-        val open = Regex("<$name(\\s[^>]*)?>").find(xml) ?: return null
-        val close = xml.indexOf("</$name>", open.range.last + 1).takeIf { it >= 0 } ?: return null
-        return xmlText(xml.substring(open.range.last + 1, close)).trim().ifEmpty { null }
-    }
-
-    /** XML character data with its CDATA sections unwrapped and its entity and character references decoded. */
-    private fun xmlText(raw: String): String {
-        if ('&' !in raw && "<![CDATA[" !in raw) return raw
-        val out = StringBuilder(raw.length)
-        var at = 0
-        while (at < raw.length) {
-            if (raw.startsWith("<![CDATA[", at)) {
-                val end = raw.indexOf("]]>", at).takeIf { it >= 0 } ?: raw.length
-                out.append(raw, at + 9, end)
-                at = end + 3
-                continue
-            }
-            val char = raw[at]
-            if (char == '&') {
-                val semicolon = raw.indexOf(';', at)
-                val entity = if (semicolon > at) raw.substring(at + 1, semicolon) else ""
-                val decoded = when {
-                    entity == "amp" -> "&"
-                    entity == "lt" -> "<"
-                    entity == "gt" -> ">"
-                    entity == "quot" -> "\""
-                    entity == "apos" -> "'"
-                    entity.startsWith("#x") || entity.startsWith("#X") -> entity.drop(2).toIntOrNull(16)?.let(::codePoint)
-                    entity.startsWith("#") -> entity.drop(1).toIntOrNull()?.let(::codePoint)
-                    else -> null
-                }
-                if (decoded != null) {
-                    out.append(decoded)
-                    at = semicolon + 1
-                    continue
-                }
-            }
-            out.append(char)
-            at++
-        }
-        return out.toString()
-    }
-
-    private fun codePoint(value: Int): String? = when {
-        value in 0..0xFFFF -> value.toChar().toString()
-        value in 0x10000..0x10FFFF -> {
-            val offset = value - 0x10000
-            charArrayOf((0xD800 + (offset shr 10)).toChar(), (0xDC00 + (offset and 0x3FF)).toChar()).concatToString()
-        }
-        else -> null
-    }
-
-    private val TRACK_OPEN = Regex("<track(\\s[^>]*)?>")
 
     /** A cue sheet names a file, and a track in it, on lines of their own. */
     private fun isCueSheet(text: String): Boolean {

@@ -172,6 +172,11 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- The XSPF playlist reader now reads the list as XML (#490). It searched the text with patterns,
+  so a list whose elements carry a namespace prefix read as no list, a `</track>` inside CDATA or
+  a comment cut its track short, `xml:base` was ignored, and a location beside a list on disk
+  kept its `%20` escapes, though XSPF makes a location a URI reference. An M3U path is still
+  read as the path it is.
 - The segment store no longer renews a stored segment as fresh when the server's `304` says
   `no-store`, says `Vary: *`, or starts to vary by a request header (#547). The `304` renewed the
   old record whatever its headers said, so a server could not take caching back, and an entry

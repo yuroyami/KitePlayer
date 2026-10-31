@@ -422,6 +422,10 @@ public class VideoPlayback(
         startAtNanos.value = NO_START
         frameTimerNanos = clock.nanos()
         started = true
+        // Nothing plays while this frame is shown, so the clock holds it: running, it counted the
+        // time the renderer took to draw the frame, and a paused player then read 400 ms ahead of
+        // its picture after a slow draw (#588). The schedule's resume starts the clock from here.
+        videoClock.pause()
         return present(frameTimerNanos, masterClock)
     }
 

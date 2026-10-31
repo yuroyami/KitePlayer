@@ -14836,7 +14836,6 @@ internal class PlaybackCore(
                     if (wait > Duration.ZERO) worker.nap(minOf(wait, WORKER_POLL).atLeastOneTick())
                 }
                 SCHEDULER_ONE_FRAME -> {
-                    video.resumeSchedule()
                     // Released and not shown: a renderer that refuses still consumed the frame, so
                     // a gate counting successes alone would tick the whole queue away one frame at
                     // a time looking for a success that is never coming.

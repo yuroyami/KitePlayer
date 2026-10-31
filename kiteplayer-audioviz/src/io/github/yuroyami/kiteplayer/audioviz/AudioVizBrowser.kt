@@ -46,7 +46,18 @@ import kotlinx.coroutines.delay
  */
 @Composable
 public fun AudioVizBrowser(state: AudioVizState, modifier: Modifier = Modifier, onPick: (Visualization) -> Unit = {}) {
-    val tiles = remember { VizCatalog.create() }
+    AudioVizBrowserOf(state, modifier, onPick, makeTiles = VizCatalog::create)
+}
+
+/** [AudioVizBrowser] over the tiles [makeTiles] makes, which a test hands drawings that count what they see (#673). */
+@Composable
+internal fun AudioVizBrowserOf(
+    state: AudioVizState,
+    modifier: Modifier,
+    onPick: (Visualization) -> Unit,
+    makeTiles: () -> List<Visualization>,
+) {
+    val tiles = remember { makeTiles() }
     val previewParams = remember(state, tiles) {
         tiles.flatMap { tile ->
             val configured = state.catalogue.firstOrNull { it.name == tile.name }

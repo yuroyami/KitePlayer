@@ -195,6 +195,13 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- The byte cache no longer allocates a whole chunk for every upstream read (#649). A network
+  reader answers about 8 KiB a read, and the cache made a 256 KiB array for each one and walked
+  thousands of small chunks on every read, so a 20 Mbit/s stream over https made about 82 MB of
+  garbage a second. The window now fills whole chunks from one reused buffer and finds the
+  cursor's chunk by arithmetic: reading 64 MiB in 8 KiB answers allocated 2,113 MiB before and
+  64 MiB after. The Ktor reader also takes every byte its response has already buffered in one
+  read, so the bridge to FFmpeg runs one round per buffer instead of one per 8 KiB.
 - The default controls no longer save their subtitle lift into a memento (#648). They kept text
   above the control bar by moving the user's own subtitle position, so a memento taken while
   they showed, which is every pause, saved the lifted value, and after a restore the subtitles

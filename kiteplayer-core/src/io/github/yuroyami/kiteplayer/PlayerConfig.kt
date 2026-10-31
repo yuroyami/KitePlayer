@@ -215,7 +215,12 @@ public fun interface NetworkStatus {
  */
 public data class IoCachePolicy(
     val enabled: Boolean = true,
-    /** How much one upstream read pulls. Bigger means fewer network round trips. */
+    /**
+     * How much one upstream read asks for, and the size of each block of the window. A source
+     * answers at most this much a read and often less: a network reader answers about 8 KiB a
+     * read whatever it is asked. The window fills whole blocks from those answers, so it allocates
+     * about what it keeps. Bigger means fewer round trips only for a source that answers in full.
+     */
     val readChunkBytes: Int = 256 * 1024,
     /** How many bytes behind the cursor stay in RAM, at least, for free backward seeks. */
     val backWindowBytes: Long = 8L * 1024 * 1024,

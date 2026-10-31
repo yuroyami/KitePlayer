@@ -380,12 +380,22 @@ public class KtorMediaIo private constructor(
             minOf(length, titles.untilBlock)
         }
         // A response that stops sending is a failure, not a wait for ever.
-        val pulled = withTimeoutOrNull(policy.readTimeout) { channel.readAvailable(into, offset, room) }
+        var pulled = withTimeoutOrNull(policy.readTimeout) { channel.readAvailable(into, offset, room) }
         if (pulled == null) {
             dropBody()
             throw KtorMediaIoException("no bytes for ${policy.readTimeout} at byte $position", retryable = true)
         }
         if (pulled < 0) return endOfBody(knownSize)
+        // One call gives one segment of the channel's buffer, at most 8 KiB, so take what else is
+        // already buffered in the same read, which saves the bridge a round per segment (#649).
+        // The block form never suspends: it answers -1 when nothing is buffered.
+        while (pulled < room) {
+            val at = offset + pulled
+            val end = offset + room
+            val more = channel.readAvailable(1) { buffer -> buffer.readAtMostTo(into, at, end) }
+            if (more <= 0) break
+            pulled += more
+        }
         titles?.consumed(pulled)
         stored?.wrote(position, into, offset, pulled)
         names?.feed(position, into, offset, pulled)

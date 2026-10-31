@@ -78,6 +78,34 @@ class KtorMediaIoTest {
         return out
     }
 
+    /**
+     * A read takes every byte the response has already buffered, not one 8 KiB segment of it
+     * (#649), so the bridge to FFmpeg runs one round per buffer rather than one per segment.
+     */
+    @Test
+    fun aReadTakesMoreThanOneBufferedSegment() = runBlocking {
+        val bytes = content(2_000_000)
+        val port = serve(bytes)
+        val io = KtorMediaIo.open("http://127.0.0.1:$port/media")
+        try {
+            val out = ByteArray(bytes.size)
+            var at = 0
+            var largest = 0
+            while (at < out.size) {
+                // Wait a moment so the local server's bytes are buffered before each read.
+                kotlinx.coroutines.delay(5)
+                val r = io.read(out, at, minOf(64 * 1024, out.size - at))
+                check(r > 0) { "short read at $at (got $r)" }
+                largest = maxOf(largest, r)
+                at += r
+            }
+            assertTrue(out.contentEquals(bytes), "the bytes must arrive exactly")
+            assertTrue(largest > 8192, "no read took more than one 8 KiB segment; the largest was $largest")
+        } finally {
+            io.close()
+        }
+    }
+
     @Test
     fun aRangedServerYieldsASeekableSizedReaderWithExactBytes() = runBlocking {
         val bytes = content(300_000)

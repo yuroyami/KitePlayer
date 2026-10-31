@@ -1,8 +1,10 @@
 package io.github.yuroyami.kiteplayer.network.dash
 
+import io.github.yuroyami.kiteplayer.subtitle.WebVttParser
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 
 /**
  * TTML documents read as cues, and cues written as WebVTT (#402). The reader itself is
@@ -125,6 +127,29 @@ class TtmlTest {
         assertEquals(
             "WEBVTT\n\n00:00:00.000 --> 00:00:01.500\none\n\n01:02:03.004 --> 01:02:04.000\ntwo\n<i>three</i>\n\n",
             vtt,
+        )
+    }
+
+    /** An empty line inside one paragraph ended the cue block, and FFmpeg dropped every later cue (#620). */
+    @Test
+    fun anEmptyLineInAParagraphNeverReachesTheWebVttDocument() {
+        val xml = tt(
+            """<p begin="1s" end="2s">one</p>
+               <p begin="3s" end="4s">Wait.<br/><br/>Listen.</p>
+               <p begin="5s" end="6s">three</p>""",
+        )
+        val vtt = webVtt(Ttml.cues(xml))
+        val lastTiming = vtt.indexOf("00:00:05.000 -->")
+        assertFalse(vtt.substring(vtt.indexOf("00:00:03.000 -->"), lastTiming).trimEnd().contains("\n\n"), vtt)
+        val parsed = WebVttParser.parse(vtt)
+        assertEquals(listOf("one", "Wait.\nListen.", "three"), parsed.map { it.plainText })
+    }
+
+    @Test
+    fun aCueOfOnlyBlankLinesIsLeftOut() {
+        assertEquals(
+            "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nkept\n\n",
+            webVtt(listOf(TimedCue(0, 1_000_000, "kept"), TimedCue(1_000_000, 2_000_000, "\n \n"))),
         )
     }
 }

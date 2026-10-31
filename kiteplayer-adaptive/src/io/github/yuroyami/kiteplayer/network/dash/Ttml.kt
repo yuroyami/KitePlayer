@@ -68,8 +68,14 @@ internal object Ttml {
 internal fun webVtt(cues: List<TimedCue>): String = buildString {
     append("WEBVTT\n\n")
     for (cue in cues) {
+        // An empty line ends a cue block in WebVTT, and FFmpeg's reader then takes the next line
+        // as an identifier, fails its timing and drops every later cue of the document. A TTML
+        // `<br/><br/>` gives such a line, so a cue's blank lines are left out (#620).
+        val lines = cue.text.lines().filter { it.isNotBlank() }
+        if (lines.isEmpty()) continue
         append(vttTime(cue.startMicros)).append(" --> ").append(vttTime(cue.endMicros)).append('\n')
-        append(cue.text).append("\n\n")
+        lines.joinTo(this, "\n")
+        append("\n\n")
     }
 }
 

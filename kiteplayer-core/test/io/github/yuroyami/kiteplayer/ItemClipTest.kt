@@ -306,6 +306,17 @@ class ItemClipTest {
         )
         assertTrue(blocks.first().ptsUs <= 2_000_000 && blocks.first().endUs > 2_000_000, "the scan starts at the clip: ${blocks.first().ptsUs}")
         assertTrue(assertNotNull(result.endPts).micros in 4_000_000..4_021_334, "the scan stops at the clip's end: ${result.endPts}")
+        // The clip's end is the item's end, so its map can be complete and kept (#672).
+        assertTrue(result.reachedEnd, "a scan that stopped at the clip's end did not reach the item's end")
+        val ranged = scanMediaAudio(
+            harness.backend,
+            clipped(2.seconds, 4.seconds),
+            track = null,
+            preferredLanguages = emptyList(),
+            range = AudioScanRange(from = Pts(2_000_000), until = Pts(3_000_000)),
+            sink = { _, _, _, _ -> },
+        )
+        assertEquals(false, ranged.reachedEnd, "a range that stops before the clip's end did not reach the item's end")
         harness.close()
     }
 

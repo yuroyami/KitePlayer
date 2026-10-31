@@ -42,7 +42,7 @@ public class AudioScanResult internal constructor(
     public val firstPts: Pts?,
     /** Where the last block ended, or null when the track decoded to nothing. */
     public val endPts: Pts?,
-    /** Whether the decoder reported the end of the stream. */
+    /** Whether the decoder reported the end of the stream, or the scan reached the end of the item's clip. */
     public val reachedEnd: Boolean,
 )
 

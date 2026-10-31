@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.audioviz
 
 import io.github.yuroyami.kiteplayer.AudioScanRange
 import io.github.yuroyami.kiteplayer.AudioScanSink
+import io.github.yuroyami.kiteplayer.MediaClip
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.Pts
@@ -22,6 +23,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 /** When a scan starts, what it installs, and what it must never do. Times are virtual. */
 class SongScannerTest {
@@ -428,6 +430,29 @@ class SongScannerTest {
         assertEquals(2, source.ranges.count { it != null }, "the song was not cut into two ranges")
         assertTrue(source.ranges.last() == null, "a range that started 50 s late was joined: ${source.ranges}")
         assertTrue(rig.installs.maps.single().map.complete)
+        rig.close()
+    }
+
+    /**
+     * A clipped item's duration counts from its clip's start, while the scan reads the file's own
+     * times, so its ranges are planned from the clip's start (#672). Planned from zero, the ranges of
+     * a track in the middle of an album's file fell before the track.
+     */
+    @Test
+    fun aClippedItemIsScannedInRangesOfItsClip() {
+        val source = FakeSource(SyntheticSong.drumLoop(200f))
+        val rig = Rig(source, workers = 2)
+        val track = MediaItem("file:///album.flac", clip = MediaClip(40.seconds, 170.seconds))
+        rig.target(ScanTarget(track, TrackId(1), null, 130_000_000L, true))
+        rig.settleAll()
+        val asked = source.ranges.filterNotNull()
+        assertEquals(2, asked.size, "the clip was not cut into two ranges: ${source.ranges}")
+        assertEquals(
+            listOf(0L, 40_000_000L + 65_000_000L - SongMapBuilder.WARM_UP_MICROS),
+            asked.map { it.from?.micros },
+            "each range starts its warm-up before the stretch of the clip it owns",
+        )
+        assertEquals(40_000_000L + 65_000_000L + SongMapBuilder.LOOK_AHEAD_MICROS, asked.first().until?.micros)
         rig.close()
     }
 }

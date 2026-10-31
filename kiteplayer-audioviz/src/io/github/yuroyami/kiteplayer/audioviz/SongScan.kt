@@ -276,13 +276,18 @@ internal class SongScanner(
         val duration = target.durationMicros ?: 0L
         val count = chunkCount(duration)
         if (count > 1) {
+            // The duration counts from a clip's start, and the scan and every time it reports are in
+            // the file's own times, so the ranges are planned there (#672). Planned from zero, the
+            // ranges of a clip in the middle of an album's file all fell before the clip.
+            val clipStart = target.media.clip?.start?.inWholeMicroseconds?.coerceAtLeast(0L) ?: 0L
             val ranges = (0 until count).map { index ->
-                (index * duration / count) to if (index == count - 1) duration else (index + 1) * duration / count
+                (clipStart + index * duration / count) to
+                    clipStart + if (index == count - 1) duration else (index + 1) * duration / count
             }
             val scanned = try {
                 coroutineScope {
                     ranges.mapIndexed { index, (from, until) ->
-                        async(scanDispatcher) { scanRange(target, from, until, last = index == count - 1) }
+                        async(scanDispatcher) { scanRange(target, from, until, first = index == 0, last = index == count - 1) }
                     }.awaitAll()
                 }
             } catch (cancellation: CancellationException) {
@@ -322,10 +327,10 @@ internal class SongScanner(
 
     private class RangeResult(val part: SongMapPart, val ownedFrom: Long, val ownedUntil: Long, val outcome: ScanOutcome)
 
-    private suspend fun scanRange(target: ScanTarget, from: Long, until: Long, last: Boolean): RangeResult {
+    private suspend fun scanRange(target: ScanTarget, from: Long, until: Long, first: Boolean, last: Boolean): RangeResult {
         val builder = SongMapBuilder(
             target.track ?: TrackId(-1),
-            ownedFromMicros = if (from == 0L) Long.MIN_VALUE else from,
+            ownedFromMicros = if (first) Long.MIN_VALUE else from,
             ownedUntilMicros = if (last) Long.MAX_VALUE else until,
         )
         val range = AudioScanRange(

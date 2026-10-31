@@ -413,8 +413,8 @@ public sealed class PlaybackWarning {
      * converts at all.
      *
      * A renderer can also report a limit of its own conversion, through
-     * [io.github.yuroyami.kiteplayer.spi.RendererEvent.ColorApproximated]: the web canvas, for
-     * example, shows HDR without tone mapping. That one arrives when the first such frame is drawn.
+     * [io.github.yuroyami.kiteplayer.spi.RendererEvent.ColorApproximated], which arrives when the
+     * first frame it cannot draw exactly is drawn.
      */
     public data class ColorApproximated(val detail: String) : PlaybackWarning() {
         override val message: String get() = "colour approximated: $detail"

@@ -444,8 +444,10 @@ public object DashManifestParser {
             bandwidth = rep.attr("bandwidth")?.toLongOrNull() ?: 0L,
             codecs = rep.attr("codecs") ?: set.attr("codecs"),
             mimeType = rep.attr("mimeType") ?: set.attr("mimeType"),
-            width = rep.attr("width")?.toIntOrNull(),
-            height = rep.attr("height")?.toIntOrNull(),
+            // Common attributes, as codecs is: a size the set states holds for each of its
+            // representations, and a set with one size states it only there (#623).
+            width = (rep.attr("width") ?: set.attr("width"))?.toIntOrNull(),
+            height = (rep.attr("height") ?: set.attr("height"))?.toIntOrNull(),
             baseUrl = repBase.url,
             segmentTemplate = TemplateLevel.under(setTemplate, rep)?.template,
             segmentUrls = listed.mapNotNull { it.first },

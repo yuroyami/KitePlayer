@@ -77,6 +77,29 @@ class DashHlsTest {
         assertEquals(2, variants.count { "VIDEO-RANGE" !in it }, variants.joinToString("\n"))
     }
 
+    /** A size the adaptation set states once holds for each of its representations, as Shaka Packager writes it (#623). */
+    @Test
+    fun aSizeOnTheAdaptationSetReachesItsRepresentations() {
+        val period = parse(
+            """
+            <MPD type="static" mediaPresentationDuration="PT4S">
+                <Period>
+                    <AdaptationSet contentType="video" mimeType="video/mp4" codecs="hvc1.2.4.L153.90" width="3840" height="2160">
+                        <SegmentTemplate media="v-${'$'}Number${'$'}.m4s" initialization="v-init.mp4" timescale="1" duration="2"/>
+                        <Representation id="uhd" bandwidth="16000000"/>
+                        <Representation id="own" bandwidth="8000000" width="2560" height="1440"/>
+                    </AdaptationSet>
+                </Period>
+            </MPD>
+            """.trimIndent(),
+        ).periods.single()
+        val sizes = period.adaptationSets.single().representations.associate { it.id to (it.width to it.height) }
+        assertEquals(mapOf<String?, Pair<Int?, Int?>>("uhd" to (3840 to 2160), "own" to (2560 to 1440)), sizes)
+        val variants = DashHls.presentation(period).master.lines().filter { it.startsWith("#EXT-X-STREAM-INF:") }
+        assertTrue(variants.any { "RESOLUTION=3840x2160" in it }, variants.joinToString("\n"))
+        assertTrue(variants.any { "RESOLUTION=2560x1440" in it }, "a representation's own size wins: ${variants.joinToString("\n")}")
+    }
+
     @Test
     fun separateVideoAndAudioSetsBecomeVariantsAndOneRendition() {
         val period = parse(separateSets).periods.single()

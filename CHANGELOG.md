@@ -172,6 +172,8 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- An external MicroDVD file in UTF-16 now loads (#492). FFmpeg's probe of its raw bytes threw,
+  and the throw ended the read before the text the player had already decoded was tried.
 - The XSPF playlist reader now reads the list as XML (#490). It searched the text with patterns,
   so a list whose elements carry a namespace prefix read as no list, a `</track>` inside CDATA or
   a comment cut its track short, `xml:base` was ignored, and a location beside a list on disk

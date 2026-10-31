@@ -48,8 +48,16 @@ internal object SubtitleFiles {
             val index = path.dropLast(".sub".length) + ".idx"
             runCatching { open(MediaSource.open(index), text) }.getOrNull()?.let { return it }
         }
-        // An image track's bytes are no text, and a text track's encoding is the engine's call.
-        val asBytes = open(MediaSource.open(BytesSource(bytes)), text, imagesOnly = true)
+        // An image track's bytes are no text, and a text track's encoding is the engine's call. A
+        // probe of the raw bytes that FFmpeg refuses is one candidate that failed, not the file: a
+        // UTF-16 MicroDVD file is refused as bytes and reads as its decoded text (#492).
+        val asBytes = try {
+            open(MediaSource.open(BytesSource(bytes)), text, imagesOnly = true)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            null
+        }
         if (asBytes != null) return asBytes
         val utf8 = text.encodeToByteArray()
         return open(MediaSource.open(BytesSource(utf8)), text)

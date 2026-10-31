@@ -3,12 +3,17 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.ofBytes
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -114,5 +119,62 @@ class HlsThumbnailsTest {
             asked,
             "the playlist and the image were each read once",
         )
+    }
+
+    /**
+     * A preview request a seek bar cancels while the image playlist loads has read nothing, so the
+     * next request reads the playlist again (#433). It used to mark the playlist read, and the
+     * stream gave no pictures for the rest of the session.
+     */
+    @Test
+    fun aCancelledFirstRequestLeavesThePlaylistToBeReadAgain() = runTest {
+        for (during in listOf(false, true)) {
+            val sprite = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 1, 2, 3)
+            var playlistOpens = 0
+            var hangingClosed = false
+            val started = CompletableDeferred<Unit>()
+            val root = assertNotNull(MediaIo.ofBytes(master.encodeToByteArray()).open())
+            val io = object : MediaIo by root {
+                override suspend fun openRelated(uri: String): MediaIo? = when (uri) {
+                    "https://cdn.test/images/index.m3u8" -> {
+                        playlistOpens++
+                        if (playlistOpens > 1) {
+                            MediaIo.ofBytes(imagePlaylist.encodeToByteArray()).open()
+                        } else if (!during) {
+                            started.complete(Unit)
+                            awaitCancellation()
+                        } else {
+                            // A reader that hangs in its read, and must be closed when it is given up.
+                            val inner = assertNotNull(MediaIo.ofBytes(ByteArray(0)).open())
+                            object : MediaIo by inner {
+                                override suspend fun read(into: ByteArray, offset: Int, length: Int): Int {
+                                    started.complete(Unit)
+                                    awaitCancellation()
+                                }
+
+                                override fun close() {
+                                    hangingClosed = true
+                                }
+                            }
+                        }
+                    }
+                    "https://cdn.test/images/sprite-1.jpg" -> MediaIo.ofBytes(sprite).open()
+                    else -> null
+                }
+            }
+            val thumbnails = HlsThumbnails(io, "https://cdn.test/master.m3u8", assertNotNull(HlsThumbnails.choose(hlsImageStreams(master))))
+            val first = launch { thumbnails.at(Pts(35_000_000L)) }
+            started.await()
+            yield()
+            first.cancel()
+            first.join()
+            if (during) assertTrue(hangingClosed, "the reader of the cancelled read was not closed")
+
+            val picture = assertNotNull(thumbnails.at(Pts(35_000_000L)), "the cancelled request left no pictures (cancelled during the read: $during)")
+            assertEquals(480, picture.x)
+            assertEquals(2, playlistOpens, "the playlist was not read again")
+            thumbnails.at(Pts(12_000_000L))
+            assertEquals(2, playlistOpens, "a playlist that was read is read once")
+        }
     }
 }

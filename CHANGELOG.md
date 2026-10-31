@@ -172,6 +172,10 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- Cancelling the first seek bar preview of an HLS or DASH stream while its image playlist loads
+  no longer leaves the stream with no previews (#433). The cancelled read marked the playlist as
+  read, so every later request answered nothing. A playlist is now marked read only once its read
+  returns.
 - The start seek of an open, as a resume uses, and the seek of a rebuilt session now give up
   after 10 seconds with `SourceUnavailable`, as a user's seek does, and give way to a stop or a
   close at once (#591). They had no deadline, so a long scan, such as a Matroska file with no

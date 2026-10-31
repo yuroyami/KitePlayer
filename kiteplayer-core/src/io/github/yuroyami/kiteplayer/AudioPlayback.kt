@@ -429,7 +429,10 @@ public class AudioPlayback(
      * The stage is keyed on [sourceFormat] against the format it was built for, so a decoder that
      * changes format mid-stream gets a new one on the buffer that changed rather than one buffer
      * later. The old one plays out what it still holds first. When [sourceFormat] already is the
-     * negotiated format every stage is a copy and the cost is one pass over the samples.
+     * negotiated format and every setting is at its default, the samples go to the ring with no copy.
+     *
+     * [interleaved] is never written to, whatever the settings, so one array may be submitted again
+     * and again, and the caller may reuse it once this call returns.
      *
      * @param pts the media timestamp of the first frame, when the decoder gave one. Passing null is
      *        normal for buffers that continue from the previous one.

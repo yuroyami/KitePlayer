@@ -167,6 +167,9 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- An HLS stream opened from a PLS or plain M3U station list changes quality in place again (#669).
+  The copy that gave the stream the list's title left out the variant switch, so every quality
+  change opened the station list again, with a gap and a jump to the live edge.
 - A working hardware video decoder is no longer moved to software when a keyframe interval holds
   more than 16 MiB (#645). The decoder keeps a copy of the packets since the last keyframe so that
   software can take over if the hardware fails, and when that copy would pass its cap the player

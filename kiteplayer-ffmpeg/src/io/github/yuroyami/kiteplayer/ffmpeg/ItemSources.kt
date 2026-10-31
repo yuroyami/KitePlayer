@@ -22,7 +22,7 @@ import kotlin.time.Duration.Companion.seconds
  * cannot end a read that waits inside the reader. [hls] is set for an HLS stream read through the
  * item's reader.
  */
-internal class OpenedItem(
+internal data class OpenedItem(
     val source: MediaSource,
     val bridge: BlockingMediaIo?,
     val hls: HlsLedger? = null,
@@ -42,8 +42,12 @@ internal class OpenedItem(
     /** Moves an HLS stream to another variant in place (#464). */
     val switch: HlsVariantSwitch? = null,
 ) {
-    fun withListedTitle(title: String?): OpenedItem =
-        OpenedItem(source, bridge, hls, variants, selectedVariant, realTimeScheme, title ?: listedTitle, growing, thumbnails, times)
+    /**
+     * This item under the title a list of streams gave it. A copy, so that no field can fall out:
+     * the hand-written constructor call this replaced lost the variant switch, and an HLS stream
+     * opened from a station list opened again at every quality change (#669).
+     */
+    fun withListedTitle(title: String?): OpenedItem = copy(listedTitle = title ?: listedTitle)
 }
 
 /**

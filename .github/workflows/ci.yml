@@ -87,6 +87,13 @@ jobs:
         working-directory: kiteplayer-rt/native
         run: ./scripts/build-host.sh tsan && ./scripts/run-c-tests.sh tsan
 
+      # TSan grades atomicity, not ordering strength: every suite passed with the ring's release
+      # store and acquire load made relaxed. This reads the eighteen orderings from the source, and
+      # its negative controls prove it rejects each weakened one (#640).
+      - name: kiteplayer-rt, the ring's memory orderings
+        working-directory: kiteplayer-rt/native
+        run: ./scripts/source-discipline.sh && ./scripts/source-discipline.sh --prove-it-can-fail
+
       # The packing suite needs neither jni.h nor libass; the driver suite needs a real libass and
       # asserts pixels, which is why the formula is installed here.
       - name: Install libass for the driver suite
@@ -160,6 +167,16 @@ jobs:
           ./kotlin task $metadata
           ./kotlin check abi klibAbi klibOnlyAbi androidAbi kitertCoupling duplicateClasses
           ./scripts/check-dependency-hygiene.sh
+
+      # The device callback may reach no allocator, lock, log or framework call. Only the compiled
+      # objects can prove that, so this runs after the build above wrote the macOS, iOS device and
+      # iOS simulator archives the cinterop klibs embed, and its negative controls prove it rejects
+      # each forbidden call (#640). The build logic's own tests ride here too.
+      - name: The render audit of the audio callback, and the build logic tests
+        run: |
+          kiteplayer-rt/native/scripts/render-audit.sh
+          kiteplayer-rt/native/scripts/render-audit.sh --prove-it-can-fail
+          ./kotlin test -m build-support
 
       # Every module that HAS jvm tests. The ones that need the clips (ffmpeg, kiteplayer,
       # compose-video, audioviz) are here rather than on Linux for the generator reason above.

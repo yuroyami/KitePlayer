@@ -195,6 +195,9 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- The libass adapter libraries leave the chain's debug info out (#615). It was about a third of
+  each published library, 1.1 MB for each Android ABI, and an app built without the NDK shipped
+  it as it was. The symbol tables stay, so a native crash still names its functions.
 - An untagged picture 1280 or more pixels wide is guessed to be BT.709 whatever its height (#606),
   as mpv and libplacebo guess. A 720p film in a scope ratio, 1280x536 with no colour tags, played
   with the BT.601 matrix, so reds lost about 9 percent and its ASS subtitle colours were matched to

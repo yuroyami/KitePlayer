@@ -113,6 +113,48 @@ class DashHlsTest {
         assertTrue(variants.none { "BANDWIDTH=80000" in it }, variants.joinToString("\n"))
     }
 
+    /**
+     * An audio only Period offers every audio set: the default one by its role carries the variants,
+     * and each other set is a rendition beside them (#630). Taking the first set alone, a description
+     * listed first was the only sound a listener could hear.
+     */
+    @Test
+    fun anAudioOnlyPeriodOffersEveryAudioSetAndTheMainOneByDefault() {
+        val period = parse(
+            """
+            <MPD type="static" mediaPresentationDuration="PT4S">
+                <Period>
+                    <AdaptationSet id="desc" contentType="audio" mimeType="audio/mp4" lang="en" codecs="mp4a.40.2">
+                        <Role schemeIdUri="urn:mpeg:dash:role:2011" value="description"/>
+                        <SegmentTemplate media="d-${'$'}Number${'$'}.m4s" initialization="d.mp4" timescale="1" duration="2"/>
+                        <Representation id="d" bandwidth="64000"/>
+                    </AdaptationSet>
+                    <AdaptationSet id="main" contentType="audio" mimeType="audio/mp4" lang="en" codecs="mp4a.40.2">
+                        <Role schemeIdUri="urn:mpeg:dash:role:2011" value="main"/>
+                        <SegmentTemplate media="m-${'$'}RepresentationID${'$'}-${'$'}Number${'$'}.m4s" initialization="m-${'$'}RepresentationID${'$'}.mp4" timescale="1" duration="2"/>
+                        <Representation id="m-lo" bandwidth="64000"/>
+                        <Representation id="m-hi" bandwidth="128000"/>
+                    </AdaptationSet>
+                </Period>
+            </MPD>
+            """.trimIndent(),
+        ).periods.single()
+        val presentation = DashHls.presentation(period)
+        val lines = presentation.master.lines()
+        val variants = lines.filter { it.startsWith("#EXT-X-STREAM-INF:") }
+        val variantTracks = presentation.tracks.filter { it.role == DashHlsRole.Audio && lines.contains(it.address) }
+        assertEquals(setOf("main"), variantTracks.map { it.set.id }.toSet(), "the variants came from the description: ${presentation.master}")
+        assertTrue(variants.all { "AUDIO=\"" in it }, presentation.master)
+        val renditions = lines.filter { it.startsWith("#EXT-X-MEDIA:TYPE=AUDIO") }
+        assertEquals(2, renditions.size, presentation.master)
+        val own = renditions.single { "URI=" !in it }
+        assertTrue("DEFAULT=YES" in own, "the variants' own sound is the default: $own")
+        val description = renditions.single { "URI=" in it }
+        assertTrue("DEFAULT=NO" in description && "public.accessibility.describes-video" in description, description)
+        val address = description.substringAfter("URI=\"").substringBefore('"')
+        assertEquals("desc", presentation.tracks.single { it.address == address }.set.id)
+    }
+
     /** A size the adaptation set states once holds for each of its representations, as Shaka Packager writes it (#623). */
     @Test
     fun aSizeOnTheAdaptationSetReachesItsRepresentations() {

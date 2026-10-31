@@ -119,8 +119,18 @@ public class KitePlayerWorker private constructor(
      * its [PlayerEvent.Opened] are mapped back through this, so the page reads the objects it gave,
      * relative addresses and all. An item the worker changed, or one this map has forgotten, reads
      * as it crossed.
+     *
+     * Bounded by what the worker still holds (#687): each state keeps only the items it shows and
+     * those a command has sent that no state has shown yet, a refused add takes its own back, and
+     * the end of the player clears it. It once kept every item a long radio page had ever queued.
      */
     private val sentItems = HashMap<MediaItem, MediaItem>()
+
+    /** Items sent by a command that no state has shown yet, which a state must not forget. */
+    private val awaitingState = HashSet<MediaItem>()
+
+    /** How many items [sentItems] maps, for a test. */
+    internal val retainedItemCount: Int get() = sentItems.size
 
     /** Set by [start] until the worker has answered the first message. */
     private var started: CompletableDeferred<Unit>? = null
@@ -134,7 +144,9 @@ public class KitePlayerWorker private constructor(
     public suspend fun open(media: MediaItem) {
         val crossing = crossing(media)
         sentItems.clear()
+        awaitingState.clear()
         sentItems[crossing] = media
+        awaitingState += crossing
         call(Command.Open(crossing))
     }
 
@@ -142,7 +154,9 @@ public class KitePlayerWorker private constructor(
     public suspend fun openQueue(items: List<MediaItem>, startIndex: Int = 0) {
         val crossing = items.map(::crossing)
         sentItems.clear()
+        awaitingState.clear()
         crossing.forEachIndexed { i, item -> sentItems[item] = items[i] }
+        awaitingState += crossing
         call(Command.OpenQueue(crossing, startIndex))
     }
 
@@ -189,8 +203,19 @@ public class KitePlayerWorker private constructor(
     /** Inserts [items] at [index], or at the end when [index] is null. */
     public suspend fun addToQueue(items: List<MediaItem>, index: Int? = null) {
         val crossing = items.map(::crossing)
+        val added = crossing.filter { it !in sentItems }
         crossing.forEachIndexed { i, item -> sentItems[item] = items[i] }
-        call(Command.AddToQueue(crossing, index))
+        awaitingState += added
+        try {
+            call(Command.AddToQueue(crossing, index))
+        } catch (refused: Throwable) {
+            // The worker did not take them, so nothing will show them.
+            for (item in added) {
+                sentItems.remove(item)
+                awaitingState.remove(item)
+            }
+            throw refused
+        }
     }
 
     /** Inserts one item. See the list overload. */
@@ -501,7 +526,7 @@ public class KitePlayerWorker private constructor(
         if (dead == null) workerPostTo(worker, message.encode())
     }
 
-    private fun receive(data: JsAny?) {
+    internal fun receive(data: JsAny?) {
         when (val message = decodeWorkerMessage(data) ?: return) {
             WorkerMessage.Hello -> Unit
             WorkerMessage.Ready -> started?.complete(Unit)
@@ -517,6 +542,7 @@ public class KitePlayerWorker private constructor(
                 stateFlow.value = message.snapshot.let { snapshot ->
                     snapshot.copy(media = snapshot.media?.let(::own), queue = snapshot.queue.map(::own))
                 }
+                forgetWhatTheWorkerLetGo(message.snapshot)
                 holdDisplay(message.snapshot)
             }
             is WorkerMessage.Progressed -> progressFlow.value = message.progress
@@ -556,8 +582,18 @@ public class KitePlayerWorker private constructor(
         workerTerminate(worker)
     }
 
+    /** Keeps of [sentItems] only what [snapshot] shows and what no state has shown yet (#687). */
+    private fun forgetWhatTheWorkerLetGo(snapshot: PlayerSnapshot) {
+        val shown = HashSet<MediaItem>(snapshot.queue)
+        snapshot.media?.let(shown::add)
+        awaitingState.removeAll(shown)
+        sentItems.keys.retainAll { it in shown || it in awaitingState }
+    }
+
     /** Ends the worker and the page's audio once the close is answered, or the worker is gone. */
     private fun finish() {
+        sentItems.clear()
+        awaitingState.clear()
         holdDisplay(null)
         workerTerminate(worker)
         audio?.close()
@@ -565,6 +601,9 @@ public class KitePlayerWorker private constructor(
     }
 
     public companion object {
+        /** A player on [worker], an object with `postMessage` and `terminate`, for a test that plays the worker. */
+        internal fun onWorkerForTest(worker: JsAny): KitePlayerWorker = KitePlayerWorker(worker, null, null, false)
+
         /** Keeps the original startup entry point with display wake enabled. */
         public suspend fun start(
             canvas: JsAny?,

@@ -65,7 +65,7 @@ internal const val MAX_PLAYLIST_BYTES: Int = 16 * 1024 * 1024
 internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job, read: String? = null): HlsOpen {
     val base = io.location ?: item.uri
     val text = read ?: readPlaylist(io, item.uri).decodeToString()
-    val master = keepOneHlsVariant(text, item.demux.maxBitrate, item.demux.maxVideoHeight, item.demux.variant, item.demux.fit)
+    val master = keepOneHlsVariant(text, item.demux.maxBitrate, item.demux.maxVideoHeight, item.demux.variant, item.demux.fit, ::hlsCodecDecodable)
     val ledger = HlsLedger(item.uri)
     // The kept variant's backups stand in for it when an address fails (#440).
     val failover = HlsFailover(master?.backups.orEmpty(), base)
@@ -80,7 +80,9 @@ internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job, read: 
             traits = master.variants,
             initial = master.chosen,
             choose = {
-                master.variants.indexOf(chooseHlsVariant(master.variants, item.demux.maxBitrate, item.demux.maxVideoHeight, item.demux.fit))
+                master.variants.indexOf(
+                    chooseHlsVariant(master.variants, item.demux.maxBitrate, item.demux.maxVideoHeight, item.demux.fit, ::hlsCodecDecodable),
+                )
             },
             openAddress = { address -> if (failover.isEmpty) io.openRelated(address) else failover.open(address) { io.openRelated(it) } },
         )

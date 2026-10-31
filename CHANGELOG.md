@@ -167,6 +167,11 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- An HLS stream now opens on a variant whose codecs this build can decode (#625). The choice
+  took the highest bitrate whatever its `CODECS` said, so on the web, which has no E-AC-3 or AV1
+  decoder, a master that offered each quality with AAC and with E-AC-3 played the picture in
+  silence. The open now asks FFmpeg for a decoder of each codec a variant names first. The
+  player's own steps up and down during playback still choose by bitrate alone.
 - The desktop JVM no longer leaves a 5 MB copy of the libass adapter in the temporary folder at
   every launch on Windows (#651). The loader copied the library into a new folder each time and
   left it to `deleteOnExit`, which cannot delete a loaded library on Windows. It now writes one

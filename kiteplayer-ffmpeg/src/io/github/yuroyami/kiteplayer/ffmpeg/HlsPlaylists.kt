@@ -104,7 +104,8 @@ internal class HlsVariant(val tagLine: Int, val uriLine: Int, val attributes: Ma
     /** The highest frame rate, or null when the variant does not state it. */
     val frameRate: Double? = attributes["FRAME-RATE"]?.toDoubleOrNull()?.takeIf { it > 0.0 && it.isFinite() }
 
-    private val codecs: List<String> = attributes["CODECS"]?.split(',')?.map { it.trim().lowercase() }.orEmpty()
+    /** The RFC 6381 names of the variant's codecs, in lower case, or empty when it names none. */
+    val codecs: List<String> = attributes["CODECS"]?.split(',')?.map { it.trim().lowercase() }?.filter { it.isNotEmpty() }.orEmpty()
 
     /** True when the variant names its codecs and none of them is a video codec. */
     val audioOnly: Boolean = height == null && codecs.isNotEmpty() && codecs.none { it.substringBefore('.') in VIDEO_CODECS }
@@ -138,11 +139,13 @@ internal class HlsVariant(val tagLine: Int, val uriLine: Int, val attributes: Ma
 }
 
 /**
- * Chooses the variant to play. A variant with a picture wins over one with sound only, one without
- * Dolby Vision profile 5 over one with it, because profile 5 is composed on the processor, and HDR
- * over SDR when [fit] says the output shows HDR, SDR over HDR otherwise (#447). Among the rest, the
- * variant with the highest bitrate within [maxBitrate], [maxVideoHeight] and [fit]'s pixel cap
- * plays, and the first one listed wins a tie.
+ * Chooses the variant to play. A variant whose every codec [decodable] accepts wins over one with
+ * a codec this build cannot decode (#625), so a master that offers each quality with AAC and with
+ * E-AC-3 plays the AAC one where no E-AC-3 decoder exists. Then a variant with a picture wins over
+ * one with sound only, one without Dolby Vision profile 5 over one with it, because profile 5 is
+ * composed on the processor, and HDR over SDR when [fit] says the output shows HDR, SDR over HDR
+ * otherwise (#447). Among the rest, the variant with the highest bitrate within [maxBitrate],
+ * [maxVideoHeight] and [fit]'s pixel cap plays, and the first one listed wins a tie.
  * When none fits, the one with the lowest bitrate plays.
  */
 internal fun chooseHlsVariant(
@@ -150,12 +153,14 @@ internal fun chooseHlsVariant(
     maxBitrate: Long?,
     maxVideoHeight: Int?,
     fit: VariantFit? = null,
+    decodable: (String) -> Boolean = { true },
 ): HlsVariant {
     require(variants.isNotEmpty()) { "a master playlist has at least one variant" }
     var pool = variants
     fun prefer(keep: (HlsVariant) -> Boolean) {
         pool.filter(keep).takeIf { it.isNotEmpty() }?.let { pool = it }
     }
+    prefer { variant -> variant.codecs.all(decodable) }
     prefer { !it.audioOnly }
     prefer { !it.dolbyVisionOnly }
     val showsHdr = fit?.showsHdr == true
@@ -248,6 +253,7 @@ internal fun keepOneHlsVariant(
     maxVideoHeight: Int?,
     wanted: Int? = null,
     fit: VariantFit? = null,
+    decodable: (String) -> Boolean = { true },
 ): HlsMaster? {
     val lines = text.removePrefix("﻿").split('\n').map { it.removeSuffix("\r") }
     val variants = mutableListOf<HlsVariant>()
@@ -267,7 +273,7 @@ internal fun keepOneHlsVariant(
         index++
     }
     if (variants.isEmpty()) return null
-    val chosen = wanted?.let(variants::getOrNull) ?: chooseHlsVariant(variants, maxBitrate, maxVideoHeight, fit)
+    val chosen = wanted?.let(variants::getOrNull) ?: chooseHlsVariant(variants, maxBitrate, maxVideoHeight, fit, decodable)
     // The rendition group of each type that the chosen variant names, if any.
     val groups = listOf("AUDIO", "VIDEO", "SUBTITLES", "CLOSED-CAPTIONS").associateWith { chosen.attributes[it] }
     val dropped = HashSet<Int>()
@@ -294,4 +300,45 @@ internal fun keepOneHlsVariant(
         backupsOf(chosen, variants, lines),
         variants.map { lines[it.uriLine].trim() },
     )
+}
+
+/**
+ * The FFmpeg decoder for the RFC 6381 codec [name] that a variant's `CODECS` lists, such as `h264`
+ * for `avc1.640028` and `eac3` for `ec-3`, or null for a name this does not know, which a choice
+ * then takes as playable rather than refuse what it cannot judge (#625).
+ */
+internal fun ffmpegDecoderForCodec(name: String): String? {
+    val codec = name.trim().lowercase()
+    val family = codec.substringBefore('.')
+    return when (family) {
+        "avc1", "avc3", "dva1", "dvav" -> "h264"
+        "hvc1", "hev1", "dvh1", "dvhe" -> "hevc"
+        "av01", "dav1" -> "av1"
+        "vp09", "vp9" -> "vp9"
+        "vp08", "vp8" -> "vp8"
+        "mp4v" -> "mpeg4"
+        "mp4a" -> when (codec.substringAfter('.', "")) {
+            "40.34", "69", "6b" -> "mp3"
+            "a5" -> "ac3"
+            "a6" -> "eac3"
+            "a9", "ac" -> "dca"
+            else -> "aac"
+        }
+        "ac-3" -> "ac3"
+        "ec-3" -> "eac3"
+        "ac-4" -> "ac4"
+        "opus" -> "opus"
+        "flac", "fla" -> "flac"
+        "alac" -> "alac"
+        "vorbis" -> "vorbis"
+        "mp3" -> "mp3"
+        "dtsc", "dtsh", "dtsl", "dtse" -> "dca"
+        else -> null
+    }
+}
+
+/** True when this build of FFmpeg decodes the codec [name] that a variant lists, or cannot tell. */
+internal fun hlsCodecDecodable(name: String): Boolean {
+    val decoder = ffmpegDecoderForCodec(name) ?: return true
+    return runCatching { io.github.yuroyami.kiteffmpeg.FFmpeg.hasDecoder(decoder) }.getOrDefault(true)
 }

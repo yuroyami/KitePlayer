@@ -42,6 +42,9 @@ class SongScannerTest {
         /** An item whose every open fails. */
         var failingUri: String? = null
 
+        /** How far past what was asked a seek into the song lands, as an estimate seek can. */
+        var lateLandingMicros = 0L
+
         override suspend fun scan(target: ScanTarget, range: AudioScanRange?, sink: AudioScanSink): ScanOutcome {
             scans++
             started.value++
@@ -51,8 +54,11 @@ class SongScannerTest {
             val format = AudioFormat(48_000, 2, SampleFormat.F32)
             val block = FloatArray(2048)
             // A seek lands on a block boundary at or before what was asked for, as a container does.
-            var start = (((range?.from?.micros ?: 0L) * 48_000 / 1_000_000L) / 1024 * 1024)
+            val asked = range?.from?.micros ?: 0L
+            val landing = if (asked > 0L) asked + lateLandingMicros else asked
+            var start = ((landing * 48_000 / 1_000_000L) / 1024 * 1024)
                 .toInt().coerceIn(0, audio.size)
+            val firstMicros = start * 1_000_000L / 48_000
             val until = range?.until?.micros
             var first = true
             var end = 0L
@@ -70,7 +76,7 @@ class SongScannerTest {
                 cancelled++
                 throw cancellation
             }
-            return ScanOutcome(target.track ?: TrackId(0), reachedEnd = start >= audio.size, end)
+            return ScanOutcome(target.track ?: TrackId(0), reachedEnd = start >= audio.size, end, firstMicros)
         }
     }
 
@@ -404,6 +410,24 @@ class SongScannerTest {
         rig.settleAll()
         assertEquals(1, rig.source.scans, "a six second song scanned in one pass")
         assertNull(rig.source.ranges.single(), "one pass asks for no range")
+        rig.close()
+    }
+
+    /**
+     * A seek that lands long past what a range asked for leaves a hole at the start of the stretch
+     * the range owns, so the song is scanned again in one pass (#671). Joined, the map called the
+     * hole covered and was installed as complete.
+     */
+    @Test
+    fun aRangeWhoseSeekLandedPastItsWarmUpSendsTheSongToOnePass() {
+        val source = FakeSource(SyntheticSong.drumLoop(130f))
+        source.lateLandingMicros = 50_000_000L
+        val rig = Rig(source, workers = 2)
+        rig.target(ScanTarget(MediaItem("file:///long.flac"), TrackId(1), null, 130_000_000L, true))
+        rig.settleAll()
+        assertEquals(2, source.ranges.count { it != null }, "the song was not cut into two ranges")
+        assertTrue(source.ranges.last() == null, "a range that started 50 s late was joined: ${source.ranges}")
+        assertTrue(rig.installs.maps.single().map.complete)
         rig.close()
     }
 }

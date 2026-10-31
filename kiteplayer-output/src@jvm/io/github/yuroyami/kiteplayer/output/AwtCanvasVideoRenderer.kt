@@ -93,6 +93,10 @@ public fun interface AwtCanvasDecoration {
  * scheduler, [setOverlay] on the subtitle raster lane and the actor, the picture controls on the
  * actor, and a resize on the AWT event thread. One paint lock serialises every draw, and
  * [setCanvas] and [close] take it too, so a canvas handed back is fenced from the paint in flight.
+ * The fence waits for that paint for at most 500 ms and then goes on without it (#691), because the
+ * view calls [setCanvas] under AWT's tree lock and a paint that builds a `BufferStrategy` may want
+ * that lock, so an unbounded wait could deadlock the event thread (#225). See [setCanvas] for what
+ * a paint that outlives the wait can still do.
  */
 public class AwtCanvasVideoRenderer(
     private val painter: AwtFramePainter,
@@ -260,8 +264,15 @@ public class AwtCanvasVideoRenderer(
     /**
      * The canvas to paint into, or null to fence all painting off the previous one.
      *
-     * Passing null must return only once no paint can touch that canvas again, because the view
-     * calls it while AWT is about to destroy the peer.
+     * The view calls this with null while AWT is about to destroy the peer, so the call waits for the
+     * paint in flight before it lets the previous canvas go. The wait is bounded at 500 ms (#691): the
+     * view calls this under AWT's tree lock, which a paint that builds a `BufferStrategy` may want, so
+     * waiting for ever could deadlock the event thread (#225). Every paint that starts after this
+     * returns sees the new canvas, or none. A paint that was already running and outlives the wait,
+     * which takes a stall such as a long garbage collection, keeps the previous canvas it read and
+     * can still finish drawing into its `BufferStrategy` while the peer goes, where AWT drops the
+     * picture or the paint fails. A picture that never reached the screen this way is lost, and
+     * the next frame paints into the new canvas.
      */
     public fun setCanvas(canvas: Canvas?) {
         val previous = fenced {
@@ -448,6 +459,7 @@ public class AwtCanvasVideoRenderer(
 
     private fun overlaySnapshot(): SubtitleOverlay? = synchronized(lock) { overlay }
 
+    /** Lets the canvas go and stops painting, after the paint in flight, waited for as [setCanvas] does. */
     override fun close() {
         fenced { closeFenced() }
     }

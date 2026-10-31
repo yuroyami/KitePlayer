@@ -172,6 +172,12 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- TTML subtitles keep their timing and their spaces (#492). A span with times of its own showed
+  for its whole paragraph, a sequence of containers with no times of their own stopped after the
+  first, and `xml:space="preserve"` was collapsed anyway and not inherited from the elements
+  around a paragraph. A paragraph is now a cue for each stretch in which the same spans show, a
+  container ends where its children end, and preserved spaces and line feeds stay as written. The
+  same reader serves TTML in HLS and DASH.
 - An external MicroDVD file in UTF-16 now loads (#492). FFmpeg's probe of its raw bytes threw,
   and the throw ended the read before the text the player had already decoded was tried.
 - The XSPF playlist reader now reads the list as XML (#490). It searched the text with patterns,

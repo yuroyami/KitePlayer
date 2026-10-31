@@ -31,6 +31,55 @@ class TtmlParserTest {
         assertFalse(TtmlParser.isTtml("WEBVTT\n\n00:01.000 --> 00:02.000\n<tt>"))
     }
 
+    private fun timed(cues: List<SubtitleCue>) = cues.map { Triple(it.startMicros, it.endMicros, (it as SubtitleCue.Text).text) }
+
+    /**
+     * A container with no times of its own ends where its children end, so a sequence of such
+     * containers goes on past the first (#492). It ended there, and every later cue was lost.
+     */
+    @Test
+    fun aSequenceOfContainersWithNoTimesOfTheirOwnPlaysEachInTurn() {
+        val nested = TtmlParser.parse(
+            tt("""<div timeContainer="seq"><div><p dur="1s">one</p></div><div><p dur="2s">two</p></div></div>"""),
+        )
+        assertEquals(listOf(Triple(0L, 1_000_000L, "one"), Triple(1_000_000L, 3_000_000L, "two")), timed(nested))
+        // An explicit end still wins, and still clips what it holds.
+        val clipped = TtmlParser.parse(
+            tt("""<div timeContainer="seq"><div dur="500ms"><p dur="1s">one</p></div><div><p dur="2s">two</p></div></div>"""),
+        )
+        assertEquals(listOf(Triple(0L, 500_000L, "one"), Triple(500_000L, 2_500_000L, "two")), timed(clipped))
+    }
+
+    /** A span with times of its own shows only then (#492): it showed for the whole paragraph. */
+    @Test
+    fun aTimedSpanShowsOnlyInItsOwnInterval() {
+        val cues = TtmlParser.parse(tt("""<p begin="0s" end="3s">Always <span begin="1s" end="2s">middle</span></p>"""))
+        assertEquals(
+            listOf(Triple(0L, 1_000_000L, "Always"), Triple(1_000_000L, 2_000_000L, "Always middle"), Triple(2_000_000L, 3_000_000L, "Always")),
+            timed(cues),
+        )
+        // Two spans with intervals of their own, and a span alone in its paragraph.
+        val two = TtmlParser.parse(tt("""<p begin="0s" end="4s"><span dur="2s">first</span> <span begin="2s">second</span></p>"""))
+        assertEquals(listOf(Triple(0L, 2_000_000L, "first"), Triple(2_000_000L, 4_000_000L, "second")), timed(two))
+        val alone = TtmlParser.parse(tt("""<p begin="0s" end="3s"><span begin="1s" end="2s">Only in middle</span></p>"""))
+        assertEquals(listOf(Triple(1_000_000L, 2_000_000L, "Only in middle")), timed(alone))
+    }
+
+    /** `xml:space="preserve"` keeps spaces and line feeds, inherited, until a descendant resets it (#492). */
+    @Test
+    fun preservedSpaceKeepsItsSpacesAndLineFeedsAndIsInherited() {
+        val own = TtmlParser.parse(tt("""<p begin="0s" end="1s" xml:space="preserve">  A   B  </p>""")).single() as SubtitleCue.Text
+        assertEquals("  A   B  ", own.text)
+        val inherited = TtmlParser.parse(tt("<div xml:space=\"preserve\"><p begin=\"0s\" end=\"1s\">A\nB</p></div>")).single() as SubtitleCue.Text
+        assertEquals("A\nB", inherited.text)
+        val reset = TtmlParser.parse(
+            tt("""<div xml:space="preserve"><p begin="0s" end="1s" xml:space="default">  A   B  </p></div>"""),
+        ).single() as SubtitleCue.Text
+        assertEquals("A B", reset.text)
+        // With no xml:space at all, runs of space still collapse.
+        assertEquals("A B", (TtmlParser.parse(tt("""<p begin="0s" end="1s">  A   B  </p>""")).single() as SubtitleCue.Text).text)
+    }
+
     @Test
     fun paragraphsAreCuesInTimeOrderWithTheirText() {
         val cues = TtmlParser.parse(

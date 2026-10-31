@@ -1425,6 +1425,10 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
             "volume must be finite and not negative, was ${memento.volume}"
         }
         checkBalance(memento.balance)
+        // Clamped to the player's range below, but a clamp keeps a NaN, and the setter then threw
+        // after the playing item had already been stopped (#213).
+        require(memento.dialogueLevelDb.isFinite()) { "the dialogue level must be finite, was ${memento.dialogueLevelDb}" }
+        require(memento.pitchSemitones.isFinite()) { "the pitch must be finite, was ${memento.pitchSemitones}" }
         checkDelay("subtitle delay", memento.subtitleDelay)
         checkDelay("audio delay", memento.audioDelay)
         checkSubtitleScale(memento.subtitleScale)

@@ -228,6 +228,33 @@ class PlayerViewBindingTest {
         assertEquals(listOf("create 7", "attach a 7", "close 7"), log)
     }
 
+    /**
+     * A view that still holds a closed player shows nothing when its surface comes back, rather
+     * than throwing from inside the platform callback, and keeps no renderer alive (#603).
+     */
+    @Test
+    fun aPlayerThatRefusesTheRendererLeavesTheViewEmptyAndThrowsNothing() {
+        val b = PlayerViewBinding<String, Int>(
+            createRenderer = { 7.also { log += "create $it" } },
+            attach = { player, renderer ->
+                log += "attach $player $renderer"
+                throw IllegalStateException("the player is closed, so attachRenderer cannot run")
+            },
+            detach = { player, renderer -> log += "detach $player $renderer" },
+            close = { renderer -> log += "close $renderer" },
+            refusesAttach = { it is IllegalStateException },
+        )
+
+        b.setPlayer("closed")
+        b.surfaceReady()
+
+        assertNull(b.activeRenderer)
+        assertEquals(listOf("create 7", "attach closed 7", "close 7"), log)
+        // Clearing the view afterwards has nothing left to undo.
+        b.setPlayer(null)
+        assertEquals(listOf("create 7", "attach closed 7", "close 7"), log)
+    }
+
     @Test
     fun aCloseFailureStillDetachesAndSuppressesADetachFailure() {
         val closeFailure = IllegalStateException("close failed")

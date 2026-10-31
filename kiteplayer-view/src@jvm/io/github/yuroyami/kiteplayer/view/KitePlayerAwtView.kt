@@ -80,6 +80,9 @@ public open class KitePlayerAwtView : Canvas() {
             }
         },
         attach = { player, renderer -> player.attachRenderer(renderer) },
+        // A closed player refuses every command with IllegalStateException, and the view then shows
+        // nothing, as its detach already treats a closed player (#603).
+        refusesAttach = { it is IllegalStateException },
         detach = { player, renderer ->
             try {
                 player.detachRenderer(expected = renderer)

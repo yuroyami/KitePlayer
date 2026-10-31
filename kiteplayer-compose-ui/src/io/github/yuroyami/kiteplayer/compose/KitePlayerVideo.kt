@@ -215,7 +215,14 @@ private fun ComposeCanvasVideo(
         val currentPlayer = player ?: return@LaunchedEffect
         // One frame so KiteVideo has laid out and, on Android, bound its GPU path to the window.
         withFrameNanos { }
-        currentPlayer.attachRenderer(videoState.renderer)
+        try {
+            currentPlayer.attachRenderer(videoState.renderer)
+        } catch (refused: IllegalStateException) {
+            // A closed player refuses every command, and the picture then stays empty, as the
+            // detach below already treats a closed player, instead of failing the composition (#603).
+            io.github.yuroyami.kiteplayer.KiteLog.log("KitePlayerVideo", "no picture, because the player refused the renderer: ${refused.message}")
+            return@LaunchedEffect
+        }
         currentOnRendererAttached(currentPlayer)
     }
     DisposableEffect(player, videoState) {

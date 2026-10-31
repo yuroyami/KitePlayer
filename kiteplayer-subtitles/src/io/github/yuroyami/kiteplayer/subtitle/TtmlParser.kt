@@ -70,7 +70,7 @@ public object TtmlParser {
 
     internal fun read(text: String, work: TtmlWork, maxCues: Int = MAX_FILE_CUES): List<SubtitleCue.Text> {
         val root = try {
-            XmlMini.parse(text.removePrefix("﻿"), XmlMini.Limits(keepContent = true))
+            XmlMini.parse(text, XmlMini.Limits(keepContent = true))
         } catch (refusal: XmlSyntaxException) {
             throw IllegalArgumentException("not a well formed TTML document: ${refusal.message}", refusal)
         }

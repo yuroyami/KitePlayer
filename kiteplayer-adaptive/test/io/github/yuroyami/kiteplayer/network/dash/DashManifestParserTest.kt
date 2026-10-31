@@ -95,6 +95,24 @@ class DashManifestParserTest {
     }
 
     @Test
+    fun aManifestThatStartsWithAByteOrderMarkParsesAsWithout() {
+        // An origin built on .NET writes EF BB BF before the MPD, which decodes to U+FEFF (#617).
+        val marked = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) + templateMpd.encodeToByteArray()
+        val url = "http://cdn.test/vod/movie.mpd"
+        val manifest = DashDoor.manifest(marked, url, DashUrlPolicy.Default, 8L * 1024 * 1024)
+        val plain = DashManifestParser.parse(templateMpd, url)
+        val period = manifest.periods.single()
+        val hi = period.adaptationSets.single().representations.first { it.id == "hi" }
+        val plainPeriod = plain.periods.single()
+        val plainHi = plainPeriod.adaptationSets.single().representations.first { it.id == "hi" }
+        assertEquals(plain.durationMicros, manifest.durationMicros)
+        assertEquals(
+            DashManifestParser.segmentPlan(plain, plainPeriod, plainHi).mediaUrls,
+            DashManifestParser.segmentPlan(manifest, period, hi).mediaUrls,
+        )
+    }
+
+    @Test
     fun aSegmentTimelineDrivesCountAndTimeSubstitution() {
         val mpd = """
             <MPD type="static" mediaPresentationDuration="PT6S">

@@ -167,6 +167,10 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- `PlayerMemento.fromProperties` and `KitePlayer.thumbnailAt` now declare what they throw, so a
+  Swift app catches the error instead of ending (#652). A memento written by a newer build, as
+  after going back from a test build, ended the app at every launch. The Apple media session's
+  calls still declare nothing.
 - `kiteplayer-compose-ui` now exports Compose Foundation (#614). The documented controls call,
   `KitePlayerVideo(player) { KitePlayerControls(player) }`, takes a `BoxScope` lambda, and the
   published POM gave Foundation the runtime scope only, so an app with no Foundation of its own

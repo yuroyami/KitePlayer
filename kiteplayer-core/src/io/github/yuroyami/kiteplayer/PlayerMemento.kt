@@ -193,9 +193,14 @@ public data class PlayerMemento(
         /**
          * Reads what [asProperties] wrote.
          *
-         * @throws IllegalArgumentException when the version is missing or not [FORMAT_VERSION],
-         *         when a required key is missing, or when a value does not parse.
+         * Declared for Swift and Objective-C, where an undeclared exception ends the app (#652): a
+         * memento written by a newer build, as after going back from a test build, is refused here
+         * at every launch until the stored text changes.
+         *
+         * @throws IllegalArgumentException when the version is missing or outside 1 to
+         *         [FORMAT_VERSION], when a required key is missing, or when a value does not parse.
          */
+        @Throws(IllegalArgumentException::class)
         public fun fromProperties(properties: Map<String, String>): PlayerMemento {
             val version = properties["version"]?.toIntOrNull()
             // Version 1 knew nothing about balance, the equaliser or any picture and subtitle

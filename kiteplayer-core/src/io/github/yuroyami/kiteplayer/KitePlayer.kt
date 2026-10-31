@@ -1211,7 +1211,11 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * image playlist, which [Tracks.thumbnails] lists. An image downloads only when it is asked
      * for, and a few recent ones are kept, so asking at every step of a scrub costs one download
      * for each image. The picture's times count from the item's start, as [position] does.
+     *
+     * @throws IllegalStateException when the player is closed, declared for Swift as every other
+     *         suspending call is (#652).
      */
+    @Throws(Exception::class)
     public suspend fun thumbnailAt(position: Duration): StreamThumbnail? = core.thumbnailAt(position)
 
     /**

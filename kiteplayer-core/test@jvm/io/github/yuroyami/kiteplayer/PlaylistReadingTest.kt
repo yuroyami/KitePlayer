@@ -7,6 +7,7 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
@@ -64,22 +65,24 @@ class PlaylistReadingTest {
         file("back.m3u", "outer2.m3u\n")
         val outer = file("outer2.m3u", "back.m3u\n")
         val harness = CoreHarness(this)
-        val self = assertFailsWith<PlaylistException> { harness.core.readPlaylist(loop.absolutePath, emptyMap()) }
-        assertEquals(loop.absolutePath, self.uri)
-        assertFailsWith<PlaylistException> { harness.core.readPlaylist(outer.absolutePath, emptyMap()) }
+        val self = assertFailsWith<PlaybackException> { harness.core.readPlaylist(loop.absolutePath, emptyMap()) }
+        assertEquals(loop.absolutePath, assertIs<PlaybackError.NotMedia>(self.error).uri)
+        assertIs<PlaybackError.NotMedia>(assertFailsWith<PlaybackException> { harness.core.readPlaylist(outer.absolutePath, emptyMap()) }.error)
         harness.close()
     }
 
     @Test
     fun whatCannotBecomeAQueueIsRefused() = runTest {
         val harness = CoreHarness(this)
-        val missing = assertFailsWith<PlaylistException> { harness.core.readPlaylist("${folder.absolutePath}/missing.m3u", emptyMap()) }
-        assertTrue("could not be read" in missing.message.orEmpty(), missing.message)
+        // Each is the typed error every other call throws, so a caller's catch of PlaybackException holds (#654).
+        val missing = assertFailsWith<PlaybackException> { harness.core.readPlaylist("${folder.absolutePath}/missing.m3u", emptyMap()) }
+        val unreadable = assertIs<PlaybackError.SourceUnavailable>(missing.error)
+        assertTrue("could not be read" in unreadable.detail.orEmpty(), missing.message)
         val hls = file("live.m3u8", "#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\nseg.ts\n")
-        assertFailsWith<PlaylistException> { harness.core.readPlaylist(hls.absolutePath, emptyMap()) }
+        assertIs<PlaybackError.NotMedia>(assertFailsWith<PlaybackException> { harness.core.readPlaylist(hls.absolutePath, emptyMap()) }.error)
         val empty = file("empty.pls", "[playlist]\nNumberOfEntries=0\n")
-        val nothing = assertFailsWith<PlaylistException> { harness.core.readPlaylist(empty.absolutePath, emptyMap()) }
-        assertTrue("names nothing" in nothing.message.orEmpty(), nothing.message)
+        val nothing = assertFailsWith<PlaybackException> { harness.core.readPlaylist(empty.absolutePath, emptyMap()) }
+        assertTrue("names nothing" in assertIs<PlaybackError.NotMedia>(nothing.error).detail.orEmpty(), nothing.message)
         harness.close()
     }
 }

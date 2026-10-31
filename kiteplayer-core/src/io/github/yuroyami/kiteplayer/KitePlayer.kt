@@ -1039,8 +1039,9 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * keeps its titles. A list it names is read in its place, one level deep, and the items it names
      * from the playlist's own server carry [headers] too.
      *
-     * @throws PlaylistException when the list cannot be read, is no playlist, names nothing, or
-     *         names itself.
+     * @throws PlaybackException with [PlaybackError.SourceUnavailable] when the list cannot be
+     *         read, and with [PlaybackError.NotMedia] when it is no playlist, names nothing, or names
+     *         itself, the reason in its detail (#654).
      */
     @Throws(Exception::class)
     public suspend fun readPlaylist(uri: String, headers: Map<String, String> = emptyMap()): List<MediaItem> =

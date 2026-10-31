@@ -2159,11 +2159,12 @@ internal class PlaybackCore(
                 items += item
                 continue
             }
-            if (item.uri == uri) throw io.github.yuroyami.kiteplayer.PlaylistException("the playlist names itself", uri)
+            if (item.uri == uri) throw playlistRefused(uri, "the playlist names itself")
             // One level deep. A list that cannot be read is kept as an item, which FFmpeg may still open.
             val nested = try {
                 readPlaylistItems(item.uri, item.headers)
-            } catch (_: io.github.yuroyami.kiteplayer.PlaylistException) {
+            } catch (refused: PlaybackException) {
+                if (refused.error !is PlaybackError.SourceUnavailable && refused.error !is PlaybackError.NotMedia) throw refused
                 null
             }
             if (nested == null) {
@@ -2171,21 +2172,26 @@ internal class PlaybackCore(
                 continue
             }
             if (nested.any { it.uri == uri || it.uri == item.uri }) {
-                throw io.github.yuroyami.kiteplayer.PlaylistException("the playlist ${redactUri(item.uri)} names a list it is in", uri)
+                throw playlistRefused(uri, "the playlist ${redactUri(item.uri)} names a list it is in")
             }
             items += nested
         }
-        if (items.isEmpty()) throw io.github.yuroyami.kiteplayer.PlaylistException("the playlist names nothing", uri)
+        if (items.isEmpty()) throw playlistRefused(uri, "the playlist names nothing")
         return items
     }
+
+    /** A list that was read and cannot become a queue, as the typed error every call throws (#654). */
+    private fun playlistRefused(uri: String, detail: String): PlaybackException =
+        PlaybackException(PlaybackError.NotMedia(uri, detail))
 
     /** The items of the one list at [uri], its own server's entries carrying [headers]. */
     private suspend fun readPlaylistItems(uri: String, headers: Map<String, String>): List<MediaItem> {
         val parent = MediaItem(uri, headers = headers)
         val bytes = when (val read = readSubtitleBytes(SubtitleSource(uri = uri), parent)) {
             is SubtitleBytes.Read -> read.bytes
-            is SubtitleBytes.Refused ->
-                throw io.github.yuroyami.kiteplayer.PlaylistException("the playlist could not be read: ${read.reason}", uri)
+            is SubtitleBytes.Refused -> throw PlaybackException(
+                PlaybackError.SourceUnavailable(uri, cause = null, detail = "the playlist could not be read: ${read.reason}"),
+            )
         }
         val parser = backend.subtitleFileParser()
         val text = decodeSubtitleBytes(
@@ -2194,10 +2200,7 @@ internal class PlaybackCore(
             eastAsian = { data, encoding -> parser?.decode(data, encoding) },
         ).text
         val parsed = io.github.yuroyami.kiteplayer.Playlists.parse(text, uri)
-            ?: throw io.github.yuroyami.kiteplayer.PlaylistException(
-                "it is no playlist this player reads; an HLS playlist plays as one item, through open",
-                uri,
-            )
+            ?: throw playlistRefused(uri, "it is no playlist this player reads; an HLS playlist plays as one item, through open")
         if (headers.isEmpty()) return parsed
         return parsed.map { item ->
             if (sameHttpOrigin(item.uri, uri)) item.copy(headers = headers + item.headers) else item

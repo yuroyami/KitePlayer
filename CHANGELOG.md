@@ -51,6 +51,13 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Changed
 
+- `readPlaylist` and `openPlaylist` now fail with `PlaybackException`, as every other call does
+  (#654). A list that cannot be read gives `PlaybackError.SourceUnavailable`, and one that is no
+  playlist, names nothing or names itself gives `PlaybackError.NotMedia`, with the reason in its
+  detail. They threw `PlaylistException` before, a plain exception that a `catch` of
+  `PlaybackException` let through, so an app that followed the documented rule crashed on a 404.
+  `PlaylistException` is deprecated and no call throws it, so code that catches it must catch
+  `PlaybackException` instead.
 - On Android the volume now applies after the AudioTrack's own buffer, so a change, mute and the
   sleep timer's fade are heard almost at once rather than about 170 ms late (#14). The sink passes
   the volume up to 1 to `AudioTrack.setVolume`, and the ring keeps only a boost above 1, so at a

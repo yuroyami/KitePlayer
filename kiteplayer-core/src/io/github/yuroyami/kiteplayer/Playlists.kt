@@ -44,5 +44,13 @@ public object Playlists {
 /**
  * A playlist that cannot become a queue: one that cannot be read, that is no playlist, that names
  * nothing, or that names itself, directly or through a list it names. [uri] is the list's address.
+ *
+ * No call throws this any more (#654). [KitePlayer.readPlaylist] and [KitePlayer.openPlaylist]
+ * throw [PlaybackException], as every other call that fails does, with
+ * [PlaybackError.SourceUnavailable] or [PlaybackError.NotMedia].
  */
+@Deprecated(
+    "readPlaylist and openPlaylist throw PlaybackException, with SourceUnavailable or NotMedia. Catch that instead.",
+    ReplaceWith("PlaybackException", "io.github.yuroyami.kiteplayer.PlaybackException"),
+)
 public class PlaylistException(message: String, public val uri: String) : Exception(message)

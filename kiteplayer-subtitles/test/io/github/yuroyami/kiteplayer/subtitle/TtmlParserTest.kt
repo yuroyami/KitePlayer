@@ -160,6 +160,23 @@ class TtmlParserTest {
         assertEquals(5_000_000L to 8_000_000L, empty.getValue("timed").let { it.startMicros to it.endMicros }, "its own time")
     }
 
+    /** Sub-frames are a whole count at ttp:subFrameRate per frame, not a decimal fraction of a frame (#628). */
+    @Test
+    fun subFramesCountAtTheSubFrameRate() {
+        val halves = TtmlParser.parse(
+            tt(
+                """<p begin="00:00:10:00.1" end="00:00:10:12">x</p>""",
+                parameters = """ttp:frameRate="25" ttp:subFrameRate="2"""",
+            ),
+        ).single()
+        assertEquals(10_020_000L, halves.startMicros, "half a frame at 25 fps")
+        assertEquals(10_480_000L, halves.endMicros, "twelve whole frames")
+        val twelfths = TtmlParser.parse(
+            tt("""<p begin="00:00:10:00.10" end="00:00:11:00">x</p>""", parameters = """ttp:frameRate="25" ttp:subFrameRate="12""""),
+        ).single()
+        assertEquals(10_033_333L, twelfths.startMicros, "ten twelfths of a frame at 25 fps")
+    }
+
     @Test
     fun aRightToLeftParagraphStartsAtTheRight() {
         val cues = TtmlParser.parse(

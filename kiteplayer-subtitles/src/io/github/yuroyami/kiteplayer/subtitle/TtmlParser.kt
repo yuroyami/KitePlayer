@@ -638,7 +638,8 @@ public object TtmlParser {
                 var seconds = g[1].toDouble() * 3600 + g[2].toDouble() * 60 + g[3].toDouble()
                 if (g[4].isNotEmpty()) seconds += "0${g[4]}".toDouble()
                 if (g[5].isNotEmpty()) seconds += g[5].toDouble() / frameRate
-                if (g[6].isNotEmpty()) seconds += "0.${g[6]}".toDouble() / frameRate
+                // Sub-frames are a whole count, at ttp:subFrameRate of them in each frame (#628).
+                if (g[6].isNotEmpty()) seconds += g[6].toDouble() / subFrameRate / frameRate
                 return (seconds * 1_000_000).roundToLong()
             }
             OFFSET_TIME.matchEntire(value)?.let { match ->

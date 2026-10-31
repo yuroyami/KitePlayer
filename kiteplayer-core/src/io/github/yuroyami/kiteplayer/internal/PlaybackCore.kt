@@ -11485,6 +11485,9 @@ internal class PlaybackCore(
                     val afterRemoval = if (edit.from < queueIndex) queueIndex - 1 else queueIndex
                     if (edit.to <= afterRemoval) afterRemoval + 1 else afterRemoval
                 }
+                // Unshuffled, the play order IS the list, so it follows the move. Carried over as
+                // above, it kept the old sequence, and a track dragged to play next did not (#688).
+                if (!shuffleEnabled) queueOrder = queueItems.indices.toList()
                 publishSnapshot()
                 reply.complete(Unit)
             }
@@ -11502,6 +11505,15 @@ internal class PlaybackCore(
 
     private suspend fun removeQueueItem(index: Int, reply: CompletableDeferred<Unit>) {
         val removedPlaying = index == queueIndex
+        // What followed it in PLAY order, chosen before the order loses it. Taken from the list
+        // instead, a shuffled queue opened the item after it on screen rather than the one due
+        // next, and stopped at the end of the list with tracks still to play (#688). LoopMode.All
+        // is what makes the ends meet, here as everywhere else in the queue.
+        val successor = if (!removedPlaying) null else {
+            val at = queueOrder.indexOf(index)
+            queueOrder.getOrNull(at + 1)
+                ?: if (loop == LoopMode.All) queueOrder.firstOrNull { it != index } else null
+        }
         queueItems = queueItems.toMutableList().apply { removeAt(index) }
         queueOrder = queueOrder.filter { it != index }.map { if (it > index) it - 1 else it }
         failedQueueIndices = failedQueueIndices.filter { it != index }.map { if (it > index) it - 1 else it }.toSet()
@@ -11511,19 +11523,13 @@ internal class PlaybackCore(
             reply.complete(Unit)
             return
         }
-        // What followed it takes its place. LoopMode.All is what makes the ends meet, here as
-        // everywhere else in the queue.
-        val next = when {
-            index < queueItems.size -> index
-            loop == LoopMode.All && queueItems.isNotEmpty() -> 0
-            else -> null
-        }
+        // What followed it takes its place, numbered for the list without it.
+        val next = successor?.let { if (it > index) it - 1 else it }
         if (next == null) {
             // Nothing followed it, so the player stops rather than holding a picture of media the
-            // queue no longer contains. The cursor rests on the last item still there, so
-            // previous() has somewhere to go; an emptied queue puts it back to -1, which is the
-            // same expression.
-            queueIndex = queueItems.size - 1
+            // queue no longer contains. The cursor rests on the last item still there in play
+            // order, so previous() has somewhere to go; an emptied queue puts it back to -1.
+            queueIndex = queueOrder.lastOrNull() ?: -1
             runStop()
             reply.complete(Unit)
             return

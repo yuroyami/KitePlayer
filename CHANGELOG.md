@@ -172,6 +172,12 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- The segment store no longer renews a stored segment as fresh when the server's `304` says
+  `no-store`, says `Vary: *`, or starts to vary by a request header (#547). The `304` renewed the
+  old record whatever its headers said, so a server could not take caching back, and an entry
+  stored before a `Vary` appeared was read by requests of every value. Such a `304` now serves the
+  reader that asked and removes the entry, and a changed `Vary` moves the resource's list of
+  varied headers.
 - Cancelling the first seek bar preview of an HLS or DASH stream while its image playlist loads
   no longer leaves the stream with no previews (#433). The cancelled read marked the playlist as
   read, so every later request answered nothing. A playlist is now marked read only once its read

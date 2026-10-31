@@ -231,7 +231,18 @@ public class AudioTrackSink internal constructor(
             if (!writerFailed) return
             val format = accepted ?: return
             dead?.release()
-            driver = driverFactory.open(format, content).also { it.setVolume(deviceGain) }
+            // Null before the open, as the desktop sink does it: a reopen that throws left `driver`
+            // on the track released just above, so the next pause, stop or close called it and
+            // threw (#665). Null and still failed is the honest state, and the next start retries.
+            driver = null
+            val fresh = driverFactory.open(format, content)
+            try {
+                fresh.setVolume(deviceGain)
+            } catch (failure: Throwable) {
+                fresh.release()
+                throw failure
+            }
+            driver = fresh
             submittedFrames = 0L
             resetTimestampState()
             writerFailed = false

@@ -250,6 +250,12 @@ internal object DashHls {
          * because a playlist that began live may not change its type (RFC 8216, 6.2.1) (#616).
          */
         ended: Boolean = false,
+        /**
+         * How far behind the live edge a player should start, the manifest's
+         * `suggestedPresentationDelay`, written as `EXT-X-START` so that FFmpeg starts there (#627).
+         * Null, and any playlist that is not live, writes none.
+         */
+        startBehindLiveMicros: Long? = null,
     ): String =
         buildString {
             val longest = plan.segments.maxOfOrNull { it.durationMicros } ?: 1_000_000L
@@ -257,6 +263,9 @@ internal object DashHls {
             append("#EXT-X-TARGETDURATION:").append((longest + 999_999) / 1_000_000).append('\n')
             append("#EXT-X-MEDIA-SEQUENCE:").append(sequence).append('\n')
             if (!live) append("#EXT-X-PLAYLIST-TYPE:VOD\n")
+            if (live && !ended && startBehindLiveMicros != null && startBehindLiveMicros > 0) {
+                append("#EXT-X-START:TIME-OFFSET=-").append(seconds(startBehindLiveMicros)).append('\n')
+            }
             // A thumbnail set's playlist is an image playlist: each segment one grid image, whose
             // tiles share its time evenly (#433).
             val grid = images?.tiles

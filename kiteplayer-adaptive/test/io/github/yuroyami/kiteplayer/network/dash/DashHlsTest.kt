@@ -476,6 +476,22 @@ class DashHlsTest {
         assertTrue(DashManifestParser.timedPlan(manifest, period, rep, DashUrlPolicy.Default, 1_000_000L)!!.segments.isEmpty())
     }
 
+    /** A manifest's suggested delay behind the live edge reaches FFmpeg as the playlist's start point (#627). */
+    @Test
+    fun aLivePlaylistStartsAsFarBehindTheEdgeAsTheManifestSuggests() {
+        val manifest = parse(live.replace("<MPD ", "<MPD suggestedPresentationDelay=\"PT20S\" "))
+        assertEquals(20_000_000L, manifest.suggestedPresentationDelayMicros)
+        val period = manifest.periods.single()
+        val rep = period.adaptationSets.single().representations.single()
+        val plan = assertNotNull(DashManifestParser.timedPlan(manifest, period, rep, DashUrlPolicy.Default, 61_000_000L))
+        val playlist = DashHls.mediaPlaylist(plan, live = true, startBehindLiveMicros = manifest.suggestedPresentationDelayMicros)
+        assertTrue("#EXT-X-START:TIME-OFFSET=-20.000000\n" in playlist, playlist)
+        // None without a suggestion, and none in a playlist that has ended or never was live.
+        assertFalse("EXT-X-START" in DashHls.mediaPlaylist(plan, live = true))
+        assertFalse("EXT-X-START" in DashHls.mediaPlaylist(plan, live = true, ended = true, startBehindLiveMicros = 20_000_000L))
+        assertFalse("EXT-X-START" in DashHls.mediaPlaylist(plan, live = false, startBehindLiveMicros = 20_000_000L))
+    }
+
     @Test
     fun aLivePlaylistDatesEachSegmentFromTheAvailabilityStart() = runTest {
         // 2026-10-07T21:00:00Z, and a Period that starts ten seconds after it.

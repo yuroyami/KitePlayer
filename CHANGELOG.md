@@ -167,6 +167,13 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- A live HLS stream now starts where its `EXT-X-START` tag says, and a live DASH stream as far
+  behind the live edge as its `suggestedPresentationDelay` asks (#627). FFmpeg obeys the tag only
+  with its `prefer_x_start` option on, which the player never set, so every live stream started
+  three segments from the end of its playlist. The HLS open now sets it, unless the item's own
+  open options set it first, and the DASH stand-in writes the manifest's delay as the tag. A
+  playlist that has ended still starts at its beginning, because FFmpeg applies the tag only to
+  a live one.
 - An HLS stream now opens on a variant whose codecs this build can decode (#625). The choice
   took the highest bitrate whatever its `CODECS` said, so on the web, which has no E-AC-3 or AV1
   decoder, a master that offered each quality with AAC and with E-AC-3 played the picture in

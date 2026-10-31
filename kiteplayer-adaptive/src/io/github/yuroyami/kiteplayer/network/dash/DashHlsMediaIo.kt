@@ -257,7 +257,14 @@ internal class DashHlsMediaIo(
         // clock has passed, ends its playlist, so FFmpeg ends there instead of reloading a playlist
         // that never grows again for minutes (#616).
         val ended = !manifest.isDynamic || DashManifestParser.liveEnded(manifest, now)
-        DashHls.mediaPlaylist(plan, live = true, sequence = sequence, dateOriginMicros = dateOrigin(manifest), ended = ended)
+        DashHls.mediaPlaylist(
+            plan,
+            live = true,
+            sequence = sequence,
+            dateOriginMicros = dateOrigin(manifest),
+            ended = ended,
+            startBehindLiveMicros = manifest.suggestedPresentationDelayMicros,
+        )
     }
 
     /**

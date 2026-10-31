@@ -49,10 +49,15 @@ internal class HlsOpen(
 ) {
     /**
      * The pre-open options this open adds. A segment address often has no file extension, so
-     * FFmpeg's extension check must not refuse it; the opener decides which addresses open.
+     * FFmpeg's extension check must not refuse it; the opener decides which addresses open. A live
+     * playlist that names a start point with `EXT-X-START` starts there, as RFC 8216 asks, rather
+     * than three segments from its end, which FFmpeg does only with `prefer_x_start` on (#627). A
+     * key the caller set stays as the caller set it.
      */
-    fun options(item: MediaItem): Map<String, String> =
-        if (opener != null && "extension_picky" !in item.openOptions) mapOf("extension_picky" to "0") else emptyMap()
+    fun options(item: MediaItem): Map<String, String> = buildMap {
+        if (opener != null && "extension_picky" !in item.openOptions) put("extension_picky", "0")
+        if ("prefer_x_start" !in item.openOptions) put("prefer_x_start", "1")
+    }
 }
 
 /** The most bytes a playlist may have. A day of two second segments is about 3 MB. */

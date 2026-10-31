@@ -587,7 +587,7 @@ private class MediaCodecVideoDecoder(
     private var nextSyntheticPtsUs: Long = 0L
     private var outputSize: VideoSize = configuredSize
     private var outputColor: ColorSpaceInfo = outputContract.trustedOutputColor ?: stream.colorSpace
-        ?: ColorSpaceInfo.guessFor(configuredSize.height)
+        ?: ColorSpaceInfo.guessFor(configuredSize.width, configuredSize.height)
     private var outputColorValidated: Boolean = outputContract.validateOutput == null ||
         !outputContract.requireExplicitOutputColor &&
         (outputContract.trustedOutputColor ?: stream.colorSpace)?.let { declared ->
@@ -1022,9 +1022,14 @@ internal data class MediaCodecColorHints(
     val range: Int?,
 )
 
-/** Only emits Android keys that are exact representations of the stream declaration. */
+/**
+ * Only emits Android keys that are exact representations of the stream declaration. A matrix and
+ * primaries that are both this library's guess name no standard (#606), so the codec keeps
+ * Android's own default for an untagged stream, which reads the width as the guess now does.
+ */
 internal fun mediaCodecColorHints(color: ColorSpaceInfo): MediaCodecColorHints = MediaCodecColorHints(
     standard = when {
+        !color.matrixSpecified && !color.primariesSpecified -> null
         color.matrix == ColorMatrix.Unspecified && color.primaries == ColorPrimaries.Unspecified -> null
         color.matrix == ColorMatrix.Bt709 && color.primaries == ColorPrimaries.Bt709 ->
             MediaFormat.COLOR_STANDARD_BT709

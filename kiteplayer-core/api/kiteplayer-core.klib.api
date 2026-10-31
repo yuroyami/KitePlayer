@@ -1920,6 +1920,7 @@ final class io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo { // io.github.yuro
             final fun <get-Unspecified>(): io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.Companion.Unspecified.<get-Unspecified>|<get-Unspecified>(){}[0]
 
         final fun guessFor(kotlin/Int): io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.Companion.guessFor|guessFor(kotlin.Int){}[0]
+        final fun guessFor(kotlin/Int, kotlin/Int): io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.Companion.guessFor|guessFor(kotlin.Int;kotlin.Int){}[0]
     }
 }
 

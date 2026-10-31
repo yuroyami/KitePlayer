@@ -195,6 +195,13 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- An untagged picture 1280 or more pixels wide is guessed to be BT.709 whatever its height (#606),
+  as mpv and libplacebo guess. A 720p film in a scope ratio, 1280x536 with no colour tags, played
+  with the BT.601 matrix, so reds lost about 9 percent and its ASS subtitle colours were matched to
+  the same wrong matrix. `ColorSpaceInfo.guessFor(width, height)` is new, and `guessFor(height)` is
+  deprecated. On Android a guessed matrix no longer reaches the hardware decoder as a declared
+  colour standard, so the decoder keeps Android's own default for an untagged stream. Frames from
+  the FFmpeg backend still arrive with KiteFFmpeg's own guess, which changes in that repository.
 - The byte cache no longer allocates a whole chunk for every upstream read (#649). A network
   reader answers about 8 KiB a read, and the cache made a 256 KiB array for each one and walked
   thousands of small chunks on every read, so a 20 Mbit/s stream over https made about 82 MB of

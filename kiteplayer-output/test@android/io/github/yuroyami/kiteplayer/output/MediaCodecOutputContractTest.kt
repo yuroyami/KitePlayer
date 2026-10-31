@@ -55,7 +55,7 @@ class MediaCodecOutputContractTest {
     fun guessedInputNeedsARecognizedOutputStandardEvenAfterTransferRequestAcceptance() {
         val contract = requireNotNull(
             composeMediaCodecOutputContract(
-                requirement(ColorSpaceInfo.guessFor(576)),
+                requirement(ColorSpaceInfo.guessFor(720, 576)),
                 sdkInt = 31,
             ),
         )
@@ -66,7 +66,7 @@ class MediaCodecOutputContractTest {
             standard = 0,
             transferCode = 0,
             range = 0,
-            fallback = ColorSpaceInfo.guessFor(576),
+            fallback = ColorSpaceInfo.guessFor(720, 576),
             outputContract = contract,
             sourceColorDeclared = true,
         )
@@ -77,7 +77,7 @@ class MediaCodecOutputContractTest {
             standard = MediaFormat.COLOR_STANDARD_BT709,
             transferCode = null,
             range = MediaFormat.COLOR_RANGE_LIMITED,
-            fallback = ColorSpaceInfo.guessFor(576),
+            fallback = ColorSpaceInfo.guessFor(720, 576),
             outputContract = contract,
             sourceColorDeclared = true,
         )
@@ -95,7 +95,7 @@ class MediaCodecOutputContractTest {
             rangeSpecified = false,
         )
         listOf(
-            ColorSpaceInfo.guessFor(576),
+            ColorSpaceInfo.guessFor(720, 576),
             kiteCodecSdGuess,
         ).forEach { guessed ->
             val contract = requireNotNull(
@@ -108,7 +108,7 @@ class MediaCodecOutputContractTest {
         }
 
         val conventionalHd = requireNotNull(
-            composeMediaCodecOutputContract(requirement(ColorSpaceInfo.guessFor(1080)), sdkInt = 31),
+            composeMediaCodecOutputContract(requirement(ColorSpaceInfo.guessFor(1920, 1080)), sdkInt = 31),
         )
         assertNull(conventionalHd.requestedColorTransfer)
         assertFalse(conventionalHd.requireExplicitOutputColor)

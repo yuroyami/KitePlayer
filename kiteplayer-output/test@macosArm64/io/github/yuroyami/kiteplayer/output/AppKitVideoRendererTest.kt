@@ -1142,7 +1142,7 @@ class AppKitVideoRendererTest {
         override val generation: Generation = Generation.Initial,
         override val duration: Pts? = null,
         override val pixelFormat: PlayerPixelFormat = PlayerPixelFormat.Yuv420p,
-        override val colorSpace: ColorSpaceInfo = ColorSpaceInfo.guessFor(16),
+        override val colorSpace: ColorSpaceInfo = ColorSpaceInfo.guessFor(16, 16),
         override val hardwareSurface: Nothing? = null,
         override val rotationDegrees: Int = 0,
         private val ledger: LeakLedger,

@@ -252,31 +252,43 @@ public data class ColorSpaceInfo(
         /**
          * The conventional guess when a container declares nothing, which is common.
          *
-         * Standard definition content is BT.601 and high definition is BT.709, split at 576 lines.
-         * Every player uses this rule, and using a single default instead visibly wrongs one half
-         * of the world's video.
+         * Standard definition content is BT.601 and high definition is BT.709. A picture is high
+         * definition when it is 1280 or more pixels wide or more than 576 lines high, which is the
+         * rule of mpv's `csputils.c` and libplacebo's `colorspace.c` (#606). The width matters for
+         * a film in a scope ratio: a 720p rip at 1280x536 is high definition, and a guess from the
+         * height alone played it with the BT.601 matrix. A single default instead visibly wrongs
+         * one half of the world's video.
          */
-        public fun guessFor(height: Int): ColorSpaceInfo = if (height <= 576) {
-            ColorSpaceInfo(
-                ColorMatrix.Bt601,
-                ColorPrimaries.Bt601,
-                ColorTransfer.Bt601,
-                rangeSpecified = false,
-                matrixSpecified = false,
-                primariesSpecified = false,
-                transferSpecified = false,
-            )
-        } else {
-            ColorSpaceInfo(
-                ColorMatrix.Bt709,
-                ColorPrimaries.Bt709,
-                ColorTransfer.Bt709,
-                rangeSpecified = false,
-                matrixSpecified = false,
-                primariesSpecified = false,
-                transferSpecified = false,
-            )
-        }
+        public fun guessFor(width: Int, height: Int): ColorSpaceInfo =
+            if (width >= 1280 || height > 576) highDefinitionGuess else standardDefinitionGuess
+
+        /** [guessFor] from the height alone, which calls a picture of 576 lines or less standard definition. */
+        @Deprecated(
+            "A picture 1280 or more pixels wide is high definition whatever its height; pass the width too",
+            ReplaceWith("guessFor(width, height)"),
+        )
+        public fun guessFor(height: Int): ColorSpaceInfo =
+            if (height <= 576) standardDefinitionGuess else highDefinitionGuess
+
+        private val standardDefinitionGuess = ColorSpaceInfo(
+            ColorMatrix.Bt601,
+            ColorPrimaries.Bt601,
+            ColorTransfer.Bt601,
+            rangeSpecified = false,
+            matrixSpecified = false,
+            primariesSpecified = false,
+            transferSpecified = false,
+        )
+
+        private val highDefinitionGuess = ColorSpaceInfo(
+            ColorMatrix.Bt709,
+            ColorPrimaries.Bt709,
+            ColorTransfer.Bt709,
+            rangeSpecified = false,
+            matrixSpecified = false,
+            primariesSpecified = false,
+            transferSpecified = false,
+        )
     }
 }
 

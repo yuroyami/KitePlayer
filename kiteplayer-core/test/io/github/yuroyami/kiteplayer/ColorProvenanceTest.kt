@@ -1,8 +1,11 @@
 package io.github.yuroyami.kiteplayer
 
+import io.github.yuroyami.kiteplayer.spi.ColorMatrix
+import io.github.yuroyami.kiteplayer.spi.ColorPrimaries
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.ColorTransfer
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -25,7 +28,7 @@ class ColorProvenanceTest {
     @Test
     fun `a guessed colour is never high dynamic range`() {
         for (height in listOf(1, 240, 480, 576, 577, 720, 1080, 2160, 4320)) {
-            val guess = ColorSpaceInfo.guessFor(height)
+            val guess = ColorSpaceInfo.guessFor(width = height * 4 / 3, height = height)
             assertFalse(
                 guess.isHdr,
                 "guessFor($height) answered ${guess.transfer}; a guessed HDR transfer would mean " +
@@ -38,6 +41,29 @@ class ColorProvenanceTest {
         }
         assertFalse(ColorSpaceInfo.Unspecified.isHdr)
         assertFalse(ColorSpaceInfo.Unspecified.allSpecified)
+    }
+
+    /**
+     * A picture 1280 or more pixels wide is high definition whatever its height, as mpv and
+     * libplacebo guess (#606). A 720p film in a scope ratio, 1280x536, played with the BT.601
+     * matrix though it was encoded with BT.709.
+     */
+    @Test
+    fun aWidePictureIsGuessedAsHighDefinitionWhateverItsHeight() {
+        assertEquals(ColorMatrix.Bt709, ColorSpaceInfo.guessFor(width = 1280, height = 536).matrix)
+        assertEquals(ColorPrimaries.Bt709, ColorSpaceInfo.guessFor(width = 1280, height = 536).primaries)
+        assertEquals(ColorMatrix.Bt709, ColorSpaceInfo.guessFor(width = 1152, height = 648).matrix)
+        assertEquals(ColorMatrix.Bt709, ColorSpaceInfo.guessFor(width = 1920, height = 800).matrix)
+        assertEquals(ColorMatrix.Bt601, ColorSpaceInfo.guessFor(width = 720, height = 576).matrix)
+        assertEquals(ColorMatrix.Bt601, ColorSpaceInfo.guessFor(width = 1024, height = 576).matrix)
+        assertEquals(ColorMatrix.Bt601, ColorSpaceInfo.guessFor(width = 640, height = 480).matrix)
+        for (width in listOf(1, 720, 1279, 1280, 3840)) {
+            for (height in listOf(1, 480, 576, 577, 1080, 2160)) {
+                val guess = ColorSpaceInfo.guessFor(width, height)
+                assertFalse(guess.isHdr, "guessFor($width x $height) answered ${guess.transfer}")
+                assertFalse(guess.matrixSpecified, "a guess must admit it is one")
+            }
+        }
     }
 
     @Test

@@ -8878,7 +8878,7 @@ internal class PlaybackCore(
             marginRight = margins[3],
             fontScale = subtitleScale,
             linePosition = subtitlePosition,
-            videoColor = assColorTargetOf(session, fallbackHeight = videoHeight),
+            videoColor = assColorTargetOf(session, fallback = size),
         )
     }
 
@@ -8886,12 +8886,13 @@ internal class PlaybackCore(
      * The colour the ASS colours drawn over [session]'s picture are matched to (#499), or null to
      * keep them as authored: with [SubtitleConfig.assColorMatching][io.github.yuroyami.kiteplayer.SubtitleConfig.assColorMatching]
      * off, with no picture, and wherever [assColorTarget] says there is nothing to match to. A
-     * stream with no size guesses an unstated matrix from [fallbackHeight].
+     * stream with no size guesses an unstated matrix from [fallback], the picture as shown.
      */
-    private fun assColorTargetOf(session: OpenSession?, fallbackHeight: Int = 0): io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo? {
+    private fun assColorTargetOf(session: OpenSession?, fallback: VideoSize? = null): io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo? {
         if (!config.subtitles.assColorMatching) return null
         val stream = session?.videoStream ?: return null
-        return assColorTarget(stream, stream.visibleVideoSize?.height ?: fallbackHeight)
+        val picture = stream.visibleVideoSize ?: fallback
+        return assColorTarget(stream, picture?.width ?: 0, picture?.height ?: 0)
     }
 
     /** One video frame of media time, bounded so a broken frame rate cannot spin or stall the lane. */

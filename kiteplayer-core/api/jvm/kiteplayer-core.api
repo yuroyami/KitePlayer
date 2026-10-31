@@ -3913,6 +3913,7 @@ public final class io/github/yuroyami/kiteplayer/spi/ColorSpaceInfo {
 public final class io/github/yuroyami/kiteplayer/spi/ColorSpaceInfo$Companion {
 	public final fun getUnspecified ()Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;
 	public final fun guessFor (I)Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;
+	public final fun guessFor (II)Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/ColorTransfer : java/lang/Enum {

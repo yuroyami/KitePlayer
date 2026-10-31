@@ -681,7 +681,7 @@ class UIKitVideoRendererTest {
         override val generation: Generation = Generation.Initial,
         override val duration: Pts? = null,
         override val pixelFormat: PlayerPixelFormat = PlayerPixelFormat.Yuv420p,
-        override val colorSpace: ColorSpaceInfo = ColorSpaceInfo.guessFor(size.height),
+        override val colorSpace: ColorSpaceInfo = ColorSpaceInfo.guessFor(size.width, size.height),
         override val hardwareSurface: Nothing? = null,
         override val mirrored: Boolean = false,
     ) : VideoFrame {

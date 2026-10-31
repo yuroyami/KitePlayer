@@ -92,7 +92,7 @@ internal class FakeVideoFrame(
     override val duration: Pts? = null,
     override val size: VideoSize = VideoSize(1920, 1080),
     override val pixelFormat: PlayerPixelFormat = PlayerPixelFormat.Yuv420p,
-    override val colorSpace: ColorSpaceInfo = ColorSpaceInfo.guessFor(1080),
+    override val colorSpace: ColorSpaceInfo = ColorSpaceInfo.guessFor(1920, 1080),
     override val hardwareSurface: Nothing? = null,
     private val ledger: LeakLedger? = null,
     override val closedCaptions: ByteArray? = null,

@@ -1,11 +1,13 @@
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.internal.CoreCommand
+import io.github.yuroyami.kiteplayer.internal.assColorTarget
 import io.github.yuroyami.kiteplayer.internal.matchAssColor
 import io.github.yuroyami.kiteplayer.spi.ColorMatrix
 import io.github.yuroyami.kiteplayer.spi.ColorPrimaries
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.ColorTransfer
+import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
 import io.github.yuroyami.kiteplayer.subtitle.CueLayout
 import io.github.yuroyami.kiteplayer.subtitle.CueStyle
 import io.github.yuroyami.kiteplayer.subtitle.ScriptColorMatrix
@@ -87,6 +89,17 @@ class AssColorMatchingTest {
         val style = harness.output.rasterizedCueStyles.last { it.isNotEmpty() }.first()
         harness.core.close()
         return style
+    }
+
+    /**
+     * An untagged scope ratio 720p picture, 1280x536, is matched to BT.709 as its picture is (#606),
+     * not to BT.601 as a guess from the height alone made it.
+     */
+    @Test
+    fun anUntaggedWidePictureMatchesItsCuesToHighDefinition() {
+        val stream = PlayerStreamInfo(index = 0, kind = TrackKind.Video, codec = "h264", videoSize = VideoSize(1280, 536))
+        assertEquals(ColorMatrix.Bt709, assColorTarget(stream, pictureWidth = 1280, pictureHeight = 536)?.matrix)
+        assertEquals(ColorMatrix.Bt601, assColorTarget(stream, pictureWidth = 720, pictureHeight = 536)?.matrix)
     }
 
     @Test

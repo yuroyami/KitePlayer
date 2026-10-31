@@ -10,7 +10,10 @@ import kotlinx.atomicfu.atomic
  *
  * KiteLog is silent until an application installs a sink, so FFmpeg prints nothing by default,
  * and with a sink its lines arrive beside the player's own. FFmpeg's log is one setting for the
- * whole process, so the first backend that opens an item installs this once.
+ * whole process, so the first backend that opens an item installs this once. It replaces a sink
+ * the application gave `FFmpeg.setLogSink` itself, and one set after it replaces this for good,
+ * because KiteFFmpeg can neither report the sink it holds nor keep two (#670). `KiteLog` says so
+ * to applications.
  */
 internal object FFmpegLogForwarding {
     private val installed = atomic(false)

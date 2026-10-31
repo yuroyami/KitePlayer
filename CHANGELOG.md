@@ -167,6 +167,11 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- Thumbnails and encoded snapshots are now the picture as it is shown (#608). `Thumbnails.at` and
+  `encode` wrote the stored picture, so a portrait phone recording came out on its side, an
+  anamorphic DVD picture came out squeezed, and a snapshot kept the bars its container crops
+  away. Both now apply the crop, square the pixels by their aspect, and mirror and turn the
+  picture as its display matrix says, and a `Thumbnail` reports the size its image has.
 - An HLS stream opened from a PLS or plain M3U station list changes quality in place again (#669).
   The copy that gave the stream the list's title left out the variant switch, so every quality
   change opened the station list again, with a gap and a jump to the live edge.

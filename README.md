@@ -516,8 +516,16 @@ case in detail.
 - KitePlayer does not play media protected by DRM (digital rights management). It skips encrypted
   DASH adaptation sets. When every audio and video set of a DASH manifest is encrypted, it refuses
   the manifest with `DashUnsupportedException`.
-- The web build has no software AV1 decoder. The AV1 decoder (dav1d) needs threads, and the web
-  build runs on one thread.
+- The web build plays a much smaller set of formats than the other platforms, because its codec
+  module is a much smaller FFmpeg. It opens MP4 and MOV, Matroska and WebM, MPEG-TS, MP3, raw AAC,
+  FLAC, HLS and WebVTT, and decodes H.264, HEVC, VP9, AAC, MP3, FLAC, Opus, Vorbis and PCM. So an
+  Ogg, WAV or AVI file does not open there, and AC-3, E-AC-3, DTS, TrueHD and ALAC audio and VP8,
+  MPEG-2 and MPEG-4 Part 2 video do not decode. There is no software AV1 decoder either: dav1d
+  needs threads, and the web build runs on one thread. The web
+  draws only text subtitles, which are SubRip, WebVTT, TTML, ASS, LRC and teletext; image
+  subtitles from Blu-ray, DVD and DVB and the captions inside the picture do not decode there.
+  [KiteFFmpeg's platform page](https://github.com/yuroyami/KiteFFmpeg/blob/main/docs/platforms.md)
+  has the full web list.
 - KitePlayer converts Dolby Vision profile 5 and 10.0 to HDR10 on the CPU. That keeps up at 1080p,
   but not at 4K.
 - Nobody has played sound with the desktop JVM build on a real Linux or Windows computer yet.

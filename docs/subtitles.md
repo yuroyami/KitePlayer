@@ -75,6 +75,8 @@ on each renderer, and [TTML regions](subtitle-regions.md) describes how TTML tex
   picture.
 - On the web, libass is a separate module (see the [web setup](../README.md#web-setup)). A browser
   has no system font, so supply fonts as attachments or through `SubtitleConfig.fonts`.
+- On the web, image subtitles (PGS, DVB, DVD and XSUB) and the closed captions inside the picture
+  do not decode, because the web's FFmpeg has none of their decoders.
 - On the web, the browser's own text engine and fonts draw SubRip, WebVTT, TTML and the built-in
   ASS styling, on the page and in the worker player. See
   [the web section of TTML regions](subtitle-regions.md#the-web).

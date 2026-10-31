@@ -568,9 +568,11 @@ Do not reopen these without new evidence.
   a video view, https, and the whole conformance matrix passing. The targets stay declared and
   empty so the real-media tests resolve on Linux and so a native consumer has the common types to
   implement the output SPI against.
-- Every Android ABI stays supported, and the minimum SDK stays where it is. "The minimum SDK
-  excludes 32-bit" is true for phones and false for television: the common streaming sticks are
-  32-bit only and budget boxes ship a 32-bit userspace.
+- Every Android ABI the media library builds stays supported, which is `arm64-v8a`, `armeabi-v7a`
+  and `x86_64`, and the minimum SDK stays where it is. `x86` has no cross-build in the sibling, so
+  no artifact ships it, and `KitePlayer()` throws in an `x86` process. "The minimum SDK excludes
+  32-bit" is true for phones and false for television: the common streaming sticks are 32-bit only
+  and budget boxes ship a 32-bit userspace.
 - Both Compose video paths are permanent by design. The interop platform view is the sustained
   playback default, because the system compositor presents and the GPU idles. The Compose-native
   primitive is what allows clipping, alpha and shared-element transitions. Neither replaces the

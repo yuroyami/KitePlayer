@@ -297,8 +297,8 @@ separate evidence; none stands in for another.
 
 ## Android media requests and playback resumption
 
-Planned API contract for #431. The implementation and ABI update follow in separate changes. All of
-it is Android-only, in `kiteplayer`'s `session` package, and with none of it set nothing changes.
+The API contract of #431, which the tree implements and the Android ABI dump records. All of it is
+Android-only, in `kiteplayer`'s `session` package, and with none of it set nothing changes.
 
 **Requests for specific media.** `KitePlayerMediaSession.setMediaRequestHandler(kinds:
 Set<MediaRequestKind>, handler: ((MediaRequest) -> Unit)?)` takes the requests the application

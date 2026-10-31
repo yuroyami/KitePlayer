@@ -19,7 +19,7 @@ import kotlin.time.Duration.Companion.seconds
  * The player.
  *
  * One media item at a time, played through a backend that is passed in rather than discovered. Everything
- * about what is happening is read from the four flows below; everything a caller can ask for is one of
+ * about what is happening is read from the flows below; everything a caller can ask for is one of
  * the calls below. There is nothing else, and that is the point: a member here means the engine implements
  * it, and a feature that is not implemented is absent rather than present and ignored.
  *

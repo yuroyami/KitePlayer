@@ -21,9 +21,12 @@ import kotlin.jvm.JvmName
  * With the default media backend, this also gives the platform's player views their default
  * renderer, so `view.player = player` is all a `KitePlayerView` needs.
  *
- * Android, iOS, macOS and the desktop JVM always have the default stack in a correctly packaged
- * app. The web has it once its codec module is loaded. Where that can be false, check
- * `KitePlayer.isAvailable` first, for example to fall back to another engine.
+ * Android on `arm64-v8a`, `armeabi-v7a` and `x86_64`, iOS, macOS on Apple silicon, and the desktop
+ * JVM on macOS on Apple silicon, Linux x64 and arm64 and Windows x64 have the default stack in a
+ * correctly packaged app. The web has it once its codec module is loaded. Anywhere else, such as
+ * an Intel Mac, Windows on Arm or an `x86` Android process, `KitePlayer.isAvailable` is false and
+ * this throws, so check it first where that can happen, for example to fall back to another
+ * engine.
  *
  * @throws PlaybackException with [PlaybackError.ConfigurationInvalid] when a backend is missing
  *         and this platform has no default for it. The detail says why.

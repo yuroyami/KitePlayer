@@ -12,6 +12,11 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Added
 
+- `KitePlayerJava` has a future for every call that suspends again (#650): `setItemDetailsAsync`,
+  `readPlaylistAsync`, `openPlaylistAsync`, `thumbnailAtAsync`, `seekToSubtitleLineAsync` and
+  `stepSubtitleDelayAsync`, the last two in milliseconds. `KitePlayerJava.marker(positionMillis,
+  id)` builds the `Marker` that `setMarkers` takes, which Java could not build. A test now fails
+  when a suspending call of `KitePlayer` has no future.
 - `TrackInfo.isLanguage(tag)` tells whether a track is in a language, in any spelling of it (#633).
   A container writes French as `fr`, `fra` or `fre`, so the README's old sample, which compared
   `language` with `==`, found no track in most MP4, MPEG-TS and Matroska files and threw. The

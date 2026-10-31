@@ -177,6 +177,27 @@ class AssParserTest {
         assertEquals("\u00A0\u00A0EXIT\u00A0\u00A0", cue("""\h\hEXIT\h\h""").plainText)
     }
 
+    /**
+     * The tags inside an animated `\t` describe where the line ends up, so the line shows its start
+     * state, and the first alignment and position of a line win, as in libass (#631).
+     */
+    @Test
+    fun anAnimatedTransformShowsItsStartStateAndTheFirstPlacementWins() {
+        fun cue(text: String) = AssParser.parse(document("Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,$text")).single() as SubtitleCue.Text
+        val plain = cue("Text").spans.single().style
+        val animated = cue("""{\t(0,500,\c&H0000FF&\fs50)}Text""").spans.single().style
+        assertEquals(plain.primaryColor, animated.primaryColor, "the colour the transform fades to showed at once")
+        assertEquals(plain.fontSizePx, animated.fontSizePx)
+        val after = cue("""{\t(\fs80\bord0)\b1}Text""").spans.single().style
+        assertEquals(plain.fontSizePx, after.fontSizePx)
+        assertTrue(after.bold, "a tag after the transform is still read")
+
+        assertEquals(CueAlignment.TopCenter, cue("""{\an8}A{\an2}B""").layout.alignment)
+        val placed = cue("""{\pos(100,200)}A{\pos(500,600)}B""").layout
+        assertEquals(100f / 1280, placed.positionX)
+        assertEquals(200f / 720, placed.positionY)
+    }
+
     @Test
     fun karaokeTagsAreStrippedWithTheirTextKept() {
         val cues = AssParser.parse(

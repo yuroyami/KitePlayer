@@ -11,9 +11,10 @@ package io.github.yuroyami.kiteplayer.subtitle
  * in wrap style 2 and is a space in every other, and `\h` is a space that never wraps. The wrap
  * style starts from the script's `WrapStyle:` and `\q` changes it. Style resets (`\r`) are
  * honoured; karaoke timing tags are stripped with their text kept; vector drawings (`\p`) are
- * dropped whole. Everything beyond that (rotation, shear, clipping, animated `\t`,
- * `\fade`'s seven-argument form) is the optional libass module's job, and unknown override tags are
- * ignored rather than shown.
+ * dropped whole, and an animated `\t` is skipped whole, so the line shows its start state. The
+ * first `\an` or `\a` and the first `\pos` or `\move` of a line win, as in libass. Everything
+ * beyond that (rotation, shear, clipping, the animation of `\t`, `\fade`'s seven-argument form) is
+ * the optional libass module's job, and unknown override tags are ignored rather than shown.
  *
  * Two entries, one grammar. [parse] takes a whole document, the external-file case.
  * [trackParser] takes just the header (a container's codec extradata carries exactly that)
@@ -267,15 +268,26 @@ private fun parseOverrideText(
                 // by every player as nothing, so it is dropped the same way here.
                 var tagAt = block.indexOf('\\')
                 while (tagAt >= 0) {
+                    // An animated transform holds tags of its own, each with its backslash, and they
+                    // describe where the line ends up, not where it starts: read as tags of the block,
+                    // a colour that fades in showed its final value from the first frame (#631). The
+                    // whole transform is skipped, so the line shows its start state.
+                    if (block.startsWith("t(", tagAt + 1)) {
+                        val closeAt = matchingParenthesis(block, tagAt + 3)
+                        tagAt = if (closeAt < 0) -1 else block.indexOf('\\', closeAt + 1)
+                        continue
+                    }
                     val tagEnd = block.indexOf('\\', tagAt + 1).let { if (it < 0) block.length else it }
                     val tag = block.substring(tagAt + 1, tagEnd).trim()
                     var newStyle = style
                     when {
-                        tag.startsWith("an") -> tag.drop(2).toIntOrNull()?.let { alignment = numpadAlignment(it) }
+                        // The first alignment and the first position of a line win, as in libass
+                        // and VSFilter, which ignore the later ones.
+                        tag.startsWith("an") -> if (alignment == null) tag.drop(2).toIntOrNull()?.let { alignment = numpadAlignment(it) }
                         tag.startsWith("a") && tag.getOrNull(1)?.isDigit() == true ->
-                            tag.drop(1).toIntOrNull()?.let { alignment = legacyAlignment(it) }
-                        tag.startsWith("pos(") -> parsePair(tag, "pos(")?.let { (x, y) -> posX = x; posY = y }
-                        tag.startsWith("move(") -> parsePair(tag, "move(")?.let { (x, y) ->
+                            if (alignment == null) tag.drop(1).toIntOrNull()?.let { alignment = legacyAlignment(it) }
+                        tag.startsWith("pos(") -> if (posX == null) parsePair(tag, "pos(")?.let { (x, y) -> posX = x; posY = y }
+                        tag.startsWith("move(") -> if (posX == null) parsePair(tag, "move(")?.let { (x, y) ->
                             // The dialogue tier shows the start point; motion is libass's job.
                             posX = x; posY = y
                         }
@@ -334,6 +346,18 @@ private fun parseOverrideText(
     flushSpan()
     val wrap = if (wrapStyle == 2) CueWrap.Never else CueWrap.Balanced
     return ParsedText(spans, alignment, posX, posY, wrap, fadeIn, fadeOut)
+}
+
+/** The index of the `)` that closes the `(` just before [from] in [block], or -1 when none does. */
+private fun matchingParenthesis(block: String, from: Int): Int {
+    var depth = 1
+    for (index in from until block.length) {
+        when (block[index]) {
+            '(' -> depth++
+            ')' -> if (--depth == 0) return index
+        }
+    }
+    return -1
 }
 
 /** Two comma-separated numbers out of `name(x,y[,...])`. */

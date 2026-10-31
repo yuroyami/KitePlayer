@@ -580,6 +580,18 @@ public class KitePlayerWorker private constructor(
         stateFlow.update { it.copy(status = PlaybackStatus.Failed, error = error) }
         eventFlow.tryEmit(PlayerEvent.Failed(error))
         workerTerminate(worker)
+        // A dead worker cannot come back through this player, so its page side goes with it, rather
+        // than leaving the worklet running until the application closes a player it may replace (#686).
+        releaseAudio()
+    }
+
+    private var audioReleased = false
+
+    /** Closes the page's audio once, whichever of a close and a dead worker comes first. */
+    private fun releaseAudio() {
+        if (audioReleased) return
+        audioReleased = true
+        audio?.close()
     }
 
     /** Keeps of [sentItems] only what [snapshot] shows and what no state has shown yet (#687). */
@@ -596,7 +608,7 @@ public class KitePlayerWorker private constructor(
         awaitingState.clear()
         holdDisplay(null)
         workerTerminate(worker)
-        audio?.close()
+        releaseAudio()
         closeId?.let { pending.remove(it) }?.complete(null)
     }
 
@@ -639,28 +651,42 @@ public class KitePlayerWorker private constructor(
             keepDisplayAwake: Boolean = true,
         ): KitePlayerWorker {
             val audio = WebWorkletAudio.createOrNull()
-            val offscreen = canvas?.let(::canvasTransfer)
             val hello = CompletableDeferred<Unit>()
             var player: KitePlayerWorker? = null
-            val worker = workerCreate(
-                workerUrl,
-                { data ->
-                    val current = player
-                    if (current != null) {
-                        current.receive(data)
-                    } else if (decodeWorkerMessage(data) == WorkerMessage.Hello) {
-                        hello.complete(Unit)
-                    }
-                },
-                { detail ->
-                    val current = player
-                    if (current != null) {
-                        current.died(detail)
-                    } else {
-                        hello.completeExceptionally(PlaybackException(PlaybackError.Internal("the player's worker stopped: $detail")))
-                    }
-                },
-            )
+            // The audio has one owner from here: a canvas that cannot be transferred, or a worker
+            // address the browser refuses, used to throw past the cleanup below and leave the page's
+            // audio context and its worklet running with no player to close them (#686).
+            val offscreen: JsAny?
+            val worker: JsAny
+            try {
+                offscreen = canvas?.let(::canvasTransfer)
+                worker = workerCreate(
+                    workerUrl,
+                    { data ->
+                        val current = player
+                        if (current != null) {
+                            current.receive(data)
+                        } else if (decodeWorkerMessage(data) == WorkerMessage.Hello) {
+                            hello.complete(Unit)
+                        }
+                    },
+                    { detail ->
+                        val current = player
+                        if (current != null) {
+                            current.died(detail)
+                        } else {
+                            hello.completeExceptionally(PlaybackException(PlaybackError.Internal("the player's worker stopped: $detail")))
+                        }
+                    },
+                )
+            } catch (failure: Throwable) {
+                try {
+                    audio?.close()
+                } catch (closeFailure: Throwable) {
+                    if (closeFailure !== failure) failure.addSuppressed(closeFailure)
+                }
+                throw failure
+            }
             try {
                 // The worker sets its listener once its code has loaded. A message sent before that
                 // is lost, so the first one waits for the worker to say it is listening.

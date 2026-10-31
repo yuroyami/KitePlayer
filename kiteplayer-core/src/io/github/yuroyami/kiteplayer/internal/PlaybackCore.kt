@@ -14345,48 +14345,84 @@ internal class PlaybackCore(
         var restarts = -1
         var lane: AudioLane? = null
         var ending = false
-        while (true) {
-            worker.checkpoint()
-            if (worker.releases != restarts) {
-                restarts = worker.releases
-                epoch = worker.epoch
-                lane = session.audioLane
-                ending = false
-            }
-            val active = lane
-            if (active == null) {
-                worker.nap(WORKER_POLL)
-                continue
-            }
-            val queue = active.queue
-            val decoder = active.decoder
-            if (passBuffer(session, worker, decoder, epoch)) continue
-            // A drained decoder takes nothing more. A sound that was over only for now and gives
-            // packets again gets a new decoder from the actor, and this lane then starts over (#570).
-            if (ending) {
-                worker.nap(WORKER_POLL)
-                continue
-            }
-            if (queue.isEndOfStream && queue.count == 0) {
-                // Same rule as the video worker: the drain signal counts only when accepted.
-                if (decoder.send(null)) ending = true
-                continue
-            }
-            val packet = queue.poll()
-            if (packet == null) {
-                worker.napUntil(WORKER_POLL) { queue.awaitData() }
-                continue
-            }
-            try {
-                while (!decoder.send(packet)) {
-                    val buffer = decoder.receive() ?: error(
-                        "decoder refused a packet and produced nothing; this violates the codec contract",
-                    )
-                    if (!offerBuffer(session, worker, buffer, epoch)) break
+        // What a park interrupted, kept for the release that follows it (#592). A park that does not
+        // flush, the output reopen and the resume of a live sender that could not hold its pause,
+        // used to close the buffer in hand and the packet the decoder had not taken yet, and the
+        // sound skipped them. They go on only on the same epoch and the same lane.
+        var heldBuffer: AudioBuffer? = null
+        var heldPacket: io.github.yuroyami.kiteplayer.spi.PlayerPacket? = null
+        var heldPacketEpoch: Generation? = null
+        var heldFor: AudioLane? = null
+        val keep: (AudioBuffer) -> Unit = { buffer ->
+            heldBuffer?.close()
+            heldBuffer = buffer
+            heldFor = lane
+        }
+        try {
+            while (true) {
+                worker.checkpoint()
+                if (worker.releases != restarts) {
+                    restarts = worker.releases
+                    epoch = worker.epoch
+                    lane = session.audioLane
+                    ending = false
+                    if (heldFor !== lane || heldBuffer?.let { it.generation != epoch } == true || (heldPacket != null && heldPacketEpoch != epoch)) {
+                        heldBuffer?.close()
+                        heldPacket?.close()
+                        heldBuffer = null
+                        heldPacket = null
+                    }
                 }
-            } finally {
-                packet.close()
+                val active = lane
+                if (active == null) {
+                    worker.nap(WORKER_POLL)
+                    continue
+                }
+                val queue = active.queue
+                val decoder = active.decoder
+                heldBuffer?.let { pending ->
+                    heldBuffer = null
+                    if (!offerBuffer(session, worker, pending, epoch, keep)) continue
+                }
+                if (heldPacket == null && passBuffer(session, worker, decoder, epoch, keep)) continue
+                // A drained decoder takes nothing more. A sound that was over only for now and gives
+                // packets again gets a new decoder from the actor, and this lane then starts over (#570).
+                if (ending) {
+                    worker.nap(WORKER_POLL)
+                    continue
+                }
+                if (queue.isEndOfStream && queue.count == 0) {
+                    // Same rule as the video worker: the drain signal counts only when accepted.
+                    if (decoder.send(null)) ending = true
+                    continue
+                }
+                val packet = heldPacket?.also { heldPacket = null } ?: queue.poll()
+                if (packet == null) {
+                    worker.napUntil(WORKER_POLL) { queue.awaitData() }
+                    continue
+                }
+                var kept = false
+                try {
+                    while (!decoder.send(packet)) {
+                        val buffer = decoder.receive() ?: error(
+                            "decoder refused a packet and produced nothing; this violates the codec contract",
+                        )
+                        if (!offerBuffer(session, worker, buffer, epoch, keep)) {
+                            // The decoder has not taken the packet yet, so it is sent after the release.
+                            kept = true
+                            heldPacket = packet
+                            heldPacketEpoch = epoch
+                            heldFor = lane
+                            break
+                        }
+                    }
+                } finally {
+                    if (!kept) packet.close()
+                }
             }
+        } finally {
+            heldBuffer?.close()
+            heldPacket?.close()
         }
     }
 
@@ -14395,17 +14431,23 @@ internal class PlaybackCore(
         worker: Worker,
         decoder: AudioDecoder,
         epoch: Generation,
+        keep: ((AudioBuffer) -> Unit)? = null,
     ): Boolean {
         val buffer = decoder.receive() ?: return false
-        offerBuffer(session, worker, buffer, epoch)
+        offerBuffer(session, worker, buffer, epoch, keep)
         return true
     }
 
+    /**
+     * Hands [buffer] to the feed. False when a park request ended the wait: the buffer then goes to
+     * [keep], for the release to hand on, or is closed when there is no [keep].
+     */
     private suspend fun offerBuffer(
         session: OpenSession,
         worker: Worker,
         buffer: AudioBuffer,
         epoch: Generation,
+        keep: ((AudioBuffer) -> Unit)? = null,
     ): Boolean {
         var ownsBuffer = true
         try {
@@ -14428,6 +14470,10 @@ internal class PlaybackCore(
             while (true) {
                 if (worker.quiesceRequested) {
                     session.audioInFlight.decrementAndGet()
+                    if (keep != null) {
+                        ownsBuffer = false
+                        keep(buffer)
+                    }
                     return false
                 }
                 // A select rather than a cancelled send, for the same reason the actor uses one: a send

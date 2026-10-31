@@ -7301,7 +7301,13 @@ internal class PlaybackCore(
             val aim = Pts((target.micros - backoff).coerceAtLeast(0L))
             flushDecoders(rebuilt, epoch)
             clearBuffers(rebuilt, epoch)
-            withContext(dispatchers.demux) { rebuilt.source.seekToKeyframe(aim) }
+            // Bounded and preemptible as every container seek the actor makes (#591).
+            try {
+                boundedContainerSeek(rebuilt.source, aim, preemptible = true)
+            } catch (_: OpenPreempted) {
+                teardownSession()
+                return null
+            }
             rebuilt.discardBeforeUs.value = when (mode) {
                 SeekMode.Keyframe -> Long.MIN_VALUE
                 else -> target.micros

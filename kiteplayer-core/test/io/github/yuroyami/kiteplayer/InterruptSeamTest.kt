@@ -80,6 +80,29 @@ class InterruptSeamTest {
         assertEquals(0, harness.ledger.liveCount)
     }
 
+    /** The seek of the software recovery after a hardware decoder fails gives way to a stop (#591). */
+    @Test
+    fun aWedgedRecoverySeekGivesWayToAStop() = runTest(timeout = 20.seconds) {
+        val faults = FaultPlan().apply { videoDecodeFailsAfterFrames = 12 }
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(durationUs = 6_000_000),
+            faults = faults,
+            config = PlayerConfig(hardwareDecode = HwdecPolicy.Auto),
+        )
+        harness.backend.videoDecoderStatus.value = HwdecStatus.HardwareWithDownload(HwdecKind.VideoToolbox)
+        harness.openWithRenderer()
+        faults.seekWedges = true
+        harness.core.play()
+        harness.run(1.seconds)
+        assertEquals(2, harness.backend.openCalls, "the decoder never failed, so no recovery seek ran")
+        val stopping = async { runCatching { harness.core.stop() } }
+        harness.run(1.seconds)
+        assertTrue(stopping.isCompleted, "the stop waited behind the wedged recovery seek")
+        assertTrue(harness.source.interruptCalls > 0, "the wedged seek was never interrupted")
+        withTimeout(30.seconds) { harness.core.closeAndAwait() }
+    }
+
     @Test
     fun aSourceThatCannotInterruptKeepsTheOldUnboundedWaitAndStillLands() = runTest(timeout = 20.seconds) {
         // The world before interruptible opens: interrupt() answers false. The engine must keep waiting, and

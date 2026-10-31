@@ -160,6 +160,12 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- A file named with a `file:` URI now opens when its name holds a space or a non-ASCII letter, and
+  on Windows when the URI names a drive (#655). Android's `Uri.fromFile`, Apple's `NSURL` and
+  Java's `File.toURI` all write such a name percent-encoded, and only the playlist reader decoded
+  it, so FFmpeg looked for `%20` in the name and the item failed with `SourceUnavailable`. The
+  item, its external subtitle files, its linked Matroska files and a file still being written now
+  share one decoder, which also keeps an emoji beside an escape whole.
 - A stream opened before its view had a size no longer plays its top variant for good (#600). With
   no size the open took the highest rung, and the network steps only ever looked for more, so a
   phone could play 2160p into a small view. Once the view reports a size, a variant the player

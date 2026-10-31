@@ -1,4 +1,4 @@
-@file:OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
+@file:OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class, io.github.yuroyami.kiteplayer.KitePlayerInternalApi::class)
 
 package io.github.yuroyami.kiteplayer.internal
 
@@ -6,6 +6,7 @@ import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.NetworkConfig
 import io.github.yuroyami.kiteplayer.spi.MediaIoProviders
+import io.github.yuroyami.kiteplayer.uri.FileUri
 
 /**
  * One precedence rule for every session open and rebuild, including direct core construction.
@@ -31,15 +32,7 @@ internal suspend fun resolveMediaIo(
 }
 
 /**
- * The local file [uri] names, a bare path or a `file:` address, as FFmpeg's file reader reads it, or
- * null for any other scheme. A single letter before the colon is a Windows drive, not a scheme.
+ * The local file [uri] names, a bare path or a `file:` address with its escapes decoded, or null for
+ * any other scheme (#655). See [FileUri.localPath].
  */
-internal fun localPathOf(uri: String): String? {
-    if (uri.startsWith("file://")) return uri.removePrefix("file://").ifEmpty { null }
-    if (uri.startsWith("file:")) return uri.removePrefix("file:").ifEmpty { null }
-    val colon = uri.indexOf(':')
-    if (colon < 2) return uri.ifEmpty { null }
-    val scheme = uri.substring(0, colon)
-    val looksLikeScheme = scheme.first().isLetter() && scheme.all { it.isLetterOrDigit() || it == '+' || it == '-' || it == '.' }
-    return if (looksLikeScheme) null else uri
-}
+internal fun localPathOf(uri: String): String? = FileUri.localPath(uri)

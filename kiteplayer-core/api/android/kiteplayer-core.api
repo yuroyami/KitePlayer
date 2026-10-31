@@ -5175,6 +5175,11 @@ public final class io/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride 
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/uri/FileUri {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/uri/FileUri;
+	public final fun localPath (Ljava/lang/String;)Ljava/lang/String;
+}
+
 public final class io/github/yuroyami/kiteplayer/webm/Webm {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/webm/Webm;
 	public final fun header ([B)Lio/github/yuroyami/kiteplayer/webm/Webm$Header;

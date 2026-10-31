@@ -1,7 +1,10 @@
+@file:OptIn(io.github.yuroyami.kiteplayer.KitePlayerInternalApi::class)
+
 package io.github.yuroyami.kiteplayer.internal
 
 import io.github.yuroyami.kiteplayer.MediaClip
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.uri.FileUri
 import kotlin.time.Duration.Companion.microseconds
 
 /** The text work of [io.github.yuroyami.kiteplayer.Playlists] (#490), with no I/O. */
@@ -321,36 +324,7 @@ private fun joinPath(folder: String, path: String): String {
 }
 
 /** The path a `file:` address names, its percent escapes decoded, `file:///C:/x` as `C:/x`. */
-private fun filePath(uri: String): String {
-    var rest = uri.substring("file:".length)
-    if (rest.startsWith("//")) {
-        rest = rest.substring(2)
-        // file://host/path: the local host is the only one a player can read.
-        if (!rest.startsWith("/")) rest = rest.substringAfter('/', "").let { "/$it" }
-    }
-    val decoded = percentDecoded(rest.substringBefore('?').substringBefore('#'))
-    return if (decoded.length >= 3 && decoded[0] == '/' && decoded[2] == ':' && decoded[1].isLetter()) decoded.substring(1) else decoded
-}
-
-private fun percentDecoded(text: String): String {
-    if ('%' !in text) return text
-    val bytes = ArrayList<Byte>(text.length)
-    var at = 0
-    while (at < text.length) {
-        val char = text[at]
-        if (char == '%' && at + 2 < text.length) {
-            val value = text.substring(at + 1, at + 3).toIntOrNull(16)
-            if (value != null) {
-                bytes += value.toByte()
-                at += 3
-                continue
-            }
-        }
-        char.toString().encodeToByteArray().forEach { bytes += it }
-        at++
-    }
-    return bytes.toByteArray().decodeToString()
-}
+private fun filePath(uri: String): String = FileUri.localPath(uri).orEmpty()
 
 private fun hasScheme(text: String): Boolean {
     val colon = text.indexOf(':')

@@ -6260,6 +6260,10 @@ final object io.github.yuroyami.kiteplayer.subtitle/CueSelector { // io.github.y
     final fun nextChangeAfter(kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue>, kotlin/Long): kotlin/Long? // io.github.yuroyami.kiteplayer.subtitle/CueSelector.nextChangeAfter|nextChangeAfter(kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>;kotlin.Long){}[0]
 }
 
+final object io.github.yuroyami.kiteplayer.uri/FileUri { // io.github.yuroyami.kiteplayer.uri/FileUri|null[0]
+    final fun localPath(kotlin/String): kotlin/String? // io.github.yuroyami.kiteplayer.uri/FileUri.localPath|localPath(kotlin.String){}[0]
+}
+
 final object io.github.yuroyami.kiteplayer.webm/Webm { // io.github.yuroyami.kiteplayer.webm/Webm|null[0]
     final fun header(kotlin/ByteArray): io.github.yuroyami.kiteplayer.webm/Webm.Header // io.github.yuroyami.kiteplayer.webm/Webm.header|header(kotlin.ByteArray){}[0]
     final fun isWebm(kotlin/ByteArray): kotlin/Boolean // io.github.yuroyami.kiteplayer.webm/Webm.isWebm|isWebm(kotlin.ByteArray){}[0]

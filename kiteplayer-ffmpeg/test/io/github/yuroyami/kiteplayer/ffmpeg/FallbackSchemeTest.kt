@@ -35,6 +35,14 @@ class FallbackSchemeTest {
         assertEquals("/videos/A.mkv", fallbackAddress("/videos/A.mkv"))
     }
 
+    /** FFmpeg's file reader opens what follows `file:` as it stands, so the escapes go decoded (#655). */
+    @Test
+    fun aFileUriReachesFFmpegDecoded() {
+        assertEquals("file:/sdcard/Movies/\u00c9t\u00e9 2024.mkv", fallbackAddress("file:///sdcard/Movies/%C3%89t%C3%A9%202024.mkv"))
+        assertEquals("file:C:/Media/rec.ts", fallbackAddress("file:/C:/Media/rec.ts"))
+        assertEquals("file:/videos/a.mkv", fallbackAddress("file:///videos/a.mkv"))
+    }
+
     @Test
     fun anRtpAddressCarriesTheReadTimeout() {
         // FFmpeg's RTP reader waits for its first packet through the protocol, which reads the address alone.

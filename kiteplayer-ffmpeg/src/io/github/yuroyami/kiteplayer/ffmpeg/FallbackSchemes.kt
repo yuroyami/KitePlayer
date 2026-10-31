@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.PlaybackError
 import io.github.yuroyami.kiteplayer.PlaybackException
+import io.github.yuroyami.kiteplayer.uri.FileUri
 
 /**
  * The schemes FFmpeg's own protocols open in this build, in lower case: the URL fallback refuses
@@ -36,11 +37,16 @@ private fun Char.isSchemeCharacter(): Boolean =
  * The address the URL fallback hands FFmpeg for [uri]. FFmpeg compares a protocol's name exactly, so
  * the scheme goes in lower case. An `rtp://` address also carries the read timeout in its query
  * unless it names one: FFmpeg's RTP reader waits for the first packet through the protocol alone,
- * which takes its timeout from the address and from no option.
+ * which takes its timeout from the address and from no option. A `file:` URI goes with its escapes
+ * decoded and the slash before a drive letter dropped, because FFmpeg's file reader strips the
+ * `file:` and opens the rest as it stands (#655).
  */
 internal fun fallbackAddress(uri: String): String {
     val scheme = fallbackScheme(uri)
-    if (scheme == "file") return uri
+    if (scheme == "file") {
+        if (!uri.startsWith("file:", ignoreCase = true)) return uri
+        return FileUri.localPath(uri)?.let { "file:$it" } ?: uri
+    }
     val address = scheme + uri.substring(scheme.length)
     if (scheme != "rtp") return address
     val query = address.substringAfter('?', "")

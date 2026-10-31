@@ -1673,9 +1673,10 @@ internal class PlaybackCore(
      */
     private suspend fun rasterizeOverlayFor(
         captured: io.github.yuroyami.kiteplayer.CapturedFrame,
+        moment: CaptureMoment,
     ): io.github.yuroyami.kiteplayer.spi.SubtitleOverlay? {
         val rasterizer = output.subtitleRasterizer ?: return null
-        val cues = subtitleCues.value
+        val cues = moment.cues
         if (cues.isEmpty()) return null
         // What the screen showed of the picture, so the text sits where it did once the caller crops.
         val shown = captured.size.cropped(captured.crop)
@@ -1687,8 +1688,8 @@ internal class PlaybackCore(
         val images = withContext(dispatchers.raster) {
             rasterizer.rasterizeWithinLimits(
                 io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea.None,
-                applyOverride(matchAssColors(cues, assColorTargetOf(session)), subtitleStyle),
-                width, height, subtitleScale, subtitlePosition,
+                applyOverride(matchAssColors(cues, moment.colorTarget), moment.style),
+                width, height, moment.scale, moment.position,
                 ::warnUndrawnSubtitles,
             )
         }
@@ -1700,6 +1701,29 @@ internal class PlaybackCore(
             contentHash = captured.pts.micros,
         )
     }
+
+    /**
+     * Everything a capture draws besides the frame's pixels, as it stood when the frame was copied
+     * (#73): the subtitles showing, the viewer's turn, and the look the subtitles were drawn in.
+     */
+    private class CaptureMoment(
+        val transform: io.github.yuroyami.kiteplayer.VideoTransform,
+        val cues: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>,
+        val colorTarget: io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo?,
+        val style: io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride?,
+        val scale: Float,
+        val position: Float,
+    )
+
+    /** The capture state now. The video schedule calls this as it copies a frame, on its own lane. */
+    private fun captureMomentNow(): CaptureMoment = CaptureMoment(
+        transform = snapshotState.value.videoTransform,
+        cues = subtitleCues.value,
+        colorTarget = assColorTargetOf(session),
+        style = subtitleStyle,
+        scale = subtitleScale,
+        position = subtitlePosition,
+    )
 
     /** Decodes one audio track without playing it, with playback's reader rules. See [io.github.yuroyami.kiteplayer.KitePlayer.scanAudio]. */
     suspend fun scanAudio(media: MediaItem, track: io.github.yuroyami.kiteplayer.TrackId?,
@@ -1927,13 +1951,16 @@ internal class PlaybackCore(
         val reply = CompletableDeferred<io.github.yuroyami.kiteplayer.CapturedFrame>()
         send(CoreCommand.CaptureFrame(reply))
         try {
+            val frame = reply.await()
+            // The state of the moment the frame was copied, not of the moment this resumed (#73).
+            val moment = frame.moment as? CaptureMoment ?: captureMomentNow()
             // Turned as the viewer turned the picture (#428), so the subtitles are laid out on the turned one.
-            val captured = reply.await().turnedBy(snapshotState.value.videoTransform)
+            val captured = frame.turnedBy(moment.transform)
             if (!withSubtitles) return captured
             // Drawn AFTER the frame is in hand, because the layout depends on the frame's own
             // size, which nothing knows until the frame arrives. The raster lane owns every
             // typesetter call, so this goes through the same door the on-screen overlay does.
-            return captured.withOverlay(rasterizeOverlayFor(captured))
+            return captured.withOverlay(rasterizeOverlayFor(captured, moment))
         } catch (cancellation: CancellationException) {
             // A cancelled capture withdraws ITS OWN arm and nothing else. Posting Stop here, the
             // way the session-owning commands do, meant abandoning a screenshot killed playback
@@ -4244,6 +4271,7 @@ internal class PlaybackCore(
             }
             // Seed the schedule with the display the renderer already knows, before first frame.
             videoPlayback?.vsyncIntervalNanos = pendingRenderer?.vsyncIntervalNanos()
+            videoPlayback?.sampleCaptureMoment = ::captureMomentNow
             if (videoPlayback != null) {
                 rollback += { videoPlayback.close() }
                 // Pre-start, so it applies immediately; the scheduler for this playback does not
@@ -5719,6 +5747,7 @@ internal class PlaybackCore(
             dropPolicy = config.frameDrop,
         ).also { created ->
             created.vsyncIntervalNanos = pendingRenderer?.vsyncIntervalNanos()
+            created.sampleCaptureMoment = ::captureMomentNow
             created.speed = effectiveSpeed
         }
         // The lanes are parked, so the frames of the picture before can go, and the schedule starts

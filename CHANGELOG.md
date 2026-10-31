@@ -172,6 +172,11 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- `captureFrame(withSubtitles = true)` now returns one moment: the frame's pixels with the
+  subtitles, the subtitle look and the viewer's turn that went with that frame (#73). The pixels
+  were copied as the frame was shown, but the rest was read when the caller resumed, so a caller
+  that resumed late could get an earlier picture with a later moment's text and rotation. The
+  engine now samples all of it as it copies the pixels.
 - TTML subtitles keep their timing and their spaces (#492). A span with times of its own showed
   for its whole paragraph, a sequence of containers with no times of their own stopped after the
   first, and `xml:space="preserve"` was collapsed anyway and not inherited from the elements

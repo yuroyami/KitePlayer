@@ -153,6 +153,30 @@ class AssParserTest {
         assertEquals("line one\nline two", (cues[0] as SubtitleCue.Text).plainText)
     }
 
+    /** `\n` is a soft break, a line only in wrap style 2, and `\h` a space that never wraps, as libass reads them (#629). */
+    @Test
+    fun aSoftBreakIsASpaceUnlessTheWrapStyleIsTwo() {
+        fun cue(text: String, wrapStyleHeader: String? = null): SubtitleCue.Text {
+            var script = document("Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,$text")
+            if (wrapStyleHeader != null) script = script.replace("PlayResY: 720", "PlayResY: 720\nWrapStyle: $wrapStyleHeader")
+            return AssParser.parse(script).single() as SubtitleCue.Text
+        }
+        val soft = cue("""I told you\nwe would be late""")
+        assertEquals("I told you we would be late", soft.plainText)
+        assertEquals(CueWrap.Balanced, soft.layout.wrap)
+
+        val byTag = cue("""{\q2}I told you\nwe""")
+        assertEquals("I told you\nwe", byTag.plainText, "under \\q2 a soft break is a line")
+        assertEquals(CueWrap.Never, byTag.layout.wrap)
+
+        val byHeader = cue("""I told you\nwe""", wrapStyleHeader = "2")
+        assertEquals("I told you\nwe", byHeader.plainText, "WrapStyle: 2 in the header makes a soft break a line")
+        assertEquals(CueWrap.Never, byHeader.layout.wrap)
+        assertEquals("I told you we", cue("""{\q0}I told you\nwe""", wrapStyleHeader = "2").plainText, "\\q changes the header's style")
+
+        assertEquals("\u00A0\u00A0EXIT\u00A0\u00A0", cue("""\h\hEXIT\h\h""").plainText)
+    }
+
     @Test
     fun karaokeTagsAreStrippedWithTheirTextKept() {
         val cues = AssParser.parse(

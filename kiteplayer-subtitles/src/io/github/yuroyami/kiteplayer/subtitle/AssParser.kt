@@ -7,9 +7,11 @@ package io.github.yuroyami.kiteplayer.subtitle
  * What it maps: styles and the dialogue-grade override subset. Fonts,
  * colours, outline and shadow, positioning (`\pos`, and `\move`'s start point), alignment
  * (`\an` and legacy `\a`), margins, bold, italic, underline, strike-out, and basic fades
- * (`\fad`). Line breaks (`\N`, `\n`, `\h`), style resets (`\r`) and wrap style (`\q`) are
- * honoured; karaoke timing tags are stripped with their text kept; vector drawings (`\p`)
- * are dropped whole. Everything beyond that (rotation, shear, clipping, animated `\t`,
+ * (`\fad`). Line breaks are honoured as libass reads them: `\N` always breaks, `\n` breaks only
+ * in wrap style 2 and is a space in every other, and `\h` is a space that never wraps. The wrap
+ * style starts from the script's `WrapStyle:` and `\q` changes it. Style resets (`\r`) are
+ * honoured; karaoke timing tags are stripped with their text kept; vector drawings (`\p`) are
+ * dropped whole. Everything beyond that (rotation, shear, clipping, animated `\t`,
  * `\fade`'s seven-argument form) is the optional libass module's job, and unknown override tags are
  * ignored rather than shown.
  *
@@ -80,6 +82,10 @@ internal class AssDocument(text: String) {
     var stacking: CueStacking = CueStacking.FirstAtBottom
         private set
 
+    /** The `WrapStyle:` header, 0 to 3, which every event's wrap style starts from (#629). */
+    var wrapStyle: Int = 0
+        private set
+
     /** The `YCbCr Matrix` header, which the engine matches every cue's colours through (#499). */
     var colorMatrix: ScriptColorMatrix = ScriptColorMatrix.Default
         private set
@@ -111,6 +117,7 @@ internal class AssDocument(text: String) {
                 "script info" -> when (key) {
                     "playresx" -> playResX = value.toIntOrNull() ?: playResX
                     "playresy" -> playResY = value.toIntOrNull() ?: playResY
+                    "wrapstyle" -> wrapStyle = value.toIntOrNull()?.takeIf { it in 0..3 } ?: wrapStyle
                     // Anything that is not "reverse" means Normal, including a typo: ASS's own
                     // readers treat the field as a switch with one interesting value.
                     "ycbcr matrix" -> colorMatrix = scriptColorMatrixOf(value)
@@ -175,7 +182,7 @@ internal class AssDocument(text: String) {
     /** Builds one cue from an event's fields; shared by the document and embedded forms. */
     fun buildCue(fields: Map<String, String>, startMicros: Long, endMicros: Long): SubtitleCue.Text? {
         val base = styles[fields["style"]?.trim()?.lowercase()] ?: defaultStyle
-        val parsed = parseOverrideText(fields["text"] ?: return null, base, styles, defaultStyle)
+        val parsed = parseOverrideText(fields["text"] ?: return null, base, styles, defaultStyle, wrapStyle)
         if (parsed.spans.isEmpty() || parsed.spans.all { it.text.isBlank() }) return null
 
         val marginL = fields["marginl"]?.toIntOrNull()?.takeIf { it > 0 } ?: base.marginL
@@ -227,6 +234,8 @@ private fun parseOverrideText(
     base: AssStyle,
     styles: Map<String, AssStyle>,
     defaultStyle: AssStyle,
+    /** The script's `WrapStyle:`, which `\q` changes from here on. */
+    scriptWrapStyle: Int,
 ): ParsedText {
     val spans = mutableListOf<StyledSpan>()
     val current = StringBuilder()
@@ -234,7 +243,7 @@ private fun parseOverrideText(
     var alignment: CueAlignment? = null
     var posX: Float? = null
     var posY: Float? = null
-    var wrap = CueWrap.Balanced
+    var wrapStyle = scriptWrapStyle
     var fadeIn = 0L
     var fadeOut = 0L
     var drawing = false
@@ -292,10 +301,7 @@ private fun parseOverrideText(
                         tag == "u0" -> newStyle = newStyle.copy(underline = false)
                         tag == "s1" -> newStyle = newStyle.copy(strikeThrough = true)
                         tag == "s0" -> newStyle = newStyle.copy(strikeThrough = false)
-                        tag.startsWith("q") -> when (tag.drop(1).toIntOrNull()) {
-                            2 -> wrap = CueWrap.Never
-                            else -> wrap = CueWrap.Balanced
-                        }
+                        tag.startsWith("q") -> tag.drop(1).toIntOrNull()?.takeIf { it in 0..3 }?.let { wrapStyle = it }
                         tag.startsWith("p") && tag.getOrNull(1)?.isDigit() == true ->
                             drawing = (tag.drop(1).toIntOrNull() ?: 0) > 0
                         tag.startsWith("r") -> {
@@ -315,7 +321,9 @@ private fun parseOverrideText(
             }
             ch == '\\' && i + 1 < text.length -> {
                 when (text[i + 1]) {
-                    'N', 'n' -> { if (!drawing) current.append('\n'); i += 2 }
+                    'N' -> { if (!drawing) current.append('\n'); i += 2 }
+                    // A soft break: a line break only in wrap style 2, a space in every other (#629).
+                    'n' -> { if (!drawing) current.append(if (wrapStyle == 2) '\n' else ' '); i += 2 }
                     'h' -> { if (!drawing) current.append(' '); i += 2 }
                     else -> { if (!drawing) current.append(ch); i++ }
                 }
@@ -324,6 +332,7 @@ private fun parseOverrideText(
         }
     }
     flushSpan()
+    val wrap = if (wrapStyle == 2) CueWrap.Never else CueWrap.Balanced
     return ParsedText(spans, alignment, posX, posY, wrap, fadeIn, fadeOut)
 }
 

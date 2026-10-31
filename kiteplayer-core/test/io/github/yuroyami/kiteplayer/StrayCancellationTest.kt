@@ -94,4 +94,24 @@ class StrayCancellationTest {
         assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
         harness.close()
     }
+
+    /** A source call of an open that throws a cancellation fails that open, typed, and the player stays open (#589). */
+    @Test
+    fun aSourceCallThatThrowsACancellationFailsTheOpenAndNotThePlayer() = runTest {
+        val faults = FaultPlan().apply {
+            failSelectStreams = true
+            selectStreamsFailure = CancellationException("stray")
+        }
+        val harness = CoreHarness(this, faults = faults)
+        harness.attachRenderer()
+        val failure = runCatching { harness.core.open(MediaItem("scripted://media")) }.exceptionOrNull()
+        assertTrue(failure is PlaybackException, "the open ended with $failure, not a typed failure")
+        assertEquals(PlaybackStatus.Failed, harness.core.snapshots.value.status)
+
+        faults.failSelectStreams = false
+        harness.core.stop()
+        harness.core.open(MediaItem("scripted://media"))
+        assertEquals(PlaybackStatus.Paused, harness.core.snapshots.value.status, "the player did not open the next item")
+        harness.close()
+    }
 }

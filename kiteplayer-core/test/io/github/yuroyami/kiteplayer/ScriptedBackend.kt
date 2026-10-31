@@ -563,6 +563,9 @@ internal class FaultPlan(
      * AFTER the audio path has gone live. */
     var failSelectStreams: Boolean = false
 
+    /** What a failing [failSelectStreams] throws, or null for a plain error. */
+    var selectStreamsFailure: Throwable? = null
+
     /** True parks every audio decoder's receive until cancellation, a worker that refuses to reach
      * a quiescent boundary. */
     var stallAudioDecodeReceive: Boolean = false
@@ -1322,7 +1325,7 @@ internal class ScriptedSource(
 
     /** Selects before the first read, and again between reads to add a stream that appeared (#509). */
     override fun selectStreams(indices: Set<Int>) {
-        if (faults.failSelectStreams) error("scripted selectStreams failure")
+        if (faults.failSelectStreams) throw faults.selectStreamsFailure ?: IllegalStateException("scripted selectStreams failure")
         require(indices.isNotEmpty()) { "no selectable stream among $indices" }
         require(indices.all { wanted -> streams.any { it.index == wanted } }) {
             "unknown scripted stream in $indices"

@@ -224,8 +224,9 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
   `RuntimeCompromised` and refused every later call. The subtitle now fails as any unreadable
   file does, and a decoder factory's track is left out. A decoder that throws one while it plays has failed,
   and is recovered in software as any decoder failure is, where its lane used to end with
-  nothing said and the picture stood still. The media source calls of an open still treat such
-  an exception as their own end.
+  nothing said and the picture stood still. A media source call of an open that throws one
+  fails that open with a typed error, and anywhere else the player's loop takes it for a failure
+  of what it called and stays open.
 - A live HLS stream now starts where its `EXT-X-START` tag says, and a live DASH stream as far
   behind the live edge as its `suggestedPresentationDelay` asks (#627). FFmpeg obeys the tag only
   with its `prefer_x_start` option on, which the player never set, so every live stream started

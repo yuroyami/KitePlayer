@@ -2544,6 +2544,17 @@ internal class PlaybackCore(
                     if (terminated) return
                 }
             } catch (cancellation: CancellationException) {
+                // One that code the actor called threw while the actor still runs is a failure of
+                // that code, and ends nothing (#589): the actor read it as its own end and closed.
+                if (currentCoroutineContext().isActive) {
+                    val error = PlaybackError.Internal("a call the session loop made was cancelled from inside", cancellation)
+                    resolveSeekReplies(SeekResult.Superseded(requestedEpoch))
+                    teardownSession()
+                    fail(error)
+                    publishSnapshot()
+                    loopPasses++
+                    continue
+                }
                 if (closedNow.value) settleOutstandingForClose()
                 // Parent-scope cancellation is every bit as terminal as Close. The actor still owns
                 // the installed graph here, so it must release that graph before its completion hook
@@ -3993,13 +4004,14 @@ internal class PlaybackCore(
             emitEvent(PlayerEvent.Opened(command.media, tracks))
             readItemThumbnails()
             command.reply.complete(Unit)
-        } catch (cancellation: CancellationException) {
-            throw cancellation
         } catch (preempted: OpenPreempted) {
             // The stop or the close is next in the mailbox, and it finds nothing half built.
             teardownSession()
             command.reply.completeExceptionally(preemptedByTeardown("open"))
         } catch (failure: Throwable) {
+            // A cancellation that a source or a factory threw while the actor runs fails this open
+            // and leaves the player usable (#589); only the actor's own ends it.
+            throwIfOwnCancellation(failure)
             val error = classify(failure, command.media)
             teardownSession()
             if (absorb?.invoke(error) == true) return

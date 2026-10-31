@@ -167,6 +167,11 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- The Web Worker player's canvas no longer draws the soft edges of subtitles too dark (#607). The
+  overlay is premultiplied, and the canvas renderer handed those bytes to `putImageData`, which
+  multiplies by the alpha again, so white text got a grey halo, a half-transparent box showed at
+  a quarter of its light and a fade darkened as it went. The colours are now divided by their
+  alpha as the overlay is packed.
 - Thumbnails and encoded snapshots are now the picture as it is shown (#608). `Thumbnails.at` and
   `encode` wrote the stored picture, so a portrait phone recording came out on its side, an
   anamorphic DVD picture came out squeezed, and a snapshot kept the bars its container crops

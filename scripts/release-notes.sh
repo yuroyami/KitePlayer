@@ -3,10 +3,13 @@
 #
 #   scripts/release-notes.sh [since]      since defaults to the newest v* tag
 #
-# Commit subjects in this repository are "prefix: one sentence". The script groups them by that
-# prefix, drops the bookkeeping prefixes (plan, gotchas, design), and prints Markdown with one
-# third-level heading per group and one bullet per subject, ready to paste under a version
-# heading in CHANGELOG.md or into a release page. A subject with no prefix lands under "other".
+# A starting point for the hand-written entries, not the entries themselves. Most commit subjects
+# here are one plain sentence with no prefix, and those land under "other". A subject that does
+# start "prefix: " is grouped by that prefix, and the bookkeeping prefixes (plan, gotchas, design)
+# are dropped. The output is Markdown with one third-level heading per group and one bullet per
+# subject. A last group lists every commit that changed a public API dump under an api/ folder,
+# whatever its subject says, because each of those is a change an entry must name, and a removed
+# member is a break the entry must call out.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -39,3 +42,8 @@ git log --reverse --format='%s' "${since}..HEAD" | awk '
       printf "### %s\n\n%s", order[i], lines[order[i]]
     }
   }'
+
+api_commits="$(git log --reverse --format='- %s (%h)' "${since}..HEAD" -- '*/api/*')"
+if [ -n "$api_commits" ]; then
+  printf '\n### changes to a public API dump\n\n%s\n' "$api_commits"
+fi

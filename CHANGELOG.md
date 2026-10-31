@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 **Versioning policy:** KitePlayer is pre-1.0. During 0.x, minor versions may contain breaking API changes; they are called out here when they happen. From 1.0 on, breaking changes only land in major versions.
 
-The entries under a version are drafted by `scripts/release-notes.sh`, which groups the commits since the previous tag by their prefix. `publish.yml` refuses a version that has no section here.
+The entries under a version are written by hand. `scripts/release-notes.sh` gives a starting point: the commits since the previous tag, grouped by a subject prefix where one exists, and every commit that changed a public API dump, each of which is a change an entry must name, and a break when a member went away. `publish.yml` refuses a version that has no section here.
 
 ## [Unreleased]
 
@@ -35,7 +35,8 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `linkedFiles`, and a part whose file is missing is left out with the new warning
   `PlaybackWarning.EditionPartLeftOut`. `DemuxPolicy.orderedEditions = false` plays every edition
   plainly, as FFmpeg does. A backend reports editions through three new defaulted members of
-  `PlayerMediaSource`: `segmentUid`, `editions` and `fromSegmentTime`.
+  `PlayerMediaSource`: `segmentUid`, `editions` and `fromSegmentTime`. `MediaItem` and
+  `DemuxPolicy` each gain a field, which changes their generated data-class methods, so recompile.
 - Compose video on the web: `kiteplayer-compose-video`, `kiteplayer-compose-ui` and
   `kiteplayer-compose` publish a `wasmJs` variant, so a Compose Multiplatform app can keep them in
   `commonMain` (#125). `KiteVideo` draws the picture inside Compose's own WebGL2 context through
@@ -46,6 +47,13 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ### Changed
 
+- On Android the volume now applies after the AudioTrack's own buffer, so a change, mute and the
+  sleep timer's fade are heard almost at once rather than about 170 ms late (#14). The sink passes
+  the volume up to 1 to `AudioTrack.setVolume`, and the ring keeps only a boost above 1, so at a
+  volume below 1 a sample past full scale is now limited before the track turns it down, as at
+  full volume. A sink takes the volume after its own buffer through the new defaulted
+  `AudioSink.setDeviceGain`; every sink but Android's answers false and keeps the whole volume in
+  the ring, as before.
 - The build moved from Gradle to the Kotlin Toolchain (`./kotlin`). The group, the artifact IDs and
   the klib names stay the same. A Gradle consumer still finds each platform through the published
   module metadata. These changes are visible to a consumer:

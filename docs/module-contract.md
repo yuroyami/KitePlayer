@@ -349,10 +349,12 @@ position.
 ## Default player controls
 
 The contract for #469. Everything lives in `kiteplayer-compose-ui`, in the
-`io.github.yuroyami.kiteplayer.compose` package, beside `KitePlayerVideo`. The module gains
-`implementation(compose.foundation)`, which an application already receives through
-`kiteplayer-compose-video`, and no Material artifact: the owner decided on 2026-10-07 against
-both a Material dependency and a new module.
+`io.github.yuroyami.kiteplayer.compose` package, beside `KitePlayerVideo`. The module exports
+Compose Foundation, because the controls overload of `KitePlayerVideo` takes a `BoxScope` lambda,
+so an application that writes `KitePlayerVideo(player) { KitePlayerControls(player) }` needs it on
+its own compile classpath (#614); it was a runtime dependency only, and an application with no
+Foundation of its own could not compile that call. No Material artifact: the owner decided on
+2026-10-07 against both a Material dependency and a new module.
 
 **State holders.** Each is created with a `remember...State(player)` composable, reads the
 player's `state` and `progress`, and calls the player's own commands. An application that wants

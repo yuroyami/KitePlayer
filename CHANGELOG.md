@@ -167,6 +167,10 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- `kiteplayer-compose-ui` now exports Compose Foundation (#614). The documented controls call,
+  `KitePlayerVideo(player) { KitePlayerControls(player) }`, takes a `BoxScope` lambda, and the
+  published POM gave Foundation the runtime scope only, so an app with no Foundation of its own
+  could not compile it.
 - The Web Worker player's canvas no longer draws the soft edges of subtitles too dark (#607). The
   overlay is premultiplied, and the canvas renderer handed those bytes to `putImageData`, which
   multiplies by the alpha again, so white text got a grey halo, a half-transparent box showed at

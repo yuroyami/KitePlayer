@@ -14,7 +14,9 @@ dependencies:
   - //kiteplayer-core: exported
   - $compose.runtime: exported
   - $compose.ui: exported
-  - $compose.foundation
+  # Exported, because the controls overload of KitePlayerVideo takes a BoxScope lambda, and an app
+  # that names it needs Foundation on its own compile classpath (#614).
+  - $compose.foundation: exported
   - //kiteplayer-compose-interop
   - //kiteplayer-compose-video
   - //kiteplayer-view

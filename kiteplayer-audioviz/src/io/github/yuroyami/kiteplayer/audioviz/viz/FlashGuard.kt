@@ -26,7 +26,13 @@ public class FlashGuard(
 ) {
     private val light = Channel(mostPerSecond, STEP, DARK)
     private val red = Channel(0, RED_STEP, 1f)
-    private var seconds = 0f
+
+    /**
+     * The guard's own clock. A Double, as the surface clocks have been since #349: a Float stops
+     * adding an 8.33 ms step correctly after 36 hours, which shrank the guard's second to half a
+     * real one and let five flashes a second through, and then stopped the clock (#656).
+     */
+    private var seconds = 0.0
 
     /** How many flashes are inside the last second of what was shown. Diagnostics. */
     public val recent: Int get() = light.recent(seconds)
@@ -41,7 +47,7 @@ public class FlashGuard(
      * all. [deltaSeconds] is the time since the last frame.
      */
     public fun limit(wanted: Float, redShare: Float, deltaSeconds: Float): Float {
-        seconds += deltaSeconds.takeIf { it.isFinite() && it > 0f }?.coerceAtMost(0.5f) ?: 0f
+        seconds += deltaSeconds.takeIf { it.isFinite() && it > 0f }?.coerceAtMost(0.5f)?.toDouble() ?: 0.0
         val allowed = light.allow(wanted.coerceIn(0f, 1f), seconds)
         // A red flash is never allowed, so the red channel can only hold the picture back further.
         // The whole frame is dimmed by how much of the red had to go, and never below [DARKEST]:
@@ -67,7 +73,7 @@ public class FlashGuard(
 
     /** Forgets the history. Call it when the picture is replaced rather than changed. */
     public fun reset() {
-        seconds = 0f
+        seconds = 0.0
         light.reset()
         red.reset()
     }
@@ -80,12 +86,12 @@ public class FlashGuard(
      */
     private class Channel(private val most: Int, private val step: Float, private val dark: Float) {
         private var extreme = Float.NaN
-        private var extremeAt = 0f
+        private var extremeAt = 0.0
         private var rising = true
         private var halfway = false
-        private val flashes = ArrayDeque<Float>()
+        private val flashes = ArrayDeque<Double>()
 
-        fun recent(now: Float): Int {
+        fun recent(now: Double): Int {
             forget(now)
             return flashes.size
         }
@@ -97,7 +103,7 @@ public class FlashGuard(
         }
 
         /** The value that may be shown, and the state updated to what will be shown. */
-        fun allow(wanted: Float, now: Float): Float {
+        fun allow(wanted: Float, now: Double): Float {
             forget(now)
             if (extreme.isNaN()) {
                 extreme = wanted
@@ -142,8 +148,8 @@ public class FlashGuard(
             return wanted
         }
 
-        private fun forget(now: Float) {
-            while (flashes.isNotEmpty() && now - flashes.first() > 1f) flashes.removeFirst()
+        private fun forget(now: Double) {
+            while (flashes.isNotEmpty() && now - flashes.first() > 1.0) flashes.removeFirst()
         }
     }
 
@@ -169,6 +175,6 @@ public class FlashGuard(
          * Three flashes a second is six crossings a second, so a crossing that takes longer than
          * this is slower than anything the policy counts. *Judgement.*
          */
-        const val QUICK = 0.3f
+        const val QUICK = 0.3
     }
 }

@@ -26,11 +26,11 @@ class FlashGuardTest {
         frames.map { wanted -> wanted * guard.allowance(wanted, step) }
 
     /** How many flashes, as the policy counts them, are in [shown] at its busiest second. */
-    private fun busiest(shown: List<Float>): Int {
+    private fun busiest(shown: List<Float>, frameStep: Float = step): Int {
         val counter = FlashGuard(mostPerSecond = 1_000)
         var most = 0
         for (value in shown) {
-            counter.limit(value, 0f, step)
+            counter.limit(value, 0f, frameStep)
             if (counter.recent > most) most = counter.recent
         }
         return most
@@ -140,5 +140,46 @@ class FlashGuardTest {
         assertTrue(guard.recent > 0, "the guard counted nothing to forget")
         guard.reset()
         assertEquals(0, guard.recent, "the guard kept its history through a reset")
+    }
+
+    /** Runs a steady light through [guard] for [seconds] of surface time, in the longest step it takes. */
+    private fun age(guard: FlashGuard, seconds: Double) {
+        repeat((seconds / 0.5).toInt()) { guard.allowance(0.25f, 0.5f) }
+    }
+
+    /**
+     * The guard's second is still a second after 36 hours on a 120 Hz screen (#656). On a Float
+     * clock an 8.33 ms step rounded to 15.6 ms there, and a 6 Hz flicker showed 5.4 flashes a second.
+     */
+    @Test
+    fun aDayAndAHalfOfSurfaceTimeKeepsTheLimitAt120Hz() {
+        val guard = FlashGuard()
+        age(guard, LONG_UPTIME_SECONDS)
+        val frameStep = 1f / 120f
+        // A 6 Hz step between 0.25 and 0.60 for ten seconds: ten frames each way.
+        val frames = List(1_200) { if (it / 10 % 2 == 0) 0.25f else 0.60f }
+        val shown = frames.map { it * guard.allowance(it, frameStep) }
+        val most = busiest(shown, frameStep)
+        assertTrue(most <= 3, "the busiest second showed $most flashes after $LONG_UPTIME_SECONDS s")
+    }
+
+    /** On a Float clock a 144 Hz step added nothing after 36 hours, so the clock stopped and a slow fade was held. */
+    @Test
+    fun aSlowFadeIsNeverHeldAfterADayAndAHalfAt144Hz() {
+        val guard = FlashGuard()
+        age(guard, LONG_UPTIME_SECONDS)
+        val frameStep = 1f / 144f
+        // Up and down between 0.2 and 0.6 every two seconds, for ten seconds.
+        val frames = List(1_440) { frame ->
+            val phase = (frame % 288) / 288f
+            0.2f + 0.4f * (if (phase < 0.5f) phase * 2f else 2f - phase * 2f)
+        }
+        val held = frames.indices.filter { guard.allowance(frames[it], frameStep) < 1f }
+        assertEquals(0, held.size, "a fade of one second per leg is not a flash, held from frame ${held.firstOrNull()}")
+    }
+
+    private companion object {
+        /** Past 2^17 seconds, where a Float step of 8.33 ms stops adding correctly. */
+        const val LONG_UPTIME_SECONDS = 131_100.0
     }
 }

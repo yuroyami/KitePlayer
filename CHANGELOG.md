@@ -12,6 +12,14 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Added
 
+- A signed build provenance attestation for every file a release run of `publish.yml` hands out
+  (#684): each jar, klib, AAR, POM and module metadata file on Maven Central, the web zips and the
+  bill of materials on the release page. It names the workflow file, the commit and the run, so
+  `gh attestation verify <file> --repo yuroyami/KitePlayer --signer-workflow
+  yuroyami/KitePlayer/.github/workflows/publish.yml` checks who built a file as well as what it
+  holds. Signatures are not attested, as each is made again for Central. The checksums and the bill
+  of materials stay. A version published from the maintainer's machine carries no attestation, and
+  0.3.0 and earlier carry none.
 - `PlaybackWarning.PictureControlsUnavailable` and `VideoRenderer.appliesAdjustments` (#610). The
   picture controls of `setVideoAdjustments` were stored, published and silently dropped on the
   desktop canvas view, the web canvas and Apple's picture in picture layer. The player now warns

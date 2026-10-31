@@ -223,6 +223,11 @@ internal object DashHls {
         sequence: Long = plan.segments.firstOrNull()?.number ?: 0L,
         images: DashRepresentation? = null,
         dateOriginMicros: Long? = null,
+        /**
+         * Ends a live playlist whose event has ended, with `EXT-X-ENDLIST` and no playlist type,
+         * because a playlist that began live may not change its type (RFC 8216, 6.2.1) (#616).
+         */
+        ended: Boolean = false,
     ): String =
         buildString {
             val longest = plan.segments.maxOfOrNull { it.durationMicros } ?: 1_000_000L
@@ -269,7 +274,7 @@ internal object DashHls {
                 segment.range?.let { append("#EXT-X-BYTERANGE:").append(byteRange(it)).append('\n') }
                 append(segment.url).append('\n')
             }
-            if (!live) append("#EXT-X-ENDLIST\n")
+            if (!live || ended) append("#EXT-X-ENDLIST\n")
         }
 
     /**

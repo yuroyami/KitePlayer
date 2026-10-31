@@ -227,7 +227,9 @@ internal class DashHlsMediaIo(
 
     /** The media playlist of [track] as it stands now. */
     private suspend fun playlist(track: DashHlsTrack): String = lock.withLock {
-        if (!manifest.isDynamic) {
+        // A live track keeps its live numbering after its manifest turns static, so FFmpeg finds
+        // its place in the last playlist it reloads.
+        if (!manifest.isDynamic && track.address !in sequences) {
             return@withLock written.getOrPut(track.address) {
                 val plan = servedPlan(track, manifest, null)
                 if (openSegment != null) {
@@ -251,7 +253,11 @@ internal class DashHlsMediaIo(
         val plan = servedPlan(track, manifest, now)
         retainListed(track, plan)
         val sequence = sequences.getOrPut(track.address) { LiveSequence() }.first(plan)
-        DashHls.mediaPlaylist(plan, live = true, sequence = sequence, dateOriginMicros = dateOrigin(manifest))
+        // An event that ended, by an update that made the manifest static or by a stated length the
+        // clock has passed, ends its playlist, so FFmpeg ends there instead of reloading a playlist
+        // that never grows again for minutes (#616).
+        val ended = !manifest.isDynamic || DashManifestParser.liveEnded(manifest, now)
+        DashHls.mediaPlaylist(plan, live = true, sequence = sequence, dateOriginMicros = dateOrigin(manifest), ended = ended)
     }
 
     /**
@@ -640,7 +646,8 @@ internal class DashHlsMediaIo(
             KiteLog.log("KiteDash", "the live manifest could not be fetched again: ${failure.message}")
             return
         }
-        if (fresh.isDynamic && fresh.periods.isNotEmpty()) {
+        // A static update is the end of the event (ISO/IEC 23009-1, 5.4), and it is taken as well.
+        if (fresh.periods.isNotEmpty()) {
             manifest = fresh
             allowedLocation(fresh)?.let { manifestAddress = it }
             onManifest(fresh)

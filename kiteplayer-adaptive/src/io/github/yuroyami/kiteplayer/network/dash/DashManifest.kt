@@ -789,6 +789,18 @@ public object DashManifestParser {
     /** The span of Period time, in microseconds, whose segments a live presentation has available. */
     private class LiveWindow(val fromMicros: Long, val edgeMicros: Long)
 
+    /**
+     * Whether a live [manifest] states an end that the clock has passed: a packager ends a live
+     * event by stating `mediaPresentationDuration` in an update (DASH-IF IOP), and the presentation
+     * then ends that long after its availability start (#616).
+     */
+    internal fun liveEnded(manifest: DashManifest, nowMicros: Long): Boolean {
+        if (!manifest.isDynamic) return false
+        val duration = manifest.durationMicros ?: return false
+        val start = manifest.availabilityStartTimeMicros ?: return false
+        return nowMicros - start >= duration
+    }
+
     private fun liveWindow(manifest: DashManifest, periodStartMicros: Long, nowMicros: Long?): LiveWindow? {
         if (!manifest.isDynamic) return null
         val start = requireNotNull(manifest.availabilityStartTimeMicros) {
@@ -882,13 +894,16 @@ public object DashManifestParser {
                 // Segment k ends at (k + 1) segment lengths, and is available once that has passed.
                 end = if (window.edgeMicros < segmentMicros) 0 else window.edgeMicros / segmentMicros
                 first = if (window.fromMicros < 0) 0 else window.fromMicros / segmentMicros
+                // A live presentation that states its length has no segment past it, so the clock
+                // alone listed segments that do not exist after the event ended (#616).
+                totalMicros?.let { total -> end = minOf(end, total / segmentMicros + if (total % segmentMicros != 0L) 1 else 0) }
             }
             if (count != null) end = minOf(end, count)
             budget.reserve((end - first).coerceAtLeast(0))
             for (k in first until end) {
                 val startMicros = times(k, segmentMicros, "a segment start")
                 // The last segment of a finished presentation ends with it, not a whole length later.
-                val durationMicros = if (window == null && totalMicros != null) {
+                val durationMicros = if (totalMicros != null) {
                     minOf(segmentMicros, totalMicros - startMicros)
                 } else {
                     segmentMicros

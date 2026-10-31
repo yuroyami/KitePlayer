@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -142,6 +143,37 @@ class DashLiveRefreshTest {
         // A set of another kind that took the picture's id is not the picture.
         val imageTookTheId = DashManifestParser.parse(mpd(set("image/jpeg", "v") + english), base).periods.single()
         assertEquals(null, DashPeriods.bind(tracks.video(), imageTookTheId))
+    }
+
+    /** An update that makes the manifest static ends the event, and the playlist then ends too (#616). */
+    @Test
+    fun aStaticUpdateEndsThePlaylist() = runTest {
+        val ended = """<MPD type="static" mediaPresentationDuration="PT21S"><Period>$video</Period></MPD>"""
+        val result = refresh(mpd(video), ended) { it.video() }
+        assertTrue("#EXT-X-ENDLIST" !in result.before, "the live playlist ended before the event did")
+        val after = result.after.getOrThrow()
+        assertTrue(after.trimEnd().endsWith("#EXT-X-ENDLIST"), after)
+        assertTrue("#EXT-X-PLAYLIST-TYPE" !in after, "a playlist that began live changed its type: $after")
+    }
+
+    /**
+     * A live manifest that states its length lists no segment past it, and once the clock passes it
+     * the playlist ends (#616). Counted from the clock alone, it listed a segment that does not exist
+     * at every reload, and FFmpeg never ended.
+     */
+    @Test
+    fun aLiveManifestWithAStatedLengthEndsAtIt() = runTest {
+        val stated = mpd(video).replace("PT5000S", "PT20S")
+        val manifest = DashManifestParser.parse(stated, base)
+        val period = manifest.periods.single()
+        val representation = period.adaptationSets.single().representations.single()
+        // The ten second window at 25 s reaches five seconds past the stated end.
+        val plan = assertNotNull(DashManifestParser.timedPlan(manifest, period, representation, DashUrlPolicy.Default, 25_000_000L))
+        assertEquals(20L, plan.segments.maxOf { it.number }, "listed past the end: ${plan.segments.map { it.number }}")
+        val presentation = DashHls.presentation(period, live = true)
+        val io = DashHlsMediaIo(presentation, manifest, base, DashUrlPolicy.Default, { BytesMediaIo(ByteArray(0)) }, null, { 25_000_000L })
+        val playlist = io.openRelated(presentation.tracks.video().address)!!.readAll().decodeToString()
+        assertTrue(playlist.trimEnd().endsWith("#EXT-X-ENDLIST"), playlist)
     }
 
     private suspend fun MediaIo.readAll(): ByteArray {

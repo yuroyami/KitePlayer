@@ -2402,11 +2402,13 @@ internal class PlaybackCore(
     private fun enqueue(command: CoreCommand): Enqueued {
         if (command is LatestValueSetting) {
             val kind = command::class
-            val displaced = kotlinx.atomicfu.locks.synchronized(latestLock) { latestSettings.put(kind, command) }
-            if (displaced != null) {
-                kotlinx.atomicfu.locks.synchronized(latestLock) { command.takeOver(displaced) }
-                return Enqueued.Queued
+            // The put and the take-over in one section: in two, the actor could take the new
+            // command between them, answer its still empty list, and leave the older call's reply
+            // in a list that nobody reads, open for ever (#593).
+            val displaced = kotlinx.atomicfu.locks.synchronized(latestLock) {
+                latestSettings.put(kind, command)?.also { command.takeOver(it) }
             }
+            if (displaced != null) return Enqueued.Queued
             if (commands.trySend(CoreCommand.ApplyLatest(kind)).isSuccess) return Enqueued.Queued
             kotlinx.atomicfu.locks.synchronized(latestLock) { if (latestSettings[kind] === command) latestSettings.remove(kind) }
             return Enqueued.Closed

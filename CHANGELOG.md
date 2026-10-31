@@ -167,6 +167,12 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- The desktop JVM no longer leaves a 5 MB copy of the libass adapter in the temporary folder at
+  every launch on Windows (#651). The loader copied the library into a new folder each time and
+  left it to `deleteOnExit`, which cannot delete a loaded library on Windows. It now writes one
+  folder per build, named for the library's contents, reuses it at every launch, and deletes the
+  older folders once they are an hour old and no longer in use. KiteFFmpeg's own loader does the
+  same as the old one, which yuroyami/KiteFFmpeg#208 tracks.
 - `PlayerMemento.fromProperties` and `KitePlayer.thumbnailAt` now declare what they throw, so a
   Swift app catches the error instead of ending (#652). A memento written by a newer build, as
   after going back from a test build, ended the app at every launch. The Apple media session's

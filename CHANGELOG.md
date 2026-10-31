@@ -12,6 +12,10 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Added
 
+- `TrackInfo.isLanguage(tag)` tells whether a track is in a language, in any spelling of it (#633).
+  A container writes French as `fr`, `fra` or `fre`, so the README's old sample, which compared
+  `language` with `==`, found no track in most MP4, MPEG-TS and Matroska files and threw. The
+  sample now uses `isLanguage` and `firstOrNull`.
 - 360 degree video (#460). A video track whose file states a projection lists it as
   `TrackInfo.projection`, and `KiteVideo` draws an equirectangular picture, or a tile of one, as a
   view into its sphere on the desktop JVM, iOS, Android 13 and later and the web.

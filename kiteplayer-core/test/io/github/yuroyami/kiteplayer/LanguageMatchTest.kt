@@ -26,6 +26,21 @@ class LanguageMatchTest {
         for ((a, b) in pairs) assertTrue(sameLanguage(a, b), "$a against $b")
     }
 
+    /** A track answers a language in any spelling, as the README sample relies on (#633). */
+    @Test
+    fun aTrackAnswersItsLanguageInAnySpelling() {
+        fun track(language: String?) = TrackInfo(TrackId(1), TrackKind.Audio, "aac", language = language)
+        assertTrue(track("fra").isLanguage("fr"))
+        assertTrue(track("fre").isLanguage("fr-CA"))
+        assertTrue(track("jpn").isLanguage("ja"))
+        assertTrue(track("ja-JP").isLanguage("jpn"))
+        assertFalse(track("eng").isLanguage("fr"))
+        assertFalse(track(null).isLanguage("fr"))
+        assertFalse(track("und").isLanguage("en"))
+        val tracks = listOf(track("eng"), track("fra").copy(id = TrackId(2)))
+        assertEquals(TrackId(2), tracks.first { it.isLanguage("fr") }.id)
+    }
+
     @Test
     fun aLanguageDoesNotMeetItsNeighbours() {
         val pairs = listOf("en" to "enm", "fr" to "frm", "zh" to "yue", "zh" to "zh-yue", "no" to "nb", "ja" to "jav")

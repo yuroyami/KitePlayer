@@ -3264,6 +3264,7 @@ public final class io/github/yuroyami/kiteplayer/TrackInfo {
 	public final fun isCoverArt ()Z
 	public final fun isDefault ()Z
 	public final fun isForced ()Z
+	public final fun isLanguage (Ljava/lang/String;)Z
 	public fun toString ()Ljava/lang/String;
 }
 

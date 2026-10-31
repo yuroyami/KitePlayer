@@ -284,8 +284,9 @@ player.setVolume(0.8f)
 
 // Every audio, video and subtitle track of the open item
 val tracks = player.state.value.tracks
-val french = tracks.audio.first { it.language == "fr" }
-player.selectTrack(TrackKind.Audio, french.id)
+// isLanguage matches every spelling a container uses, such as fr, fra and fre
+val french = tracks.audio.firstOrNull { it.isLanguage("fr") }
+if (french != null) player.selectTrack(TrackKind.Audio, french.id)
 ```
 
 Collect `player.state` for the status, the tracks and every setting, and `player.progress` for the

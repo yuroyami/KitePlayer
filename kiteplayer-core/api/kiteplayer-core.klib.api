@@ -3294,6 +3294,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
     final fun setAbLoop(kotlin.time/Duration?, kotlin.time/Duration? = ...) // io.github.yuroyami.kiteplayer/KitePlayer.setAbLoop|setAbLoop(kotlin.time.Duration?;kotlin.time.Duration?){}[0]
     final fun setAudioDelay(kotlin.time/Duration) // io.github.yuroyami.kiteplayer/KitePlayer.setAudioDelay|setAudioDelay(kotlin.time.Duration){}[0]
     final fun setBalance(kotlin/Float) // io.github.yuroyami.kiteplayer/KitePlayer.setBalance|setBalance(kotlin.Float){}[0]
+    final fun setControlsInset(kotlin/Float) // io.github.yuroyami.kiteplayer/KitePlayer.setControlsInset|setControlsInset(kotlin.Float){}[0]
     final fun setDialogueLevel(kotlin/Float) // io.github.yuroyami.kiteplayer/KitePlayer.setDialogueLevel|setDialogueLevel(kotlin.Float){}[0]
     final fun setDuckLevel(kotlin/Float) // io.github.yuroyami.kiteplayer/KitePlayer.setDuckLevel|setDuckLevel(kotlin.Float){}[0]
     final fun setEqualizer(io.github.yuroyami.kiteplayer/EqualizerSettings) // io.github.yuroyami.kiteplayer/KitePlayer.setEqualizer|setEqualizer(io.github.yuroyami.kiteplayer.EqualizerSettings){}[0]

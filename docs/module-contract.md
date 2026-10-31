@@ -411,9 +411,11 @@ only from the state holders above, from Compose Foundation and `compose.ui`.
 - Every control has a role and a label. The seek bar and the volume, which Compose has no slider
   role for, carry `progressBarRangeInfo` and a `setProgress` action, as the visualiser's panel
   does (#326), and state the position and duration in words.
-- While the controls show, subtitles move up through `KitePlayer.setSubtitlePosition`, and settle
-  back when they hide, unless the application changed the position itself in between. It is the
-  same rule the session guards use for a pause they did not make.
+- While the controls show, subtitles stay above them through the engine's controls inset, how much
+  of the output the bar covers, and use the output again when they hide (#648). The engine raises
+  the bottom of the application's own safe area to that inset, so neither replaces the other, and
+  the user's subtitle position, the snapshot and a memento never see the lift. It used to move the
+  subtitle position, which a memento taken during a pause then saved for good.
 - On a touch screen, a horizontal drag over the picture scrubs, showing the target time, and
   seeks where the finger lifts. The width of the picture stands for the whole item, or for ten
   minutes of a longer one. A mouse drag does not scrub.
@@ -465,7 +467,7 @@ application that draws its own controls in a native toolkit builds them from thi
 The model follows the rules of the Compose controls: the play button shows play unless the player
 was asked to play, the controls hide after the timeout only while the player plays, a drag of the
 seek bar asks for `SeekMode.KeyframeThenRefine` seeks, the volume slider follows the cube of its
-position, and subtitles move up through `KitePlayer.setSubtitlePosition` while the controls show.
+position, and subtitles stay above the controls through the engine's controls inset while they show.
 It mirrors those rules; it does not share code with `kiteplayer-compose-ui`, which keeps its own
 state holders. `PlayerControlsStrings` has the same keys and the same English words as
 `KitePlayerControlsLabels`.

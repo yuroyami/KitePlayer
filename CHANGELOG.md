@@ -181,6 +181,12 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- The default controls no longer save their subtitle lift into a memento (#648). They kept text
+  above the control bar by moving the user's own subtitle position, so a memento taken while
+  they showed, which is every pause, saved the lifted value, and after a restore the subtitles
+  never came back down. The controls in Compose and in the native views now tell the engine how
+  much of the output they cover, an inset kept apart from the application's own safe area and
+  from the snapshot.
 - An HLS or DASH stream with its picture off now moves to its cheapest variant, and back to the
   one before when the picture is on again (#595). With `setVideoEnabled(false)` or the media
   session's background policy the video lane only dropped what arrived, so the stream kept

@@ -922,6 +922,20 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Keeps subtitles above the player's own controls while they show: [bottom] is how far up the
+     * output they cover, a fraction of its height, and 0 when they are hidden (#648). The engine
+     * raises the bottom of [setSubtitleSafeArea]'s area to it, so the application's own safe area
+     * stays as the application set it, and nothing of this reaches the snapshot or a memento. For
+     * KitePlayer's default controls; an application that draws its own sets a safe area instead.
+     */
+    @KitePlayerInternalApi
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
+    public fun setControlsInset(bottom: Float) {
+        require(bottom.isFinite() && bottom in 0f..1f) { "the controls inset must be within 0..1, was $bottom" }
+        core.post(CoreCommand.SetControlsInset(minOf(bottom, MAX_CONTROLS_INSET), CompletableDeferred()))
+    }
+
+    /**
      * Draws only the forced pictures of a Blu-ray or DVD subtitle track, or every picture again
      * (#513), as mpv's `sub-forced-events-only`. [SubtitleConfig.forcedPicturesOnly] says what
      * that means and is where the player starts. Applies to the subtitles showing now, with no
@@ -1907,3 +1921,6 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
 
 /** How far into a chapter "previous" still means the one before rather than a restart. */
 private val CHAPTER_RESTART_WINDOW: Duration = 3.seconds
+
+/** The most of the output the controls inset raises subtitles by, the largest inset a [io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea] takes. */
+private const val MAX_CONTROLS_INSET: Float = 0.45f

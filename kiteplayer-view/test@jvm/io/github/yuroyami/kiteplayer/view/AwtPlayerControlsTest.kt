@@ -55,7 +55,7 @@ class AwtPlayerControlsTest {
     }
 
     /** What the player was asked, without the subtitle lift every shown bar starts with. */
-    private val ScriptedControlsPlayer.commands: List<String> get() = calls.filterNot { it.startsWith("subtitles") }
+    private val ScriptedControlsPlayer.commands: List<String> get() = calls.filterNot { it.startsWith("inset") }
 
     private fun AwtPlayerControls.part(control: AwtControl): Rectangle = layout().parts.getValue(control)
 
@@ -207,7 +207,7 @@ class AwtPlayerControlsTest {
         assertTrue(repaints > before)
         // The bar covers the bottom row, the seek bar and their margins: 76 of 360 pixels.
         assertEquals(76f / 360f, controls.model.barShare)
-        assertEquals("subtitles 789", player.calls.last())
+        assertEquals("inset 211", player.calls.last())
 
         // Hidden controls do not ask for a repaint on every tick.
         controls.model.hide()

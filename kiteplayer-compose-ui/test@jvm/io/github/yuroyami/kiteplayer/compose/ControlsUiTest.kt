@@ -89,7 +89,7 @@ class ControlsUiTest {
     }
 
     /** What the controls asked of the player, leaving out the subtitle lift that showing them makes. */
-    private fun ScriptedTarget.commands(): List<String> = callsSoFar().filterNot { it.startsWith("subtitles") }
+    private fun ScriptedTarget.commands(): List<String> = callsSoFar().filterNot { it.startsWith("inset") }
 
     /** A tap on the picture away from the buttons in its middle. */
     private fun SemanticsNodeInteraction.tapPicture() {
@@ -163,7 +163,7 @@ class ControlsUiTest {
         showControls(target, visibility = visibility)
         mainClock.advanceTimeBy(100)
         onNodeWithContentDescription("Pause").assertExists()
-        assertTrue(target.snapshot.value.subtitlePosition < 1f, "the controls lifted no subtitles")
+        assertTrue(target.insetAsked > 0f, "the controls lifted no subtitles")
 
         mainClock.advanceTimeBy(3_100)
         val timedOut = hiddenState(target)
@@ -181,7 +181,7 @@ class ControlsUiTest {
         onNodeWithContentDescription("Pause").assertDoesNotExist()
         onNodeWithContentDescription("Seek").assertDoesNotExist()
         onNodeWithContentDescription("Show controls").assertExists()
-        return "subtitles at ${target.snapshot.value.subtitlePosition}"
+        return "subtitles above ${target.insetAsked}"
     }
 
     /** The controls stay as long as an accessibility service recommends, the user's time to take action (#653). */
@@ -272,10 +272,13 @@ class ControlsUiTest {
         val visibility = ControlsVisibility()
         showControls(target, visibility = visibility)
         waitForIdle()
-        val lifted = target.snapshot.value.subtitlePosition
-        assertTrue(lifted < 1f && lifted > 0.5f, "lifted to $lifted")
+        val lifted = target.insetAsked
+        assertTrue(lifted > 0f && lifted < 0.5f, "lifted above $lifted")
+        // The user's own position is never touched, so a memento taken now saves no lift (#648).
+        assertEquals(1f, target.snapshot.value.subtitlePosition)
         runOnIdle { visibility.hide() }
         waitForIdle()
+        assertEquals(0f, target.insetAsked)
         assertEquals(1f, target.snapshot.value.subtitlePosition)
     }
 

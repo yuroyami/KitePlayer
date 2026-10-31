@@ -1310,6 +1310,19 @@ internal class PlaybackCore(
         io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea.None
 
     /**
+     * How far up the output the player's own controls cover the picture, as a fraction of its
+     * height, while they show (#648). Kept apart from [subtitleSafeArea], the application's, so
+     * neither replaces the other, and never in the snapshot or a memento. Actor only.
+     */
+    private var controlsInset: Float = 0f
+
+    /** The safe area the text is laid out in: the application's, raised above the controls while they show. */
+    private fun effectiveSafeArea(): io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea {
+        val app = subtitleSafeArea
+        return if (controlsInset <= app.bottom) app else app.copy(bottom = controlsInset)
+    }
+
+    /**
      * Runtime audio timing shift. Positive means the sound reaches the ear late (a Bluetooth
      * stack, a receiver), so the master clock the video chases is read that much AHEAD and every
      * frame is presented earlier by the same amount. The audio samples themselves are never
@@ -3351,6 +3364,12 @@ internal class PlaybackCore(
             is CoreCommand.SetForcedPicturesOnly -> {
                 forcedPicturesOnly = command.value
                 // Drawn again on the very next pass, the same key-drop as a scale change.
+                session?.publishedCueKey = null
+                redrawOnOverlay = status == PlaybackStatus.Paused || status == PlaybackStatus.Ended
+                command.reply.complete(Unit)
+            }
+            is CoreCommand.SetControlsInset -> {
+                controlsInset = command.bottom
                 session?.publishedCueKey = null
                 redrawOnOverlay = status == PlaybackStatus.Paused || status == PlaybackStatus.Ended
                 command.reply.complete(Unit)
@@ -8600,7 +8619,7 @@ internal class PlaybackCore(
         // canvas height. A renderer that cannot say falls back to the picture, upright.
         val (width, height) = subtitleCanvas(session)
         // Read here, on the actor, because the raster lane below must not read actor state.
-        val safeArea = subtitleSafeArea
+        val safeArea = effectiveSafeArea()
         val generation = session.overlayGeneration.incrementAndGet()
         if (active.isEmpty()) {
             // A clear costs no rasterisation; publish it inline so text vanishes on time. The
@@ -8877,16 +8896,16 @@ internal class PlaybackCore(
         val frameElapsed = first || timeMillis < lane.lastRequestMillis ||
             (timeMillis - lane.lastRequestMillis) * 1000 >= intervalUs
         val wanted = lane.hasStaged() || frame != lane.lastRequestFrame || others != lane.lastRequestOthers ||
-            subtitleSafeArea != lane.lastRequestSafeArea || (moved && (frameElapsed || !playing))
+            effectiveSafeArea() != lane.lastRequestSafeArea || (moved && (frameElapsed || !playing))
         if (wanted) {
             lane.lastRequestMillis = timeMillis
             lane.lastRequestFrame = frame
             lane.lastRequestOthers = others
-            lane.lastRequestSafeArea = subtitleSafeArea
+            lane.lastRequestSafeArea = effectiveSafeArea()
             requestTypesetRender(
                 session,
                 lane,
-                TypesetRequest(timeMillis, frame, others, subtitleStyle, subtitleSafeArea, lane.epoch.value),
+                TypesetRequest(timeMillis, frame, others, subtitleStyle, effectiveSafeArea(), lane.epoch.value),
             )
         }
         if (playing) wakeIn(intervalUs.microseconds)
@@ -16783,6 +16802,8 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
         val value: io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea,
         val reply: CompletableDeferred<Unit>,
     ) : CoreCommand("setSubtitleSafeArea", reply)
+    class SetControlsInset(val bottom: Float, val reply: CompletableDeferred<Unit>) :
+        CoreCommand("setControlsInset", reply), LatestValueSetting
     class SetAudioDelay(val value: Duration, val reply: CompletableDeferred<Unit>) : CoreCommand("setAudioDelay", reply), LatestValueSetting
     class AddExternalSubtitle(val source: SubtitleSource, val reply: CompletableDeferred<TrackId>) :
         CoreCommand("addExternalSubtitle", reply)

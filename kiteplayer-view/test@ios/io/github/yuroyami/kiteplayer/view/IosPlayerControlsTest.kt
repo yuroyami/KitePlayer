@@ -46,7 +46,7 @@ class IosPlayerControlsTest {
     }
 
     /** What the player was asked, without the subtitle lift every shown bar starts with. */
-    private val ScriptedControlsPlayer.commands: List<String> get() = calls.filterNot { it.startsWith("subtitles") }
+    private val ScriptedControlsPlayer.commands: List<String> get() = calls.filterNot { it.startsWith("inset") }
 
     @Test
     fun aPressOnAButtonReachesThePlayer() {
@@ -128,11 +128,11 @@ class IosPlayerControlsTest {
         assertFalse(overlay.bar.hidden)
         // 8 of margin, 32 of seek bar and 44 of buttons, of 300 points.
         assertEquals(84f / 300f, overlay.model.barShare)
-        assertEquals(listOf("subtitles 720"), player.calls)
+        assertEquals(listOf("inset 280"), player.calls)
 
         overlay.pictureTapped()
         assertTrue(overlay.bar.hidden)
-        assertEquals("subtitles 1000", player.calls.last())
+        assertEquals("inset 0", player.calls.last())
         overlay.layoutIfNeeded()
         assertEquals(300.0, overlay.picture.frame.useContents { size.height })
 

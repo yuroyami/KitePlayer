@@ -29,6 +29,9 @@ internal interface ControlsTarget {
     fun setVolume(value: Float)
     fun setMuted(value: Boolean)
     fun setSubtitlePosition(value: Float)
+
+    /** Keeps subtitles above the controls, which cover [bottom] of the output, or none for 0 (#648). */
+    fun setControlsInset(bottom: Float)
     suspend fun next()
     suspend fun previous()
     suspend fun selectTrack(kind: TrackKind, track: TrackId?)
@@ -45,6 +48,9 @@ private class PlayerTarget(private val player: KitePlayer) : ControlsTarget {
     override fun setVolume(value: Float) = player.setVolume(value)
     override fun setMuted(value: Boolean) = player.setMuted(value)
     override fun setSubtitlePosition(value: Float) = player.setSubtitlePosition(value)
+
+    @OptIn(io.github.yuroyami.kiteplayer.KitePlayerInternalApi::class)
+    override fun setControlsInset(bottom: Float) = player.setControlsInset(bottom)
     override suspend fun next() = player.next()
     override suspend fun previous() = player.previous()
     override suspend fun selectTrack(kind: TrackKind, track: TrackId?) {

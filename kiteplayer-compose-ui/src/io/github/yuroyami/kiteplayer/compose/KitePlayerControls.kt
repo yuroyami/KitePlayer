@@ -218,8 +218,9 @@ internal fun Controls(
     }
 
     val lift = remember(source) { SubtitleLift() }
+    // How much of the output the bar covers, which the engine keeps subtitles above (#648).
     val wantedLift = if (visibility.visible && height > 0 && barHeight > 0) {
-        (1f - barHeight.toFloat() / height).coerceIn(SubtitleLift.LOWEST, 1f)
+        (barHeight.toFloat() / height).coerceIn(0f, 1f)
     } else {
         null
     }
@@ -810,48 +811,25 @@ private suspend fun PointerInputScope.pictureScrub(state: SeekBarState, visibili
 }
 
 /**
- * Moves subtitles above the controls while they show, and back when they hide, unless the
- * application moved them itself in between. The same rule the session guards keep for a pause they
- * did not make.
+ * Keeps subtitles above the control bar while it shows (#648). It tells the engine how much of the
+ * output the bar covers, which the engine keeps text above, apart from the application's own safe
+ * area. It used to move the subtitle position, the user's own setting, so a memento taken while
+ * the controls showed, which is every pause, saved the lift and a restore kept it for good.
  */
 internal class SubtitleLift {
-    private var before: Float? = null
-    private var lifted: Float? = null
+    private var shown: Float? = null
 
-    /** Lifts subtitles to [wanted], or keeps them where they are when they already stand higher. */
-    fun raise(source: ControlsSource, wanted: Float) {
-        val current = source.snapshot.subtitlePosition
-        val base = before?.takeIf { mine(current) } ?: current
-        val next = minOf(base, wanted)
-        if (next >= base) {
-            settle(source)
-            return
-        }
-        before = base
-        lifted = next
-        source.send("setSubtitlePosition") { setSubtitlePosition(next) }
+    /** Keeps subtitles above a bar that covers [bottom] of the output. */
+    fun raise(source: ControlsSource, bottom: Float) {
+        if (shown == bottom) return
+        shown = bottom
+        source.send("setControlsInset") { setControlsInset(bottom) }
     }
 
-    /** Puts subtitles back where they were before the lift, unless the application moved them. */
+    /** Lets subtitles use the output down to the application's own safe area again. */
     fun settle(source: ControlsSource) {
-        val restore = before ?: return
-        val current = source.snapshot.subtitlePosition
-        val untouched = mine(current)
-        before = null
-        lifted = null
-        // Sent even when the player still shows the old position: the lift may be on its way, and
-        // the engine applies the two in order.
-        if (untouched) source.send("setSubtitlePosition") { setSubtitlePosition(restore) }
-    }
-
-    /**
-     * True when [current] is the lift, or the position before it, which the player can still show
-     * while the lift waits on its way to the engine.
-     */
-    private fun mine(current: Float): Boolean = current == lifted || current == before
-
-    companion object {
-        /** The highest the player places subtitles, a tenth of the way down. */
-        const val LOWEST = 0.1f
+        if (shown == null) return
+        shown = null
+        source.send("setControlsInset") { setControlsInset(0f) }
     }
 }

@@ -195,6 +195,11 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- The Android video Surface's frame rate request follows a new item and a new speed (#598). It was
+  measured once per Surface, from media time, so a 50 fps clip after a 23.976 fps film of the same
+  aspect, or the film at 2x, kept the film's request, and a TV box that matches its mode to the
+  request dropped about half the frames. A new stream is measured again, the speed counts, a steady
+  run that disagrees asks again, and taking the picture off withdraws the request.
 - The Metal renderer reads left-sited chroma half a luma pixel to the right, not the left (#604).
   The siting correction of #118 moved the read the wrong way, so the colour of almost every H.264,
   HEVC and AV1 frame sat a whole luma column right of its edge instead of half a column, and the

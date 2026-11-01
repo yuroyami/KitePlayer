@@ -110,7 +110,9 @@ jobs:
     runs-on: macos-latest
     # The ratchets compile every published module for every platform from a cold cache, and the
     # native suites follow; two hours ran out inside the ratchets. The JVM suites are macos-jvm's.
-    timeout-minutes: 180
+    # A cold cache has since made the ratchets alone take from 12 minutes to 2 h 18, and three hours
+    # ran out in the published-format consumer after them.
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4

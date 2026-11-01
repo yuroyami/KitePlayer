@@ -128,6 +128,9 @@ public class AwtCanvasVideoRenderer(
     /** Holds the BufferStrategy's own size, which is why it is per renderer and not a singleton. */
     internal var presenter: CanvasPresenter = AwtCanvasPresenter()
 
+    /** How recent a frame means the picture plays, so its next frame draws a turned view; a test widens it. */
+    internal var playingWindowNanos: Long = PLAYING_WINDOW_NANOS
+
     /** The flash guard's clock, in nanoseconds: when each picture is painted. */
     internal var guardNanos: () -> Long = System::nanoTime
 
@@ -328,14 +331,14 @@ public class AwtCanvasVideoRenderer(
         val asked = System.nanoTime()
         viewAskedNanos.set(asked)
         if (!viewRepaintPending.compareAndSet(false, true)) return
-        val playing = asked - lastPresentNanos.get() < PLAYING_WINDOW_NANOS
+        val playing = asked - lastPresentNanos.get() < playingWindowNanos
         try {
             repaints.schedule(
                 {
                     viewRepaintPending.set(false)
                     if (viewReadNanos.get() < viewAskedNanos.get()) repaintRetained()
                 },
-                if (playing) PLAYING_WINDOW_NANOS else 0L,
+                if (playing) playingWindowNanos else 0L,
                 java.util.concurrent.TimeUnit.NANOSECONDS,
             )
         } catch (closedMeanwhile: java.util.concurrent.RejectedExecutionException) {

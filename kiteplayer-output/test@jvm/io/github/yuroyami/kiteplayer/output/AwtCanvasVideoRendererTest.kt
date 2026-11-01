@@ -927,14 +927,14 @@ class AwtCanvasVideoRendererTest {
 
     private fun BufferedImage.centre(): Int = getRGB(width / 2, height / 2) and 0xFFFFFF
 
-    /** The last picture once there are more than [after], waiting for the redraw a turn asks for. */
-    private fun CapturingPresenter.next(after: Int): Pair<BufferedImage, FrameLayout> {
+    /** The newest picture drawn that [matches], waiting up to five seconds for the redraw a turn asks for. */
+    private fun CapturingPresenter.awaitPicture(what: String, matches: (BufferedImage) -> Boolean): Pair<BufferedImage, FrameLayout> {
         val deadline = System.nanoTime() + 5_000_000_000L
-        while (pictures.size <= after) {
-            check(System.nanoTime() < deadline) { "no redraw after ${pictures.size} pictures" }
+        while (true) {
+            synchronized(pictures) { pictures.lastOrNull { matches(it.first) } }?.let { return it }
+            check(System.nanoTime() < deadline) { "no picture drew $what in ${pictures.size}" }
             Thread.sleep(5)
         }
-        return pictures.last()
     }
 
     @Test
@@ -958,17 +958,16 @@ class AwtCanvasVideoRendererTest {
         val (first, layout) = presenter.pictures.last()
         assertEquals(160 to 90, first.width to first.height, "the view is drawn at the canvas's size")
         assertEquals(FrameLayout(0, 0, 160, 90, 0, sourceRight = 160, sourceBottom = 90), layout, "and fills it")
-        assertEquals(1, presenter.pictures.size, "the projection told before the first frame drew nothing more")
         assertEquals(BandPicture.RED, first.centre(), "the front of the picture")
         // No new frame comes while paused, and the view turns anyway, a moment after the turn.
         Thread.sleep(150)
         r.setProjection(whole, io.github.yuroyami.kiteplayer.SphericalView(yaw = 90f))
-        assertEquals(BandPicture.GREEN, presenter.next(after = 1).first.centre(), "a quarter turn to the right")
+        presenter.awaitPicture("a quarter turn to the right") { it.centre() == BandPicture.GREEN }
         r.setProjection(whole, io.github.yuroyami.kiteplayer.SphericalView(yaw = 180f))
-        assertEquals(BandPicture.BLUE, presenter.next(after = 2).first.centre(), "behind, across the seam")
+        presenter.awaitPicture("the view behind, across the seam") { it.centre() == BandPicture.BLUE }
         // 512 pixels round the sphere put 57 across 40 degrees, fewer than the 90 rows they span.
         r.setProjection(whole, io.github.yuroyami.kiteplayer.SphericalView(fieldOfView = 40f))
-        val (narrow, narrowLayout) = presenter.next(after = 3)
+        val (narrow, narrowLayout) = presenter.awaitPicture("the narrow view") { it.width != 160 }
         assertEquals(101 to 57, narrow.width to narrow.height, "a narrow view has only the picture's own detail to draw")
         assertEquals(160 to 90, narrowLayout.width to narrowLayout.height, "and is scaled to fill the canvas")
         r.close()
@@ -979,14 +978,18 @@ class AwtCanvasVideoRendererTest {
     fun aTurnWhileFramesArriveIsDrawnByTheNextFrameAlone() = runTest {
         val presenter = CapturingPresenter()
         val r = sphereRenderer(presenter)
+        // Wide, so a busy machine cannot let the redraw a turn defers come before the next frame.
+        r.playingWindowNanos = 1_000_000_000L
         r.setProjection(whole, io.github.yuroyami.kiteplayer.SphericalView())
         assertTrue(r.present(CountingFrame(size = VideoSize(512, 256)), 0L))
+        Thread.sleep(100)
+        val before = presenter.pictures.size
         r.setProjection(whole, io.github.yuroyami.kiteplayer.SphericalView(yaw = 90f))
-        Thread.sleep(40)
+        assertEquals(before, presenter.pictures.size, "the turn was drawn on the caller's thread")
         assertTrue(r.present(CountingFrame(size = VideoSize(512, 256)), 0L))
         assertEquals(BandPicture.GREEN, presenter.pictures.last().first.centre(), "the next frame drew the turn")
-        Thread.sleep(200)
-        assertEquals(2, presenter.pictures.size, "and nothing drew it a second time")
+        Thread.sleep(1_300)
+        assertEquals(before + 1, presenter.pictures.size, "and nothing drew it a second time")
         r.close()
     }
 

@@ -98,10 +98,13 @@ publication() {
     run ./scripts/check-dependency-hygiene.sh
 }
 macos() {
+    # The device soaks fail without KPRT_DEVICE_SOAK, so they run only when it is set (#641).
+    local soaks=(--exclude-classes='*SoakTest')
+    [ -n "${KPRT_DEVICE_SOAK:-}" ] && soaks=()
     kotlin test -p macosArm64 -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
         -m kiteplayer-output -m kiteplayer-rt \
         -m kiteplayer-libass -m kiteplayer-adaptive -m kiteplayer-network \
-        -m kiteplayer-ffmpeg -m kiteplayer -m kiteplayer-view
+        -m kiteplayer-ffmpeg -m kiteplayer -m kiteplayer-view "${soaks[@]}"
 }
 ios_simulator() {
     kotlin test -p iosSimulatorArm64 -m kiteplayer-view -m kiteplayer-audioviz -m kiteplayer \

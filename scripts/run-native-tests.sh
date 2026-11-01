@@ -70,6 +70,11 @@ while [ $# -gt 0 ]; do
     esac
 done
 [ -n "$module" ] && [ -n "$platform" ] || { echo "usage: $0 -m MODULE -p PLATFORM ..." >&2; exit 2; }
+# The supervised device soaks fail without KPRT_DEVICE_SOAK rather than passing over nothing (#641),
+# so they are left out unless it is set, and report as not run.
+if [ -z "${KPRT_DEVICE_SOAK:-}" ]; then
+    excludes+=("*RealTimeSoakTest.*" "*RealTimeMediaSoakTest.*")
+fi
 
 # shellcheck source=test-env.sh
 . "$ROOT/scripts/test-env.sh"

@@ -231,9 +231,10 @@ jobs:
       - name: Kotlin/Native macosArm64 tests
         run: |
           . scripts/test-env.sh
+          # The device soaks fail without KPRT_DEVICE_SOAK and are left out (#641).
           ./kotlin test -p macosArm64 -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
             -m kiteplayer-rt -m kiteplayer-libass -m kiteplayer-adaptive -m kiteplayer-network \
-            -m kiteplayer-ffmpeg -m kiteplayer -m kiteplayer-view
+            -m kiteplayer-ffmpeg -m kiteplayer -m kiteplayer-view --exclude-classes='*SoakTest'
           ./scripts/run-native-tests.sh -m kiteplayer-output -p macosArm64 --exclude-set no-audio-hardware
 
       # An isolated external Gradle consumer must retain optional registration after Native

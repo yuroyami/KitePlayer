@@ -59,10 +59,9 @@ class RealTimeMediaSoakTest {
 
     @Test
     fun `real media plays through the C callback with the collector under pressure`() = runBlocking {
-        if (!enabled) {
-            println("RealTimeMediaSoakTest: skipped, set KPRT_DEVICE_SOAK=1 to run the supervised device run")
-            return@runBlocking
-        }
+        // Fails rather than passing over an assertion nobody made (#641); the gate and CI leave the
+        // class out unless the variable is set, so it reports as not run.
+        check(enabled) { "set KPRT_DEVICE_SOAK=1 to run the supervised device run; the gate leaves this class out" }
 
         val sink = CoreAudioSink()
         val audio = AudioPlayback(sink, AppleHostClock)

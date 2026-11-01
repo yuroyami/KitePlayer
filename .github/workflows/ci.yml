@@ -423,6 +423,11 @@ jobs:
           restore-keys: |
             kotlin-linux-jvm-android-
 
+      # A test folder for a platform that no job names compiles only when something pulls it in and
+      # never runs; 83 tests sat that way (#637). This fails on the next one, before any build.
+      - name: Every test folder is run by a job
+        run: python3 scripts/check-test-coverage.py
+
       - name: JVM tests, media-free modules
         run: |
           . scripts/test-env.sh

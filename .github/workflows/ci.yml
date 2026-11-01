@@ -108,7 +108,9 @@ jobs:
   macos-host:
     name: macOS arm64 (real media, JVM + native, the ratchets)
     runs-on: macos-latest
-    timeout-minutes: 120
+    # The ratchets compile every published module for every platform from a cold cache, and the
+    # real-media suites follow; two hours ran out inside the ratchets.
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -151,17 +153,23 @@ jobs:
         run: cat testmedia/MANIFEST.txt
 
       # The ratchets first, because a surface change should fail before a long test suite does.
-      # The klib and Android dumps read the compiled libraries, so every published module is built
-      # for every platform first. kitertCoupling holds the kitert boundary against a committed
-      # baseline.
+      # The klib and Android dumps read the compiled libraries, so every published module's main
+      # code is compiled for every platform first. Only the main code: `./kotlin build` compiles
+      # every test source set of every platform too, and on this runner that alone outlasted the
+      # job's two hours. Each platform's tests compile in the job that runs them. kitertCoupling
+      # holds the kitert boundary against a committed baseline.
       - name: The ratchets
         run: |
-          modules=$(scripts/published-modules.sh | sed 's/^/-m /' | tr '\n' ' ')
-          # shellcheck disable=SC2086 # one word per flag
-          ./kotlin build $modules
+          tasks=$(./kotlin show tasks)
+          compiles=$(for module in $(scripts/published-modules.sh); do
+            # A build plugin's own tasks, named like compileIosArm64@kitert-c, run as dependencies.
+            echo "$tasks" | grep -oE ":$module:compile[A-Za-z0-9]+(@[A-Za-z0-9-]+)?" | grep -vE '@|Test|Metadata|Release$'
+          done | sort -u)
+          # shellcheck disable=SC2086 # one word per task
+          ./kotlin task $compiles
           # Only a publish compiles the shared folders such as src@native. Compile them here, so an
           # error in one fails this job and not the release.
-          metadata=$(./kotlin show tasks | grep -oE ':kiteplayer[a-z-]*:compileMetadata[A-Za-z0-9]+' |
+          metadata=$(echo "$tasks" | grep -oE ':kiteplayer[a-z-]*:compileMetadata[A-Za-z0-9]+' |
             grep -v ':kiteplayer-sample' | sort -u)
           # shellcheck disable=SC2086 # one word per task
           ./kotlin task $metadata

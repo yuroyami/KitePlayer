@@ -31,6 +31,7 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.test.swipe
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import io.github.yuroyami.kiteplayer.MediaItem
@@ -77,13 +78,14 @@ class ControlsUiTest {
         target: ScriptedTarget,
         layoutDirection: LayoutDirection = LayoutDirection.Ltr,
         visibility: ControlsVisibility? = null,
+        size: DpSize = DpSize(640.dp, 360.dp),
     ) {
         setContent {
             CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
                 val source = remember { target.source() }
                 val shown = visibility ?: remember { ControlsVisibility() }
                 ControlsTimeout(shown, source.snapshot.playRequested, 3.seconds)
-                Controls(source, Modifier.size(640.dp, 360.dp), shown, DefaultControlsStyle, DefaultControlsLabels, onFullScreen = {}, onPictureInPicture = {})
+                Controls(source, Modifier.size(size), shown, DefaultControlsStyle, DefaultControlsLabels, onFullScreen = {}, onPictureInPicture = {})
             }
         }
     }
@@ -153,6 +155,43 @@ class ControlsUiTest {
         onNodeWithContentDescription("Next").requestFocus().assert(isFocused())
         onNode(isFocused()).performKeyInput { pressKey(Key.Spacebar) }
         assertEquals(listOf("seek 50s KeyframeThenRefine", "play", "play"), target.commands())
+    }
+
+    /** The label of the control that has focus. */
+    private fun ComposeUiTest.focusedLabel(): String? =
+        onNode(isFocused()).fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription)?.firstOrNull()
+
+    @Test
+    fun theVolumeSliderLetsFocusGoAtEitherEnd() = runComposeUiTest {
+        // A television's width, where the slider sits between the mute button and the menus (#666).
+        showControls(ScriptedTarget(everything), size = DpSize(960.dp, 540.dp))
+        onNodeWithContentDescription("Volume").requestFocus().assert(isFocused())
+        repeat(12) { onNode(isFocused()).performKeyInput { pressKey(Key.DirectionLeft) } }
+        onNodeWithContentDescription("Mute").assert(isFocused())
+    }
+
+    @Test
+    fun arrowKeysAloneReachMuteAndSpeedOnAWideScreen() = runComposeUiTest {
+        showControls(ScriptedTarget(everything), size = DpSize(960.dp, 540.dp))
+        onNodeWithContentDescription("Play").requestFocus().assert(isFocused())
+        val reached = mutableSetOf<String>()
+        fun press(key: Key, times: Int) = repeat(times) {
+            onNode(isFocused()).performKeyInput { pressKey(key) }
+            focusedLabel()?.let { reached += it }
+        }
+        press(Key.DirectionDown, 2)
+        press(Key.DirectionLeft, 24)
+        press(Key.DirectionRight, 36)
+        assertTrue(reached.containsAll(listOf("Mute", "Volume", "Audio", "Speed")), "the arrow keys reached only $reached")
+    }
+
+    @Test
+    fun theSeekBarDoesNotSeekPastEitherEnd() = runComposeUiTest {
+        val target = ScriptedTarget(everything, Progress(position = 0.seconds))
+        showControls(target)
+        onNodeWithContentDescription("Seek").requestFocus().assert(isFocused())
+        onNode(isFocused()).performKeyInput { pressKey(Key.DirectionLeft) }
+        assertEquals(emptyList(), target.commands(), "a left press at the start seeked")
     }
 
     @Test

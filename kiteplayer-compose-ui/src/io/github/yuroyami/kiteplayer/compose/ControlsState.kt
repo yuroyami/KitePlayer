@@ -170,15 +170,22 @@ public class SeekBarState internal constructor(
 
     /** Jumps [delta] from the position, or from the scrub target while a scrub runs. */
     public fun stepBy(delta: Duration) {
+        step(delta)
+    }
+
+    /** [stepBy], answering false when the step moved nothing because it stood at an end already. */
+    internal fun step(delta: Duration): Boolean {
         val total = duration
-        if (!seekable || total == null) return
+        if (!seekable || total == null) return false
         val from = scrubTarget ?: source.target.position()
         val to = (from + delta).coerceIn(Duration.ZERO, total)
+        if (to == from) return false
         if (scrubStart != null) {
             moveTarget(fractionOf(to, total))
         } else {
             seek(to)
         }
+        return true
     }
 
     private fun moveTarget(fraction: Float) {

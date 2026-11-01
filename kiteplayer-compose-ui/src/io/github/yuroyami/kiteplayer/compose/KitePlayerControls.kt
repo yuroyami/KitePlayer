@@ -516,8 +516,8 @@ private fun SeekBar(
                     Key.DirectionRight -> SeekStep
                     else -> return@onKeyEvent false
                 }
-                state.stepBy(step)
-                true
+                // At either end the key is left to focus, as the volume slider leaves it (#666).
+                state.step(step)
             }
             .focusable(interactionSource = interaction)
             .pointerInput(state, visibility) { barScrub(state, visibility, ThumbRadius.toPx()) },
@@ -585,7 +585,11 @@ private fun VolumeSlider(
                         Key.DirectionRight -> VolumeStep
                         else -> return@onKeyEvent false
                     }
-                    state.setLevel(level + step)
+                    // A key that moves nothing is left to focus, or the mute button is out of a
+                    // D-pad's reach past an empty or full slider (#666).
+                    val next = (level + step).coerceIn(0f, 1f)
+                    if (next == level) return@onKeyEvent false
+                    state.setLevel(next)
                     true
                 }
                 .focusable(interactionSource = interaction)

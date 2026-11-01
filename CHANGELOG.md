@@ -195,6 +195,10 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- A D-pad can reach the mute button of the default Compose controls on a screen 480 dp or wider
+  (#666). The volume slider took every left and right press, even at silence or at full, so
+  focus never left it sideways and a television remote could not reach mute. The slider and the
+  seek bar now take a key only when it moves them, and leave it to focus at either end.
 - One `AudioVizState` can be shown by several `KiteAudioViz` views (#674). Both views stepped the
   state's own drawings, so each drawing stepped twice a frame and restarted. The first view now
   draws the state's drawings, which the director and the controls act on, and each further view

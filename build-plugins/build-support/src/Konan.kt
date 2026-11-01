@@ -91,14 +91,32 @@ fun provisionKonanDependencies(konanTarget: String, kotlinVersion: String, log: 
  * another, since both write into the one konan folder. Two C tasks once downloaded the same archive
  * into the same file at once, and the tar that came out was truncated.
  */
-private fun <T> konanSetup(block: () -> T): T = synchronized(KonanSetupLock) {
+private fun <T> konanSetup(block: () -> T): T = synchronized(konanSetupMonitor()) {
     val dataDir = konanDataDir().also { it.mkdirs() }
     java.io.RandomAccessFile(dataDir.resolve(".kiteplayer-setup.lock"), "rw").use { file ->
-        file.channel.lock().use { block() }
+        lockFully(file.channel).use { block() }
     }
 }
 
-private object KonanSetupLock
+/**
+ * One monitor for the whole JVM. Each build plugin loads these classes in a class loader of its
+ * own, so an object of this file would be one per plugin, and two plugins provisioning at once
+ * then reached the file lock together, which the JVM refuses with OverlappingFileLockException.
+ * The system properties are the one map every class loader of the JVM shares.
+ */
+private fun konanSetupMonitor(): Any =
+    System.getProperties().computeIfAbsent("io.github.yuroyami.kiteplayer.build.konanSetup") { Any() }
+
+/** The file lock of [channel], waiting while another class loader of this JVM still holds it. */
+private fun lockFully(channel: java.nio.channels.FileChannel): java.nio.channels.FileLock {
+    while (true) {
+        try {
+            return channel.lock()
+        } catch (held: java.nio.channels.OverlappingFileLockException) {
+            Thread.sleep(100)
+        }
+    }
+}
 
 /** The host part of the kotlin-native-prebuilt artifact name, such as `macos-aarch64`. */
 fun kotlinNativeHost(): String {

@@ -67,6 +67,13 @@
 # kiteplayer-network out of kiteplayer's wasmJs dependencies brings the old size back, but a web app
 # then no longer gets kiteplayer-network from kiteplayer.
 #
+# The worker budget is now 0.86 MiB. The issue sweep of 2026-11-01 (#694) fixed about ninety issues,
+# many of them in the engine and the readers the worker links: the byte cache's segments, the HLS
+# ranged opens, the DASH fixes, the suggested start, the variant changes for HDR and size, the
+# filter rule and the packet captions. The worker grew from the 877,468 bytes measured at the last
+# change to 891,876, 14,408 more and 587 over the budget before. The codec module kept its
+# 1,538,723 bytes.
+#
 # Both budgets are ratchets: a new KiteFFmpeg pin, or player code, that grows a module past its
 # budget fails here, and raising a budget is a decision made in the same commit, with both numbers
 # in its message. Each file's SHA-256 is printed beside its size, so a failure names the exact bytes
@@ -81,8 +88,8 @@ cd "$ROOT"
 
 # 1.47 MiB.
 BUDGET_BYTES=1541407
-# 0.85 MiB.
-WORKER_BUDGET_BYTES=891289
+# 0.86 MiB.
+WORKER_BUDGET_BYTES=901775
 
 # Measures the files after the label gzipped, prints a table, and fails when the sum is over the budget.
 measure() { # <label> <budget bytes> <file>...

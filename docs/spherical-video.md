@@ -138,7 +138,7 @@ KitePlayerVideo(
             player.setSphericalView(view)
         }
     },
-    // The native views draw a 360 degree video flat; see "Which renderers draw the view".
+    // The native views of Android and iOS draw a 360 degree video flat; see "Which renderers draw the view".
     path = KiteRenderPath.ComposeCanvas,
 )
 ```
@@ -272,14 +272,22 @@ oracle each renderer's tests compare the drawn view against.
   - On the web, in its WebGL pass (#125), as a second fragment program beside the flat one.
 - **Not yet, in #586**: the Metal renderer on iOS and macOS, and Android's platform view, where
   MediaCodec writes straight to the Surface and no shader of the player's sees the picture.
-- **Not yet, in #587**: the AWT canvas of the desktop's native view, which paints without a shader.
+- **The AWT canvas of the desktop's native view** (#587), which has no shader, on the processor: a
+  map of where each pixel of the view reads the picture is built at each turn, exactly on a grid of
+  every fourth pixel and blended in between except where the seam or a pole runs, and each picture
+  is read through it with a bilinear blend. The view is drawn at the canvas's size, or at the
+  picture's own detail across the field of view when that is less, and scaled onto the canvas. On
+  the machine that wrote this, a 1280 by 720 canvas cost 8.3 ms a picture and 18 ms a turn, and a
+  1920 by 1080 canvas, drawn at 1518 by 854 for a 3840 pixel wide picture, 13 ms and 23 ms, on the
+  paint thread. A turn while paused is redrawn off the engine's actor, and one while frames arrive
+  is drawn by the next frame.
 - **Flat, by design for now**: the Core Graphics reference, the sample buffer layer and the web's
   2D canvas.
 
 `KitePlayerVideo` draws through `KiteVideo` when it runs `KiteRenderPath.ComposeCanvas`, which it
-always does on the web. Its default on Android, iOS and the desktop JVM is the native view, which
-draws a 360 degree video flat until #586 and #587 are done, so an application that plays one asks
-for `KiteRenderPath.ComposeCanvas` there.
+always does on the web. Its default on Android and iOS is the native view, which draws a 360 degree
+video flat until #586 is done, so an application that plays one asks for
+`KiteRenderPath.ComposeCanvas` there. The desktop JVM's native view draws the view.
 
 ## Tests
 

@@ -885,4 +885,157 @@ class AwtCanvasVideoRendererTest {
             "a real display answers between 10 and 250 Hz, got $interval",
         )
     }
+
+    // ── A view into a 360 degree video (#587) ────────────────────────────────────────────────
+
+    /** Keeps the picture and the layout of every paint. */
+    private class CapturingPresenter : CanvasPresenter {
+        val pictures: MutableList<Pair<BufferedImage, FrameLayout>> = java.util.Collections.synchronizedList(mutableListOf())
+
+        override fun present(
+            canvas: java.awt.Canvas,
+            image: BufferedImage?,
+            layout: FrameLayout?,
+            overlay: io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?,
+            dim: Float,
+            decoration: AwtCanvasDecoration?,
+        ): Boolean {
+            if (image != null && layout != null) {
+                // A copy, because the renderer draws its next view into the same image.
+                val copy = BufferedImage(image.width, image.height, BufferedImage.TYPE_INT_RGB)
+                copy.createGraphics().apply { drawImage(image, 0, 0, null); dispose() }
+                pictures += copy to layout
+            }
+            return true
+        }
+    }
+
+    private val whole = io.github.yuroyami.kiteplayer.VideoProjection(io.github.yuroyami.kiteplayer.ProjectionKind.Equirectangular)
+
+    /** A renderer whose painter fills each frame with the band picture, on a 160 by 90 canvas. */
+    private fun sphereRenderer(presenter: CanvasPresenter): AwtCanvasVideoRenderer {
+        val picture = BandPicture.whole()
+        val r = renderer(paint = { destination, width, height ->
+            check(width == picture.width && height == picture.height) { "a $width by $height frame" }
+            picture.pixels.copyInto(destination)
+            true
+        })
+        r.presenter = presenter
+        r.setCanvas(DisplayableCanvas())
+        return r
+    }
+
+    private fun BufferedImage.centre(): Int = getRGB(width / 2, height / 2) and 0xFFFFFF
+
+    /** The last picture once there are more than [after], waiting for the redraw a turn asks for. */
+    private fun CapturingPresenter.next(after: Int): Pair<BufferedImage, FrameLayout> {
+        val deadline = System.nanoTime() + 5_000_000_000L
+        while (pictures.size <= after) {
+            check(System.nanoTime() < deadline) { "no redraw after ${pictures.size} pictures" }
+            Thread.sleep(5)
+        }
+        return pictures.last()
+    }
+
+    @Test
+    fun theCanvasDrawsTheWholeSphereAndATileOfItAsAView() {
+        val r = renderer()
+        assertTrue(r.projects(io.github.yuroyami.kiteplayer.ProjectionKind.Equirectangular))
+        assertTrue(r.projects(io.github.yuroyami.kiteplayer.ProjectionKind.EquirectangularTile(0.25, 0.0, 0.25, 0.0)))
+        assertFalse(r.projects(io.github.yuroyami.kiteplayer.ProjectionKind.Cubemap(0)))
+        assertFalse(r.projects(io.github.yuroyami.kiteplayer.ProjectionKind.Other("fisheye")))
+        r.close()
+    }
+
+    @Test
+    fun aViewFillsTheCanvasAndTurnsAtOnceWhilePaused() = runTest {
+        val presenter = CapturingPresenter()
+        val r = sphereRenderer(presenter)
+        r.setProjection(whole, io.github.yuroyami.kiteplayer.SphericalView())
+        val frame = CountingFrame(size = VideoSize(512, 256))
+        assertTrue(r.present(frame, 0L))
+        assertEquals(1, frame.closes)
+        val (first, layout) = presenter.pictures.last()
+        assertEquals(160 to 90, first.width to first.height, "the view is drawn at the canvas's size")
+        assertEquals(FrameLayout(0, 0, 160, 90, 0, sourceRight = 160, sourceBottom = 90), layout, "and fills it")
+        assertEquals(1, presenter.pictures.size, "the projection told before the first frame drew nothing more")
+        assertEquals(BandPicture.RED, first.centre(), "the front of the picture")
+        // No new frame comes while paused, and the view turns anyway, a moment after the turn.
+        Thread.sleep(150)
+        r.setProjection(whole, io.github.yuroyami.kiteplayer.SphericalView(yaw = 90f))
+        assertEquals(BandPicture.GREEN, presenter.next(after = 1).first.centre(), "a quarter turn to the right")
+        r.setProjection(whole, io.github.yuroyami.kiteplayer.SphericalView(yaw = 180f))
+        assertEquals(BandPicture.BLUE, presenter.next(after = 2).first.centre(), "behind, across the seam")
+        // 512 pixels round the sphere put 57 across 40 degrees, fewer than the 90 rows they span.
+        r.setProjection(whole, io.github.yuroyami.kiteplayer.SphericalView(fieldOfView = 40f))
+        val (narrow, narrowLayout) = presenter.next(after = 3)
+        assertEquals(101 to 57, narrow.width to narrow.height, "a narrow view has only the picture's own detail to draw")
+        assertEquals(160 to 90, narrowLayout.width to narrowLayout.height, "and is scaled to fill the canvas")
+        r.close()
+    }
+
+    /** The engine turns the view on its actor, so while frames arrive a turn waits for the next. */
+    @Test
+    fun aTurnWhileFramesArriveIsDrawnByTheNextFrameAlone() = runTest {
+        val presenter = CapturingPresenter()
+        val r = sphereRenderer(presenter)
+        r.setProjection(whole, io.github.yuroyami.kiteplayer.SphericalView())
+        assertTrue(r.present(CountingFrame(size = VideoSize(512, 256)), 0L))
+        r.setProjection(whole, io.github.yuroyami.kiteplayer.SphericalView(yaw = 90f))
+        Thread.sleep(40)
+        assertTrue(r.present(CountingFrame(size = VideoSize(512, 256)), 0L))
+        assertEquals(BandPicture.GREEN, presenter.pictures.last().first.centre(), "the next frame drew the turn")
+        Thread.sleep(200)
+        assertEquals(2, presenter.pictures.size, "and nothing drew it a second time")
+        r.close()
+    }
+
+    @Test
+    fun aViewSwitchedOffOrAFlatVideoDrawsTheFlatPictureAsBefore() = runTest {
+        val presenter = CapturingPresenter()
+        val r = sphereRenderer(presenter)
+        r.setProjection(whole, io.github.yuroyami.kiteplayer.SphericalView(projected = false))
+        assertTrue(r.present(CountingFrame(size = VideoSize(512, 256)), 0L))
+        val (flat, layout) = presenter.pictures.last()
+        assertEquals(512 to 256, flat.width to flat.height, "the frame's own picture")
+        assertEquals(frameLayout(160, 90, VideoSize(512, 256), 0), layout, "fitted as a flat picture is")
+        // A cube map, which this renderer draws flat, changes nothing that is drawn.
+        r.setProjection(io.github.yuroyami.kiteplayer.VideoProjection(io.github.yuroyami.kiteplayer.ProjectionKind.Cubemap(0)), io.github.yuroyami.kiteplayer.SphericalView())
+        r.setProjection(null, io.github.yuroyami.kiteplayer.SphericalView())
+        Thread.sleep(200)
+        assertEquals(1, presenter.pictures.size, "a flat picture is not drawn again for a projection it does not draw")
+        assertTrue(r.present(CountingFrame(size = VideoSize(512, 256)), 0L))
+        assertEquals(512, presenter.pictures.last().first.width, "a flat video")
+        r.close()
+    }
+
+    /**
+     * What a view costs on the paint thread at desktop canvas sizes, printed for the record: the
+     * map, built at each turn of the view, and the draw of each picture through it, for a 3840 by
+     * 1920 picture at the default field of view, at the size the renderer draws the view at.
+     */
+    @Test
+    fun theViewsCostAtDesktopSizesIsMeasured() {
+        val pictureWidth = 3840
+        val pictureHeight = 1920
+        val picture = IntArray(pictureWidth * pictureHeight) { (it * -1640531535) ushr 8 }
+        for ((canvasWidth, canvasHeight) in listOf(1280 to 720, 1920 to 1080)) {
+            val view = io.github.yuroyami.kiteplayer.SphericalView()
+            val (width, height) = SphereViewRemap.viewSize(canvasWidth, canvasHeight, pictureWidth, whole, view)
+            val remap = SphereViewRemap()
+            val out = IntArray(width * height)
+            fun drawAt(yaw: Float) = remap.draw(
+                picture, pictureWidth, 0, 0, pictureWidth, pictureHeight, whole, view.copy(yaw = yaw), out, width, height,
+            )
+            // Warmed up, so the measure is of compiled code.
+            repeat(20) { drawAt(it.toFloat()) }
+            val turns = (0 until 20).map { step -> kotlin.system.measureNanoTime { drawAt(100f + step) } }.sorted()
+            val draws = (0 until 20).map { kotlin.system.measureNanoTime { drawAt(200f) } }.sorted()
+            println(
+                "a ${canvasWidth}x$canvasHeight canvas draws the view at ${width}x$height: " +
+                    "a turn and its picture ${turns[10] / 1_000_000.0} ms, a picture ${draws[10] / 1_000_000.0} ms (medians)",
+            )
+            assertTrue(draws[10] < turns[10], "a draw through the map must cost less than building it")
+        }
+    }
 }

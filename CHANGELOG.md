@@ -12,6 +12,12 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Added
 
+- The desktop's native video view draws a view into a 360 degree video (#587), so a desktop app no
+  longer has to switch `KitePlayerVideo` to `KiteRenderPath.ComposeCanvas` to look around in one.
+  `AwtCanvasVideoRenderer` has no shader, so it remaps each picture on the processor through a map
+  of the view built at each turn, with a bilinear blend, at the picture's own detail when that is
+  less than the canvas's; `docs/spherical-video.md` has what it costs. A turn while paused redraws
+  at once, and flat video draws exactly as before.
 - The CEA-708 caption services inside broadcast video, read in Kotlin on every platform (#678).
   Each service that carries data is a subtitle track of its own, Service 1, Service 2 and so on,
   beside CC1, so a second language that a broadcast sends only in 708 shows. Each visible window is

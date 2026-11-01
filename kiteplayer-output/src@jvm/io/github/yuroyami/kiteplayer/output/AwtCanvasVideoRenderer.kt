@@ -1,13 +1,18 @@
 package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.FlashGuard
+import io.github.yuroyami.kiteplayer.KitePlayerInternalApi
 import io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi
+import io.github.yuroyami.kiteplayer.ProjectionKind
+import io.github.yuroyami.kiteplayer.SphericalView
+import io.github.yuroyami.kiteplayer.VideoProjection
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.VideoTransform
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.RendererEvent
+import io.github.yuroyami.kiteplayer.spi.SphericalLens
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.spi.VideoFlashGuard
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
@@ -170,6 +175,29 @@ public class AwtCanvasVideoRenderer(
     private var lastMirrored: Boolean = false
     /** The flash guard's factor for [lastImage], so a repaint draws it as it was drawn. */
     private var lastDim: Float = 1f
+    /** The full raster behind [lastImage] and where the shown part starts in it, for the view into a sphere (#587). */
+    private var lastRaster: IntArray? = null
+    private var lastStride: Int = 0
+    private var lastLeft: Int = 0
+    private var lastTop: Int = 0
+
+    /** The projection whose view is drawn, or null while the picture draws flat. */
+    private var sphere: VideoProjection? = null
+    private var sphereView: SphericalView = SphericalView()
+
+    /** The view's map and its image, used only inside a paint. */
+    private val sphereRemap = SphereViewRemap()
+    private var viewImage: BufferedImage? = null
+
+    /** When the last frame was presented, and when a paint last read the view, on [System.nanoTime]. */
+    private val lastPresentNanos = AtomicLong(Long.MIN_VALUE / 2)
+    private val viewReadNanos = AtomicLong(Long.MIN_VALUE / 2)
+    private val viewAskedNanos = AtomicLong(0)
+    private val viewRepaintPending = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** The thread a turned view is redrawn on while no frame comes, made at the first turn. */
+    private var viewRepaints: java.util.concurrent.ScheduledExecutorService? = null
+
     private var overlay: SubtitleOverlay? = null
     private var decoration: AwtCanvasDecoration? = null
     private var scaleMode: VideoScale = VideoScale.Fit
@@ -264,6 +292,57 @@ public class AwtCanvasVideoRenderer(
         repaintRetained()
     }
 
+    /** The whole sphere and a tile of it, which this renderer draws a view into on the processor (#587). */
+    @OptIn(KitePlayerInternalApi::class)
+    override fun projects(kind: ProjectionKind): Boolean = SphericalLens.draws(kind)
+
+    /**
+     * Draws the view into a 360 degree picture while [view] is projected, over the whole canvas, as
+     * the Compose canvas path draws it: the scale mode, the framing and the picture's turn do not
+     * apply, because the view's field of view is its zoom. A change redraws the retained picture at
+     * once, so a paused player turns with the viewer.
+     */
+    @OptIn(KitePlayerInternalApi::class)
+    override fun setProjection(projection: VideoProjection?, view: SphericalView) {
+        val repaints = synchronized(lock) {
+            if (closed) return
+            val drawn = projection?.takeIf { view.projected && SphericalLens.draws(it.kind) }
+            val changed = drawn != sphere || (drawn != null && view != sphereView)
+            sphere = drawn
+            sphereView = view
+            if (!changed) return
+            viewRepaints ?: java.util.concurrent.Executors.newSingleThreadScheduledExecutor { task ->
+                Thread(task, "kiteplayer-awt-sphere-view").apply { isDaemon = true }
+            }.also { viewRepaints = it }
+        }
+        scheduleViewRepaint(repaints)
+    }
+
+    /**
+     * Redraws the retained picture with the view as it now is, off the caller's thread, because a
+     * turn builds the view's map again and the engine tells this renderer on its actor. While
+     * frames arrive the next one draws the new view, so the redraw waits a moment and is dropped
+     * when a paint read the view after it was asked for. Turns asked for while one waits share it.
+     */
+    private fun scheduleViewRepaint(repaints: java.util.concurrent.ScheduledExecutorService) {
+        val asked = System.nanoTime()
+        viewAskedNanos.set(asked)
+        if (!viewRepaintPending.compareAndSet(false, true)) return
+        val playing = asked - lastPresentNanos.get() < PLAYING_WINDOW_NANOS
+        try {
+            repaints.schedule(
+                {
+                    viewRepaintPending.set(false)
+                    if (viewReadNanos.get() < viewAskedNanos.get()) repaintRetained()
+                },
+                if (playing) PLAYING_WINDOW_NANOS else 0L,
+                java.util.concurrent.TimeUnit.NANOSECONDS,
+            )
+        } catch (closedMeanwhile: java.util.concurrent.RejectedExecutionException) {
+            viewRepaintPending.set(false)
+        }
+    }
+
     /**
      * The canvas to paint into, or null to fence all painting off the previous one.
      *
@@ -340,12 +419,17 @@ public class AwtCanvasVideoRenderer(
                 return false
             }
             lastImage = shown
+            lastRaster = raster
+            lastStride = width
+            lastLeft = crop?.left ?: 0
+            lastTop = crop?.top ?: 0
             lastSize = size
             lastRotation = rotation
             lastMirrored = mirrored
             lastDim = dim
             transform.orient(rotation, mirrored).rotationDegrees
         }
+        lastPresentNanos.set(System.nanoTime())
         // The view shapes itself for the picture as the viewer turned it (#428).
         onVideoGeometry(size, shownTurn)
         // Counted and reported only once the strategy showed it. A canvas with no peer or no size
@@ -394,6 +478,7 @@ public class AwtCanvasVideoRenderer(
         synchronized(lock) {
             if (closed) return
             lastImage = null
+            lastRaster = null
             lastSize = null
         }
         guardForgets.set(true)
@@ -434,10 +519,23 @@ public class AwtCanvasVideoRenderer(
         val currentTransform: VideoTransform
         val dim: Float
         val over: AwtCanvasDecoration?
+        val raster: IntArray?
+        val stride: Int
+        val left: Int
+        val top: Int
+        val projection: VideoProjection?
+        val view: SphericalView
         synchronized(lock) {
             if (closed) return false
             target = canvas ?: return false
             image = lastImage
+            raster = lastRaster
+            stride = lastStride
+            left = lastLeft
+            top = lastTop
+            projection = sphere
+            view = sphereView
+            viewReadNanos.set(System.nanoTime())
             size = lastSize
             rotation = lastRotation
             mirrored = lastMirrored
@@ -448,6 +546,9 @@ public class AwtCanvasVideoRenderer(
         }
         if (!target.isDisplayable) return false
         if (image == null || size == null) return presenter.present(target, null, null, overlaySnapshot(), 1f, over)
+        if (projection != null && raster != null) {
+            return paintSphereView(target, raster, stride, left, top, size, projection, view, dim, over)
+        }
         val layout = frameLayout(
             canvasWidth = target.width,
             canvasHeight = target.height,
@@ -462,6 +563,38 @@ public class AwtCanvasVideoRenderer(
 
     private fun overlaySnapshot(): SubtitleOverlay? = synchronized(lock) { overlay }
 
+    /**
+     * Draws the view into the retained picture and hands it to the presenter as a picture that
+     * fills the canvas. It is drawn at the canvas's size, or at the picture's own detail when that
+     * is less, and the presenter's bilinear scale fills the rest (see [SphereViewRemap.viewSize]).
+     * Only with [paintLock] held, which is what keeps [sphereRemap] and [viewImage] to one paint at
+     * a time.
+     */
+    private fun paintSphereView(
+        target: Canvas,
+        raster: IntArray,
+        stride: Int,
+        left: Int,
+        top: Int,
+        size: VideoSize,
+        projection: VideoProjection,
+        view: SphericalView,
+        dim: Float,
+        over: AwtCanvasDecoration?,
+    ): Boolean {
+        val canvasWidth = target.width
+        val canvasHeight = target.height
+        if (canvasWidth <= 0 || canvasHeight <= 0) return false
+        val (width, height) = SphereViewRemap.viewSize(canvasWidth, canvasHeight, size.width, projection, view)
+        val drawn = viewImage?.takeIf { it.width == width && it.height == height }
+            ?: BufferedImage(width, height, BufferedImage.TYPE_INT_RGB).also { viewImage = it }
+        val pixels = (drawn.raster.dataBuffer as java.awt.image.DataBufferInt).data
+        sphereRemap.draw(raster, stride, left, top, size.width, size.height, projection, view, pixels, width, height)
+        val layout = frameLayout(canvasWidth, canvasHeight, VideoSize(width, height), rotationDegrees = 0, mode = VideoScale.Stretch)
+            ?: return false
+        return presenter.present(target, drawn, layout, overlaySnapshot(), dim, over)
+    }
+
     /** Lets the canvas go and stops painting, after the paint in flight, waited for as [setCanvas] does. */
     override fun close() {
         fenced { closeFenced() }
@@ -471,9 +604,13 @@ public class AwtCanvasVideoRenderer(
         val released = synchronized(lock) {
             if (closed) return
             closed = true
+            viewRepaints?.shutdownNow()
+            viewRepaints = null
             val old = canvas
             canvas = null
             lastImage = null
+            lastRaster = null
+            viewImage = null
             lastSize = null
             overlay = null
             decoration = null
@@ -485,3 +622,6 @@ public class AwtCanvasVideoRenderer(
 
 /** How long [AwtCanvasVideoRenderer.setCanvas] and its close wait for a paint in flight. */
 private const val CANVAS_FENCE_TIMEOUT_MS = 500L
+
+/** A frame within this long means the picture plays, and its next frame will draw a turned view. */
+private const val PLAYING_WINDOW_NANOS = 100_000_000L

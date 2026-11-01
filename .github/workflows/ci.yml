@@ -106,10 +106,10 @@ jobs:
   # The macOS host: the only runner that gets the real media, plus every ratchet.
   # ---------------------------------------------------------------------------------------------
   macos-host:
-    name: macOS arm64 (real media, JVM + native, the ratchets)
+    name: macOS arm64 (real media, native, the ratchets)
     runs-on: macos-latest
     # The ratchets compile every published module for every platform from a cold cache, and the
-    # real-media suites follow; two hours ran out inside the ratchets.
+    # native suites follow; two hours ran out inside the ratchets. The JVM suites are macos-jvm's.
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
@@ -186,40 +186,6 @@ jobs:
           kiteplayer-rt/native/scripts/render-audit.sh --prove-it-can-fail
           ./kotlin test -m build-support
 
-      # Every module that HAS jvm tests. The ones that need the clips (ffmpeg, kiteplayer,
-      # compose-video, audioviz) run here on the macOS library; ffmpeg and kiteplayer run on the
-      # Linux one too, in linux-jvm-android (#639).
-      # This job generated the clips above, so a test that finds one missing fails rather than
-      # skipping. One module per run, because the wall-clock gates must not compete with other
-      # modules' tests or compilation. audioviz runs through its gate script, which leaves out the
-      # long rendering surveys.
-      - name: JVM tests, every module that has them
-        env:
-          KITEPLAYER_REQUIRE_TESTMEDIA: "1"
-        run: |
-          . scripts/test-env.sh
-          for module in kiteplayer-core kiteplayer-subtitles kiteplayer-io kiteplayer-output \
-              kiteplayer-view kiteplayer-adaptive kiteplayer-network kiteplayer-ffmpeg kiteplayer-libass \
-              kiteplayer kiteplayer-compose-video kiteplayer-compose-ui kiteplayer-compose-interop \
-              kiteplayer-compose kiteplayer-sample-shared; do
-            ./kotlin test -m "$module" -p jvm
-          done
-          ./scripts/audioviz-tests.sh gate
-
-      # One line per hot path gate (HotPathGate.kt in the core and FFmpeg JVM tests). A slow drift
-      # shows here long before it reaches a bound of ten times the measured median.
-      - name: The hot path numbers
-        if: always()
-        run: |
-          {
-            echo "### Hot paths on $RUNNER_OS, median of seven runs"
-            echo
-            echo "| Hot path | Median | Bound |"
-            echo "|---|---:|---:|"
-            find build/reports -path '*/jvm/*.xml' -exec cat {} + 2>/dev/null |
-              grep -o 'HOTPATH | .*' | grep -v 'HotPathGateTest' | sed 's/^HOTPATH //' || true
-          } >> "$GITHUB_STEP_SUMMARY"
-
       # The Kotlin/Native host target. kiteplayer-ffmpeg here is the format conformance matrix
       # against real clips, and kiteplayer plays one clip through KitePlayerPlatform.createOrNull().
       #
@@ -287,6 +253,111 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-host-reports
+          path: |
+            build/reports/**
+            build/logs/**
+            testmedia/MANIFEST.txt
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------------------------
+  # macOS: the JVM suites on the macOS library and real clips, beside macos-host. In one job with
+  # the ratchets and the native suites they outlasted three hours.
+  # ---------------------------------------------------------------------------------------------
+  macos-jvm:
+    name: macOS arm64 (real media, JVM)
+    runs-on: macos-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/JetBrains/Kotlin
+            ~/.konan
+          key: kotlin-macos-jvm-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
+          restore-keys: |
+            kotlin-macos-jvm-
+            kotlin-macos-host-
+
+      # kiteplayer-libass embeds the libass chain that KiteFFmpeg cross-builds, downloaded from the
+      # KiteFFmpeg release pinned in kiteplayer-libass/ass-chain.sha256. ffmpeg is the fixture
+      # generator below.
+      #
+      # THE GENERATOR IS PINNED TO A SERIES, the one the clips are recorded against
+      # (EXPECTED_FFMPEG_SERIES in testmedia.sh) and the one the player's own library is on. Some
+      # fixtures are oracles that FFmpeg itself produces, and an oracle from another major is a
+      # different answer. The strict check below refuses when the formula moves to the next major.
+      # brew update first: the runner image ships a formula index from the day it was built.
+      - name: Install the ffmpeg CLI the clips are recorded against
+        run: |
+          brew update --quiet
+          brew install ffmpeg
+          echo "$(brew --prefix ffmpeg)/bin" >> "$GITHUB_PATH"
+
+      - name: Check the ffmpeg the clips are pinned to
+        run: ./scripts/testmedia.sh --check-only
+        env:
+          TESTMEDIA_STRICT_FFMPEG: "1"
+
+      # Generated per run rather than cached: the cache would cost more to move than the clips
+      # cost to make.
+      - name: Generate the test clips
+        run: ./scripts/testmedia.sh
+
+      # Printed rather than verified, deliberately: a printed manifest turns "why did that matrix
+      # row behave differently on the runner" into a diff between two logs.
+      - name: The clips, and what made them
+        run: cat testmedia/MANIFEST.txt
+
+      # Every module that HAS jvm tests. The ones that need the clips (ffmpeg, kiteplayer,
+      # compose-video, audioviz) run here on the macOS library; ffmpeg and kiteplayer run on the
+      # Linux one too, in linux-jvm-android (#639).
+      # This job generated the clips above, so a test that finds one missing fails rather than
+      # skipping. One module per run, because the wall-clock gates must not compete with other
+      # modules' tests or compilation. audioviz runs through its gate script, which leaves out the
+      # long rendering surveys.
+      - name: JVM tests, every module that has them
+        env:
+          KITEPLAYER_REQUIRE_TESTMEDIA: "1"
+        run: |
+          . scripts/test-env.sh
+          for module in kiteplayer-core kiteplayer-subtitles kiteplayer-io kiteplayer-output \
+              kiteplayer-view kiteplayer-adaptive kiteplayer-network kiteplayer-ffmpeg kiteplayer-libass \
+              kiteplayer kiteplayer-compose-video kiteplayer-compose-ui kiteplayer-compose-interop \
+              kiteplayer-compose kiteplayer-sample-shared; do
+            ./kotlin test -m "$module" -p jvm
+          done
+          ./scripts/audioviz-tests.sh gate
+
+      # One line per hot path gate (HotPathGate.kt in the core and FFmpeg JVM tests). A slow drift
+      # shows here long before it reaches a bound of ten times the measured median.
+      - name: The hot path numbers
+        if: always()
+        run: |
+          {
+            echo "### Hot paths on $RUNNER_OS, median of seven runs"
+            echo
+            echo "| Hot path | Median | Bound |"
+            echo "|---|---:|---:|"
+            find build/reports -path '*/jvm/*.xml' -exec cat {} + 2>/dev/null |
+              grep -o 'HOTPATH | .*' | grep -v 'HotPathGateTest' | sed 's/^HOTPATH //' || true
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: The conformance report
+        if: always()
+        run: |
+          for report in kiteplayer-ffmpeg/build/reports/conformance/*.md; do
+            [ -f "$report" ] || continue
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-jvm-reports
           path: |
             build/reports/**
             build/logs/**
@@ -458,7 +529,7 @@ jobs:
         env:
           TESTMEDIA_STRICT_FFMPEG: "1"
 
-      # One module per run, as on macos-host, so the wall-clock gates do not compete. The job made
+      # One module per run, as on macos-jvm, so the wall-clock gates do not compete. The job made
       # the clips, so a test that finds one missing fails rather than skipping.
       - name: JVM tests, media-backed modules on the Linux library
         env:

@@ -605,7 +605,19 @@ jobs:
           nohup emulator -avd kite -no-window -no-audio -no-boot-anim -no-snapshot \
             -gpu swiftshader_indirect -accel on > "$RUNNER_TEMP/emulator.log" 2>&1 &
 
-      # While the emulator boots: the Android native test binaries, and the device test APKs.
+      # While the emulator boots: the clips, which the sample app's test APK packs one of, then the
+      # Android native test binaries and the device test APKs.
+      - name: Install the ffmpeg CLI the clips are recorded against
+        run: |
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          brew install --quiet ffmpeg
+          echo "$(brew --prefix ffmpeg)/bin" >> "$GITHUB_PATH"
+
+      - name: Generate the test clips
+        run: ./scripts/testmedia.sh
+        env:
+          TESTMEDIA_STRICT_FFMPEG: "1"
+
       - name: Build the Android native test binaries and the device test APKs
         run: |
           for module in kiteplayer-core kiteplayer-subtitles kiteplayer-io kiteplayer-rt; do
@@ -641,19 +653,6 @@ jobs:
             "-Pandroid.testInstrumentationRunnerArguments.notAnnotation=$NEEDS_PUSHED_MEDIA" \
             :io:connectedAndroidTest :output:connectedAndroidTest :ffmpeg:connectedAndroidTest \
             :libass:connectedAndroidTest :compose-video:connectedAndroidTest
-
-      - name: Install the ffmpeg CLI the clips are recorded against
-        if: ${{ !cancelled() && steps.boot.outcome == 'success' }}
-        run: |
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          brew install --quiet ffmpeg
-          echo "$(brew --prefix ffmpeg)/bin" >> "$GITHUB_PATH"
-
-      - name: Generate the test clips
-        if: ${{ !cancelled() && steps.boot.outcome == 'success' }}
-        run: ./scripts/testmedia.sh
-        env:
-          TESTMEDIA_STRICT_FFMPEG: "1"
 
       # The clips go into each test APK's own external storage, as root, with the APK's uid.
       # ReopenDeviceTest runs once more after a failure (#301), and both runs count.

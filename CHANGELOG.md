@@ -195,6 +195,10 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- The default controls of the native views stay up as long as the accessibility settings ask
+  (#653). On Android they hid three seconds after the last touch whatever time to take action the
+  user set, and now wait the time the accessibility manager recommends for controls; on iOS they
+  stay while VoiceOver runs. The Compose controls already did this.
 - A byte range segment of an HLS or DASH stream costs one HTTP request instead of two (#619). The
   Ktor reader probed every address from byte 0 and asked again from the segment's offset at the
   first read, so each segment of a byte range ladder, of a `SegmentBase` DASH item and of a ranged

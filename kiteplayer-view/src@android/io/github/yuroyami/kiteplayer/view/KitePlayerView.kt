@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.view
 
 import kotlin.time.Duration
 import android.app.PictureInPictureParams
+import kotlin.time.Duration.Companion.milliseconds
 import android.content.Context
 import android.graphics.Rect
 import android.os.Build
@@ -233,6 +234,7 @@ public open class KitePlayerView @JvmOverloads constructor(
         if (!showsControls || paired == null) return
         val scope = CoroutineScope(SupervisorJob() + MainLooper)
         val model = PlayerControlsModel(paired, scope, controlsStrings)
+        model.recommendedHideAfter = { asked -> recommendedControlsTimeout(asked) }
         model.onFullScreen = onFullScreen
         model.onPictureInPicture = onPictureInPicture
         controlsScope = scope
@@ -729,4 +731,20 @@ internal object MainLooper : CoroutineDispatcher() {
     override fun dispatch(context: CoroutineContext, block: Runnable) {
         handler.post(block)
     }
+}
+
+/**
+ * How long the accessibility settings ask controls with icons to stay, given [asked] (#653): a user
+ * who set a longer time to take action gets that time, and a screen reader keeps them while it
+ * reads. Android 10 and later answer it; before that the controls keep [asked].
+ */
+private fun android.view.View.recommendedControlsTimeout(asked: kotlin.time.Duration): kotlin.time.Duration {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return asked
+    val manager = context.getSystemService(android.view.accessibility.AccessibilityManager::class.java) ?: return asked
+    val millis = manager.getRecommendedTimeoutMillis(
+        asked.inWholeMilliseconds.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(),
+        android.view.accessibility.AccessibilityManager.FLAG_CONTENT_ICONS or
+            android.view.accessibility.AccessibilityManager.FLAG_CONTENT_CONTROLS,
+    )
+    return if (millis == Int.MAX_VALUE) kotlin.time.Duration.INFINITE else millis.milliseconds
 }

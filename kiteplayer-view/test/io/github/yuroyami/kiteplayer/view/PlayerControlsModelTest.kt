@@ -29,6 +29,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /** A player that writes down every command, and answers as a player would: a setting shows in its state at once. */
@@ -245,6 +246,22 @@ class PlayerControlsModelTest {
         model.togglePlay()
         runCurrent()
         advanceTimeBy(3_001.milliseconds)
+        assertFalse(model.state.value.visible)
+    }
+
+    /**
+     * A platform that recommends a longer time for controls, as Android does for a user who set a
+     * longer time to take action, keeps the native controls up that long (#653). They hid after
+     * three seconds whatever the user asked for, while a screen reader was still reading them.
+     */
+    @Test
+    fun theControlsWaitAsLongAsThePlatformRecommends() = runTest {
+        val model = controlsModel(ScriptedControlsPlayer(playingSnapshot()))
+        model.recommendedHideAfter = { asked -> if (asked == 3.seconds) 2.minutes else asked }
+        model.poke()
+        advanceTimeBy(5.seconds)
+        assertTrue(model.state.value.visible, "the controls hid before the recommended two minutes")
+        advanceTimeBy(2.minutes)
         assertFalse(model.state.value.visible)
     }
 

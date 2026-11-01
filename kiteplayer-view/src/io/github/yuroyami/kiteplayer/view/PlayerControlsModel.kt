@@ -190,6 +190,14 @@ public class PlayerControlsModel internal constructor(
         hideAfter: Duration = 3.seconds,
     ) : this(RealPlayer(player), scope, strings, hideAfter, DefaultSpeeds, CoroutineScope(SupervisorJob() + Dispatchers.Default))
 
+    /**
+     * How long the platform recommends the controls stay up, given [hideAfter] (#653). Android's
+     * view answers with the accessibility manager's recommended timeout for controls, which honours
+     * a user's longer time to take action. Read at every start of the timeout, so a change of the
+     * setting reaches the next one. The default keeps [hideAfter].
+     */
+    internal var recommendedHideAfter: (Duration) -> Duration = { it }
+
     private var visible = true
     private var held = false
     private var hideJob: Job? = null
@@ -408,7 +416,7 @@ public class PlayerControlsModel internal constructor(
         hideJob = null
         if (closed || !visible || held || scrubStart != null || !playRequested) return
         hideJob = scope.launch {
-            delay(hideAfter)
+            delay(recommendedHideAfter(hideAfter))
             hideJob = null
             hide()
         }

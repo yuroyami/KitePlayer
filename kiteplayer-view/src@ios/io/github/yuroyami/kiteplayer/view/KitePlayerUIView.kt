@@ -2,6 +2,7 @@
 
 package io.github.yuroyami.kiteplayer.view
 
+import platform.UIKit.UIAccessibilityIsVoiceOverRunning
 import platform.UIKit.setIsAccessibilityElement
 import platform.UIKit.setAccessibilityValue
 import platform.UIKit.setAccessibilityTraits
@@ -206,6 +207,8 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
         }
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
         val model = PlayerControlsModel(paired, scope, controlsStrings)
+        // iOS has no recommended timeout for controls, so they stay while VoiceOver reads them (#653).
+        model.recommendedHideAfter = { asked -> if (UIAccessibilityIsVoiceOverRunning()) Duration.INFINITE else asked }
         model.onFullScreen = onFullScreen
         model.onPictureInPicture = onPictureInPicture
         controlsScope = scope

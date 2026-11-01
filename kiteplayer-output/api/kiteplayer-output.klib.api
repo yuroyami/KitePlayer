@@ -294,6 +294,8 @@ final class io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer : io.git
     constructor <init>(kotlin.js/JsAny, io.github.yuroyami.kiteplayer.output/WebFramePainter) // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.<init>|<init>(kotlin.js.JsAny;io.github.yuroyami.kiteplayer.output.WebFramePainter){}[0]
     constructor <init>(kotlin.js/JsAny, io.github.yuroyami.kiteplayer.output/WebFramePainter, kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.<init>|<init>(kotlin.js.JsAny;io.github.yuroyami.kiteplayer.output.WebFramePainter;kotlin.Boolean){}[0]
 
+    final val appliesAdjustments // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.appliesAdjustments|{}appliesAdjustments[0]
+        final fun <get-appliesAdjustments>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.appliesAdjustments.<get-appliesAdjustments>|<get-appliesAdjustments>(){}[0]
     final val events // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.events|{}events[0]
         final fun <get-events>(): kotlinx.coroutines.flow/Flow<io.github.yuroyami.kiteplayer.spi/RendererEvent> // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.events.<get-events>|<get-events>(){}[0]
     final val outputSize // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.outputSize|{}outputSize[0]

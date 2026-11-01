@@ -1,10 +1,11 @@
 // The test server of the kiteplayer-web-worker browser tests, beside the clips under /testmedia/.
 // It keeps the requests for clips, and serves live HLS and DASH manifests that grow with time, a
-// manifest of several DASH periods, and a redirect. KitePlayerWorkerBrowserTest reads it under /kite-probe/.
+// manifest of several DASH periods, a redirect, and a playlist of signed segments that expire.
+// KitePlayerWorkerBrowserTest reads it under /kite-probe/.
 
 /** Returns a handler that answers a request and returns true, or returns false to let the files answer. */
 export function probeHandler() {
-  const probe = { asked: [], manifests: 0, periodFetches: 0, epoch: Date.now() };
+  const probe = { asked: [], manifests: 0, periodFetches: 0, epoch: Date.now(), expired: false };
 
   const liveHls = () => {
     const count = Math.min(6, 2 + Math.floor((Date.now() - probe.epoch) / 2000));
@@ -78,6 +79,7 @@ export function probeHandler() {
       probe.manifests = 0;
       probe.periodFetches = 0;
       probe.epoch = Date.now();
+      probe.expired = false;
       return send("text/plain", "ok");
     }
     if (name === "asked") return send("application/json", JSON.stringify({ asked: probe.asked, manifests: probe.manifests }));
@@ -91,6 +93,30 @@ export function probeHandler() {
     if (name === "live-periods.mpd") {
       keep(name);
       return send("application/dash+xml", periods(++probe.periodFetches > 1 ? ["a", "b"] : ["a"], true));
+    }
+    // Six segments of the 320x180 variant behind signed addresses, which the CDN refuses with
+    // 403 once the test calls expire, as it refuses a token that expired while the stream played (#546).
+    if (name === "expire") {
+      probe.expired = true;
+      return send("text/plain", "ok");
+    }
+    if (name === "expiring.m3u8") {
+      const lines = ["#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-TARGETDURATION:2", "#EXT-X-MEDIA-SEQUENCE:0"];
+      for (let i = 0; i < 6; i++) lines.push("#EXTINF:2.000000,", "/kite-probe/signed/ts-0-" + i + ".ts?token=old");
+      lines.push("#EXT-X-ENDLIST");
+      return send("application/vnd.apple.mpegurl", lines.join("\n") + "\n");
+    }
+    if (name.startsWith("signed/")) {
+      const file = name.slice("signed/".length);
+      keep(name);
+      if (probe.expired) {
+        response.writeHead(403);
+        response.end();
+        return true;
+      }
+      response.writeHead(302, { Location: "/testmedia/hls/" + file });
+      response.end();
+      return true;
     }
     if (name.startsWith("moved/")) {
       keep(name);

@@ -214,6 +214,10 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- A signed address that expires while a stream plays in `KitePlayerWorker` is renewed as on the
+  other targets (#546, #453). The worker's reader threw a 401 or 403 as a plain failure and kept
+  no refusal, so the player never opened the item again for a fresh address and warned nothing.
+  It now hands the refusal over, and the player warns `AddressRenewed` and opens the item again.
 - A seek whose reads a server refused for an expired address opens the item again and lands where
   it was going, on every target (#546). It failed the player instead, as `SourceUnavailable` when
   the container seek threw and as `Internal` when a later step did, because only a read during

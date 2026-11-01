@@ -108,7 +108,9 @@ class KtorMediaIoTimeoutTest {
     fun aReadThatReceivesNothingFailsWithinTheReadTimeout() = runBlocking {
         val bytes = content(64_000)
         val port = serve { respondThenStall(bytes, sent = 32_000) }
-        val io = KtorMediaIo.open("http://127.0.0.1:$port/media", policy = quick)
+        // Only the read limit is under test, so the open may take a cold JVM's first connection,
+        // which missed 500 ms on CI before any read began.
+        val io = KtorMediaIo.open("http://127.0.0.1:$port/media", policy = quick.copy(connectTimeout = 10.seconds))
         try {
             readFully(io, 32_000)
             val started = TimeSource.Monotonic.markNow()

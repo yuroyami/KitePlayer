@@ -483,7 +483,11 @@ internal fun platformStateFor(phase: MediaSessionPhase): Int = when (phase) {
  * - The lock screen, headset buttons, car and quick settings controls follow the player.
  * - [notification] adds the media notification, which keeps the app in the foreground while it
  *   plays. It needs the manifest entries that [KitePlayerMediaService] lists. Null adds none.
- * - [background] says what happens when the app leaves the screen. Null leaves that alone.
+ * - [background] says what happens when the app leaves the screen. Null leaves that alone. A
+ *   session attached while no activity is on screen, as from [KitePlayerResumptionService], counts
+ *   that as the app having left: [BackgroundPolicy.ContinueAudio] parks the video at once, and
+ *   [BackgroundPolicy.PauseAll] leaves a player that plays already playing and pauses from the next
+ *   time the app leaves (#690).
  * - [interruptions] takes audio focus, so a call or another app pauses or ducks the player, and it
  *   pauses when the headphones come out. Null turns that off.
  *

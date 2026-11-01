@@ -8,14 +8,21 @@ package io.github.yuroyami.kiteplayer.session
  */
 public enum class BackgroundPolicy {
     /**
-     * Keep the sound, park video decoding while away, and resume it on return.
+     * Keep the sound, park video decoding while away, and resume it on return. A session that
+     * attaches while the application is away parks the video at once (#690).
      *
      * Nobody is looking at the picture, so decoding it costs battery and heat for nothing. On
      * Android, carrying on in the background also needs the application's own foreground service.
      */
     ContinueAudio,
 
-    /** Pause on leaving, and play again on return only when this policy was the one that paused. */
+    /**
+     * Pause on leaving, and play again on return only when this policy was the one that paused.
+     *
+     * A player whose session attaches while the application is away, as from the resume card,
+     * is not paused then: playback started there was started on purpose. The policy pauses from
+     * the next time the application leaves the screen.
+     */
     PauseAll,
 
     /** Do nothing. */
@@ -55,6 +62,19 @@ internal class BackgroundMachine(private val policy: BackgroundPolicy) {
         val seenBefore = seen
         this.foreground = foreground
         return decide(seenBefore, playing, videoEnabled)
+    }
+
+    /**
+     * The handle attached while the application was away from the screen, before any other call.
+     * It counts as leaving, except that [BackgroundPolicy.PauseAll] pauses nothing: a player that
+     * already plays there was started there on purpose, for example from the resume card, and the
+     * policy acts from the next trip away (#690).
+     */
+    fun attachedAway(videoEnabled: Boolean): BackgroundDecision {
+        val seenBefore = seen
+        foreground = false
+        if (seen == seenBefore || policy == BackgroundPolicy.PauseAll) return NOTHING
+        return goneFromView(playing = false, videoEnabled = videoEnabled)
     }
 
     /** A picture in picture window opened, or closed. */
@@ -113,13 +133,19 @@ internal class BackgroundMachine(private val policy: BackgroundPolicy) {
  * is one of those. A stop for a configuration change, such as a rotation, is followed by the new
  * activity's start and is not a trip to the background.
  *
- * The answer starts as "on screen", which is what [BackgroundMachine] assumes too.
+ * The answer starts as what the handle found at attach, [startsOnScreen]. A handle that found
+ * nothing on screen tells [BackgroundApplier.attachedAway] so, and the first start is then the
+ * return. Starting as "on screen" whatever the handle found let a player attached away decode its
+ * video until the application came and went once (#690).
  */
 internal class StartedActivities(private var startedBeforeAttach: Boolean) {
     private val seen = HashSet<Any>()
-    private var announced = true
+    private var announced = startedBeforeAttach
 
     private val onScreen: Boolean get() = seen.isNotEmpty() || startedBeforeAttach
+
+    /** Whether an activity was on screen when the handle attached. False is the first trip away. */
+    val startsOnScreen: Boolean = startedBeforeAttach
 
     /** An activity started. Returns the new answer when it changed, else null. */
     fun onStarted(activity: Any): Boolean? {
@@ -151,6 +177,11 @@ internal class BackgroundApplier(
 
     fun handle(foreground: Boolean) {
         apply(machine.on(foreground, target.playing, target.videoEnabled))
+    }
+
+    /** The handle attached while the application was away from the screen. Called once, first. */
+    fun attachedAway() {
+        apply(machine.attachedAway(target.videoEnabled))
     }
 
     /** A picture in picture window opened, or closed. */

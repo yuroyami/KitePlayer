@@ -37,7 +37,9 @@ public expect class KitePlayerMediaSession @Throws(IllegalArgumentException::cla
  *
  * - [interruptions] pauses when the headphones come out, and on iOS for a call. Null turns that off.
  * - [background] and [pictureInPicture] say what happens when an iOS app leaves the screen. macOS
- *   ignores both.
+ *   ignores both. A session attached while the app is not active counts that as the app having
+ *   left: [BackgroundPolicy.ContinueAudio] parks the video at once, and [BackgroundPolicy.PauseAll]
+ *   leaves a player that plays already playing and pauses from the next time the app leaves (#690).
  *
  * Call this on the main thread.
  *

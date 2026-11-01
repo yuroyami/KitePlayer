@@ -195,6 +195,13 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- A media session attached while the app is off screen applies its background policy at once
+  (#690). The background handling assumed the app was on screen when it attached, so a player
+  started from the resume card decoded video nobody saw until the app came to the screen and left
+  it once. Android reads the activities and iOS the application state at attach, and
+  `ContinueAudio` parks the video then. `PauseAll` leaves a player that already plays alone and
+  pauses from the next time the app leaves, as the KDoc of `attachMediaSession` and of the policy
+  now say.
 - The Android video Surface's frame rate request follows a new item and a new speed (#598). It was
   measured once per Surface, from media time, so a 50 fps clip after a 23.976 fps film of the same
   aspect, or the film at 2x, kept the film's request, and a TV box that matches its mode to the

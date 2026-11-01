@@ -31,8 +31,9 @@ kotlin() { run env KOTLIN_CLI_NO_WELCOME_BANNER=1 ./kotlin "$@"; }
 scan_em_dashes() {
     # git grep reads the working copies of tracked files and preserves errors separately from
     # its expected no-match exit code. Add new files to the index before the final commit gate.
+    # The two Kotlin Toolchain wrappers are JetBrains' files, replaced at each toolchain upgrade.
     local status
-    if git grep -n "$(printf '\342\200\224')"; then
+    if git grep -n "$(printf '\342\200\224')" -- . ':!kotlin' ':!kotlin.bat'; then
         echo 'Em dash found in tracked source.' >&2
         return 1
     else

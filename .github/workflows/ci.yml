@@ -428,6 +428,15 @@ jobs:
       - name: Every test folder is run by a job
         run: python3 scripts/check-test-coverage.py
 
+      # The gate's em dash scan, which only the macOS gate ran (#640). The two Kotlin Toolchain
+      # wrappers are JetBrains' files, replaced at each toolchain upgrade.
+      - name: No em dash in tracked source
+        run: |
+          if git grep -n "$(printf '\342\200\224')" -- . ':!kotlin' ':!kotlin.bat'; then
+            echo "::error::Em dash found in tracked source."
+            exit 1
+          fi
+
       - name: JVM tests, media-free modules
         run: |
           . scripts/test-env.sh

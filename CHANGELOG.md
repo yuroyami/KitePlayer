@@ -201,6 +201,11 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- A live AV1, VP9 or VP8 stream on Android decodes on the phone's hardware decoder (#643). The
+  FFmpeg route, which a live stream takes, named MediaCodec only for H.264 and HEVC, so the others
+  decoded on the CPU although KiteFFmpeg builds their MediaCodec decoders and the view's own path
+  used them for files. A phone without such a decoder falls back to software as before. VP9 on
+  macOS and AV1 on Windows wait for a measurement on a Mac and for KiteFFmpeg's hardware builds.
 - A Metal renderer gives its layer back in standard range when it closes (#689). A view keeps one
   Metal layer across a detach or a change of player, and a renderer that closed while showing HDR
   left it half-float with its extended-range flag, so the next renderer inherited HDR state it

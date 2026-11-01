@@ -286,6 +286,14 @@ private const val SEGMENT_TOLERANCE_MICROS = 50_000L
  * Serves one variant of a master playlist to FFmpeg at addresses of its own, and moves the stream
  * to another variant between two segments. See the note at the top of this file.
  *
+ * A live playlist is read again at every reload. A reload that gains what the switch does not
+ * serve, above all a second `EXT-X-MAP` after a discontinuity, as an inserted advertisement or an
+ * encoder restart writes it, is served up to that map, and the stream holds its variant, refusing
+ * every [request], until a reload reads whole again (#621). Failing the reload instead made FFmpeg
+ * drop the playlist for good. The segments past the map are not served: FFmpeg's MP4 reader keeps
+ * the first `moov` it reads and skips every later one, so it would not decode them with their own
+ * initialization anyway.
+ *
  * [addresses] are the variants' playlists, resolved, in the master's order, and [traits] their
  * `EXT-X-STREAM-INF` tags. [choose] answers the variant the player would open by itself.
  * [openAddress] opens an address the stream names.

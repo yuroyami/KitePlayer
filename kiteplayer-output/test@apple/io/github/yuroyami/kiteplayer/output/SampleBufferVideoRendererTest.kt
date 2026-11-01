@@ -7,7 +7,9 @@ import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.get
 import kotlinx.cinterop.plus
 import kotlinx.cinterop.reinterpret
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -179,6 +181,34 @@ class SampleBufferVideoRendererTest {
         assertFalse(renderer.supports(PlayerPixelFormat.Yuv444p))
         assertFalse(renderer.supports(PlayerPixelFormat.Opaque))
         renderer.close()
+    }
+
+    // A layer that failed, after an interruption or a media services reset, showed nothing more
+    // while the sound played on and the frames counted as shown (#597).
+    @Test
+    fun aFailedLayerIsFlushedBeforeTheNextSampleAndSaysSoOnce() = runBlocking {
+        val picture = planarPicture()
+        val sink = RecordingSampleSink()
+        val renderer = SampleBufferVideoRenderer(resolve = { picture }, sink = sink)
+        val events = mutableListOf<io.github.yuroyami.kiteplayer.spi.RendererEvent>()
+        val collector = launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) { renderer.events.collect { events += it } }
+        assertTrue(renderer.present(SampleTestFrame(), targetNanos = 0L))
+
+        sink.failing = "The operation was interrupted."
+        assertFalse(renderer.present(SampleTestFrame(), targetNanos = 0L), "a frame that met a failed layer counted as shown")
+        assertEquals(listOf("enqueue", "flush", "enqueue"), sink.calls, "the failed layer was not flushed before the sample")
+        assertTrue(renderer.present(SampleTestFrame(), targetNanos = 0L))
+        yield()
+        assertEquals(1, events.count { it is io.github.yuroyami.kiteplayer.spi.RendererEvent.SurfaceLost }, "$events")
+        assertTrue(
+            (events.single { it is io.github.yuroyami.kiteplayer.spi.RendererEvent.SurfaceLost }
+                as io.github.yuroyami.kiteplayer.spi.RendererEvent.SurfaceLost).detail.contains("interrupted"),
+            "$events",
+        )
+        assertEquals(io.github.yuroyami.kiteplayer.spi.RendererEvent.SurfaceAvailable, events.last(), "$events")
+        collector.cancel()
+        renderer.close()
+        sink.release()
     }
 
     @Test

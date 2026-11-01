@@ -100,12 +100,27 @@ internal class RecordingSampleSink : SampleSink {
     var flushes = 0
         private set
 
+    /** Why the layer has failed, or null while it renders. A [flush] resets it, as on a real layer. */
+    var failing: String? = null
+
+    /** Every call, in order: "enqueue", "flush" and "flushAndRemoveImage". */
+    val calls = mutableListOf<String>()
+
     override fun enqueue(sample: CMSampleBufferRef) {
         samples += sample
+        calls += "enqueue"
     }
 
     override fun flushAndRemoveImage() {
         flushes++
+        calls += "flushAndRemoveImage"
+    }
+
+    override fun failure(): String? = failing
+
+    override fun flush() {
+        failing = null
+        calls += "flush"
     }
 
     fun release() {

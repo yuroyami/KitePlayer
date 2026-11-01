@@ -195,6 +195,13 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- The sample buffer renderer, which picture in picture uses on iOS and macOS, recovers a failed
+  layer (#597). A layer that failed after an interruption or a media services reset showed
+  nothing more, while the sound played on and every frame counted as shown. Each frame now reads
+  the layer's status first, flushes a failed layer, and on iOS 17 and macOS 14 one whose renderer
+  asks for a flush, before it enqueues. The renderer says `SurfaceLost` once with the layer's
+  error and `SurfaceAvailable` when a frame finds it rendering, and the frame that met the failure
+  is not counted as shown.
 - A native player view shows the picture of a player built on an FFmpeg backend the app made
   itself (#601). `KitePlayer(config)` gave the views their default renderer only when the config
   named no media backend, so `KiteFFmpegMediaBackend(decoderOptions = ...)`, as the

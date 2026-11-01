@@ -69,19 +69,46 @@ class KitePlayerPlatformJvmTest {
         }
     }
 
-    /** A stack of the app's own may make frames the default renderer cannot show, so it sets nothing. */
+    /**
+     * An FFmpeg backend the app built itself, for its decoder options, makes the frames the default
+     * renderer shows, so the views get it as with the default backend (#601). It used to set
+     * nothing, and a view showing that player played sound only.
+     */
     @Test
-    fun aStackOfYourOwnLeavesTheViewDefaultAlone() {
+    fun anFfmpegBackendOfYourOwnGivesTheViewsTheirRenderer() {
         val before = PlayerViewDefaults.rendererFactory
         PlayerViewDefaults.rendererFactory = null
         try {
-            val own = Backends(backend = KitePlayerPlatform.backendsOrNull()?.backend, output = NamedOutputBackend)
+            val own = Backends(
+                backend = io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegMediaBackend(lowDelayDecode = true),
+                output = NamedOutputBackend,
+            )
+            KitePlayer(PlayerConfig(backends = own)).use {
+                assertSame<Any?>(DesktopAwtPlayerViewRendererFactory, PlayerViewDefaults.rendererFactory)
+            }
+        } finally {
+            PlayerViewDefaults.rendererFactory = before
+        }
+    }
+
+    /** A media backend that is not FFmpeg's may make frames the default renderer cannot show, so it sets nothing. */
+    @Test
+    fun aMediaBackendOfYourOwnLeavesTheViewDefaultAlone() {
+        val before = PlayerViewDefaults.rendererFactory
+        PlayerViewDefaults.rendererFactory = null
+        try {
+            val own = Backends(backend = OwnMediaBackend, output = NamedOutputBackend)
             KitePlayer(PlayerConfig(backends = own)).use {
                 assertNull(PlayerViewDefaults.rendererFactory)
             }
         } finally {
             PlayerViewDefaults.rendererFactory = before
         }
+    }
+
+    private object OwnMediaBackend : io.github.yuroyami.kiteplayer.spi.MediaBackend {
+        override suspend fun open(media: MediaItem): io.github.yuroyami.kiteplayer.spi.BackendSession =
+            error("not opened in this test")
     }
 
     /** The old door answers as it did, for apps that have not moved yet. */

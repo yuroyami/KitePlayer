@@ -97,6 +97,27 @@ class KitePlayerAwtViewTest {
         return view
     }
 
+    // A view that shows no picture says why once, where nothing else would (#601).
+    @Test
+    fun aViewWithAPlayerAndNoRendererSaysSoOnce() {
+        val before = PlayerViewDefaults.rendererFactory
+        PlayerViewDefaults.rendererFactory = null
+        val lines = mutableListOf<String>()
+        io.github.yuroyami.kiteplayer.KiteLog.install { tag, message -> if (tag == "kiteplayer-view") lines += message }
+        try {
+            val view = KitePlayerAwtView()
+            view.player = player()
+            view.canvasAvailable()
+            view.player = player()
+            assertEquals(1, lines.size, "logged $lines")
+            assertTrue("no renderer factory" in lines.single(), lines.single())
+            view.release()
+        } finally {
+            io.github.yuroyami.kiteplayer.KiteLog.install(null)
+            PlayerViewDefaults.rendererFactory = before
+        }
+    }
+
     private class Counted(
         override val presentedFrames: Long,
         override val supersededFrames: Long,

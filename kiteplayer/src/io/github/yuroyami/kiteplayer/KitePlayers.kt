@@ -18,8 +18,10 @@ import kotlin.jvm.JvmName
  * the defaults. [KitePlayer.create] is the door that uses only what the config names, for a stack
  * of your own.
  *
- * With the default media backend, this also gives the platform's player views their default
- * renderer, so `view.player = player` is all a `KitePlayerView` needs.
+ * With the FFmpeg media backend, the default one or a `KiteFFmpegMediaBackend` the config names,
+ * this also gives the platform's player views their default renderer, so `view.player = player` is
+ * all a `KitePlayerView` needs. [KitePlayer.create] gives the views nothing: a view showing a player
+ * it built needs a `rendererFactory` of its own, or a player built here first (#601).
  *
  * Android on `arm64-v8a`, `armeabi-v7a` and `x86_64`, iOS, macOS on Apple silicon, and the desktop
  * JVM on macOS on Apple silicon, Linux x64 and arm64 and Windows x64 have the default stack in a
@@ -34,19 +36,24 @@ import kotlin.jvm.JvmName
 @Throws(PlaybackException::class)
 public fun KitePlayer(config: PlayerConfig = PlayerConfig()): KitePlayer {
     val supplied = config.backends
-    if (supplied.backend != null && supplied.output != null) return KitePlayer.create(config)
-    val defaults = platformKitePlayerDefaults.backendsOrNull()
-        ?: throw PlaybackException(PlaybackError.ConfigurationInvalid(noDefaultStackDetail()))
-    val player = KitePlayer.create(
-        config.copy(
-            backends = Backends(
-                backend = supplied.backend ?: defaults.backend,
-                output = supplied.output ?: defaults.output,
+    val player = if (supplied.backend != null && supplied.output != null) {
+        KitePlayer.create(config)
+    } else {
+        val defaults = platformKitePlayerDefaults.backendsOrNull()
+            ?: throw PlaybackException(PlaybackError.ConfigurationInvalid(noDefaultStackDetail()))
+        KitePlayer.create(
+            config.copy(
+                backends = Backends(
+                    backend = supplied.backend ?: defaults.backend,
+                    output = supplied.output ?: defaults.output,
+                ),
             ),
-        ),
-    )
-    // The default renderer shows the frames of the default media backend, so it comes with that.
-    if (supplied.backend == null) platformKitePlayerDefaults.installViewDefaults()
+        )
+    }
+    // The default renderer shows the frames of the FFmpeg backend, the default one or one the app
+    // built itself for its decoder options, so it comes with either (#601).
+    val media = supplied.backend
+    if (media == null || platformKitePlayerDefaults.viewsShowFramesOf(media)) platformKitePlayerDefaults.installViewDefaults()
     return player
 }
 

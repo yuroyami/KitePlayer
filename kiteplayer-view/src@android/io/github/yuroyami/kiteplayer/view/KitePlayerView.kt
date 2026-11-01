@@ -34,8 +34,9 @@ import kotlin.math.roundToInt
  * A reusable Android player view for layouts, programmatic UI, and Compose `AndroidView` interop.
  *
  * This artifact owns only Android view lifecycle and layout. A view with no [rendererFactory] of its
- * own uses [PlayerViewDefaults.rendererFactory], which the `kiteplayer` module sets when it builds a
- * player, so `view.player = player` is the whole setup. The renderer is attached as soon as both the
+ * own uses [PlayerViewDefaults.rendererFactory], which `KitePlayer(config)` sets when it builds a
+ * player on the FFmpeg backend, so `view.player = player` is the whole setup; see that object for
+ * the rule. The renderer is attached as soon as both the
  * player and a factory exist, even before the Surface does, so renderer-coupled hardware decoders
  * can take part in decoder selection. Media may open before or after that: a player that decoded
  * without a renderer moves to the renderer's own decoder when the renderer arrives. Surface creation and destruction are forwarded into
@@ -75,9 +76,11 @@ public open class KitePlayerView @JvmOverloads constructor(
     private var supersededBefore = 0L
     private var failedBefore = 0L
 
+    private val missingRenderer = MissingRendererNotice("KitePlayerView")
+
     private val binding = PlayerViewBinding<KitePlayer, AndroidPlayerViewRenderer>(
         createRenderer = {
-            (rendererFactory ?: PlayerViewDefaults.rendererFactory)?.let { factory ->
+            (rendererFactory ?: PlayerViewDefaults.rendererFactory ?: run { missingRenderer.note(); null })?.let { factory ->
                 val generation = ++rendererGeneration
                 val renderer = factory.create(
                     onOverlay = { overlay ->

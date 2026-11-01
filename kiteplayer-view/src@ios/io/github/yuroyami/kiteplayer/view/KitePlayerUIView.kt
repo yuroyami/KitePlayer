@@ -40,7 +40,8 @@ import platform.UIKit.UIView
  * playback, because a backgrounded view should not stop the sound.
  *
  * With no [rendererFactory] of its own, the view uses [PlayerViewDefaults.rendererFactory], which
- * the `kiteplayer` module sets when it builds a player. The default adapter in `kiteplayer` uses
+ * `KitePlayer(config)` sets when it builds a player on the FFmpeg backend; see that object for the
+ * rule. The default adapter in `kiteplayer` uses
  * Metal: VideoToolbox frames wrap into textures with no copy and software
  * frames upload in their native format. [preferMetal] set false before the view enters a window
  * asks that adapter for its CPU-converter CALayer fallback. A custom backend can install its own
@@ -78,8 +79,9 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
 
     /**
      * The renderer adapter for this view. Null uses [PlayerViewDefaults.rendererFactory], which the
-     * `kiteplayer` module sets when it builds a player. A view with neither remains a valid UIKit
-     * container and attaches no renderer; installing one later rebuilds immediately.
+     * `kiteplayer` module's `KitePlayer(config)` sets when it builds a player on the FFmpeg backend. A
+     * view with neither remains a valid UIKit container, attaches no renderer and logs that once;
+     * installing one later rebuilds immediately.
      */
     public var rendererFactory: ApplePlayerViewRendererFactory? = null
         set(value) {
@@ -88,10 +90,13 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
             binding.rendererConfigurationChanged()
         }
 
+    private val missingRenderer = MissingRendererNotice("KitePlayerUIView")
+
     private val binding = PlayerViewBinding<KitePlayer, PlayerViewRenderer>(
         createRenderer = {
             val useMetal = preferMetal
-            (rendererFactory ?: PlayerViewDefaults.rendererFactory)?.create(videoLayer, metalLayer, useMetal)?.also {
+            (rendererFactory ?: PlayerViewDefaults.rendererFactory ?: run { missingRenderer.note(); null })
+                ?.create(videoLayer, metalLayer, useMetal)?.also {
                 // Exactly one layer is on the glass. Both stayed visible before,
                 // with the Metal layer on top, so its last drawable covered every CG frame a
                 // fallback generation delivered afterwards.

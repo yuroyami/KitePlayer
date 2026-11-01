@@ -28,6 +28,9 @@ private object IosKitePlayerPlatformDefaults : KitePlayerPlatformDefaults {
         }
     }
 
+    override fun viewsShowFramesOf(backend: io.github.yuroyami.kiteplayer.spi.MediaBackend): Boolean =
+        backend is KiteFFmpegMediaBackend
+
     override fun backendsOrNull(): Backends = Backends(
         backend = KiteFFmpegMediaBackend(),
         output = AppleOutputBackend,

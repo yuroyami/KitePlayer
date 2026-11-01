@@ -195,6 +195,13 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- A native player view shows the picture of a player built on an FFmpeg backend the app made
+  itself (#601). `KitePlayer(config)` gave the views their default renderer only when the config
+  named no media backend, so `KiteFFmpegMediaBackend(decoderOptions = ...)`, as the
+  `PlaybackProfile` example builds it, played sound only, and whether a view worked hung on what
+  else the app had built first. It now gives it for any `KiteFFmpegMediaBackend`. `KitePlayer.create`
+  still gives nothing, as its KDoc and the views' now say, and a view with a player and no renderer
+  logs that once through `KiteLog`. The `PlaybackProfile` example builds with `KitePlayer(config)`.
 - Broadcast H.264 and HEVC show their CC1 captions on Android's hardware video path (#611).
   MediaCodec, on the view's own route and on FFmpeg's, gives its pictures no caption data, so the
   track never existed there. A lane whose hardware decoder gives none now reads the A/53 captions

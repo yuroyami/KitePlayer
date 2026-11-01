@@ -66,7 +66,8 @@ class ComposedColourTagsTest {
             is platform.Foundation.NSNumber -> value.doubleValue
             else -> null
         }
-        assertEquals(gamma, level, "gamma")
+        // Core Video keeps the gamma as a float, so 2.2 reads back as 2.1999999992549419.
+        if (gamma == null) assertNull(level, "gamma") else assertEquals(gamma, assertNotNull(level, "gamma"), 1e-6, "gamma")
         assertNull(attachment(buffer, kCVImageBufferYCbCrMatrixKey), "an RGB buffer has no matrix")
     }
 

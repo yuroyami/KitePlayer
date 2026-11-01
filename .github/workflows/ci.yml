@@ -945,7 +945,7 @@ jobs:
     name: Linux arm64 (Kotlin/Native, executed on an arm64 runner)
     needs: linux-arm64-link
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -953,14 +953,22 @@ jobs:
           name: linux-arm64-test-binaries
           path: linux-arm64-tests
 
-      # kiteplayer-ffmpeg's binary is linked above but not run: its suites read clips.
-      - name: linuxArm64 tests, media-free modules
+      # kiteplayer-ffmpeg's suites read clips, so this runner makes them, with Ubuntu's ffmpeg 6.1,
+      # whose clips the suite passes against, and runs the Linux arm64 FFmpeg it links (#639). The
+      # strict check is off because this series is not the pinned one; the MANIFEST says so.
+      - name: Install the ffmpeg CLI and generate the test clips
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q ffmpeg
+          ./scripts/testmedia.sh
+
+      - name: linuxArm64 tests, the media-free modules and the FFmpeg backend on real media
         run: |
           set +e
           mkdir -p "$RUNNER_TEMP/test-logs"
           status=0
           for module in kiteplayer-core kiteplayer-subtitles kiteplayer-io kiteplayer-output \
-                        kiteplayer-rt kiteplayer-libass kiteplayer; do
+                        kiteplayer-rt kiteplayer-libass kiteplayer kiteplayer-ffmpeg; do
             binary="$GITHUB_WORKSPACE/linux-arm64-tests/$module.kexe"
             if [ ! -f "$binary" ]; then
               echo "::error::$module: no test binary at $binary"
@@ -988,7 +996,7 @@ jobs:
           print("### linuxArm64 test binaries, executed on an arm64 runner\n")
           print("| Test binary | Tests | Failed | Skipped |\n|---|---:|---:|---:|")
           for module in ("kiteplayer-core", "kiteplayer-subtitles", "kiteplayer-io", "kiteplayer-output",
-                         "kiteplayer-rt", "kiteplayer-libass", "kiteplayer"):
+                         "kiteplayer-rt", "kiteplayer-libass", "kiteplayer", "kiteplayer-ffmpeg"):
               path = os.path.join(os.environ["RUNNER_TEMP"], "test-logs", f"{module}.log")
               text = open(path, errors="replace").read() if os.path.exists(path) else ""
               ran = re.search(r"^\[=+\] (\d+) tests? from .* ran", text, re.M)

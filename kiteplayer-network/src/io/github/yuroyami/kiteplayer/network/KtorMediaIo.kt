@@ -85,6 +85,11 @@ import kotlin.time.TimeSource
  * addresses come from the media. Headers that a [KtorMediaIoResolver] adds by default go to every
  * address. An open that times out, fails to connect or meets a server error tries again after a
  * backoff, as a read does.
+ *
+ * A redirect follows the same rule. A request that a redirect moves to another scheme, host or port
+ * loses the item's own headers, and they stay off if a later redirect comes back. A move from http
+ * to https on the same host and the default ports keeps them, and so does a redirect on one server.
+ * In a browser, the browser follows redirects and applies its own rules.
  */
 public class KtorMediaIo private constructor(
     private val client: HttpClient,
@@ -570,7 +575,7 @@ public class KtorMediaIo private constructor(
                 guarded(client, redirects) { mark ->
                     client.prepareGet(uri) {
                         mark()
-                        requestHeaders.forEach { (key, value) -> header(key, value) }
+                        sendHeaders(requestHeaders, related)
                         askForTitles(requestHeaders)
                         if (!live) {
                             // A rewind to zero asks for a range too, so its answer is checked like any other.
@@ -762,10 +767,9 @@ public class KtorMediaIo private constructor(
             val requested = login?.uri ?: uri
             val itemHeaders = login?.let { withLogin(headers, it) } ?: headers
             val related = RelatedRequests(requested, defaultHeaders, itemHeaders)
-            return open(
-                requested, client ?: itemClient(), ownsClient = client == null, itemHeaders, related, policy, redirects, meter,
-                reuse,
-            )
+            val http = client ?: itemClient()
+            keepHeadersOnServer(http)
+            return open(requested, http, ownsClient = client == null, itemHeaders, related, policy, redirects, meter, reuse)
         }
 
         /**
@@ -830,7 +834,7 @@ public class KtorMediaIo private constructor(
                     guarded(http, redirects) { mark ->
                         http.prepareGet(uri) {
                             mark()
-                            headers.forEach { (key, value) -> header(key, value) }
+                            sendHeaders(headers, related)
                             askForTitles(headers)
                             header(HttpHeaders.Range, if (from == 0L && until == null) "bytes=0-" else "bytes=$from-${until ?: ""}")
                             // A stale stored segment asks whether it changed, and a 304 keeps its bytes (#547).
@@ -970,6 +974,12 @@ public class KtorMediaIo private constructor(
             )
         }
     }
+}
+
+/** Sets [headers] on the request. Those that [related] calls the item's own stay on the server it asks. */
+private fun io.ktor.client.request.HttpRequestBuilder.sendHeaders(headers: Map<String, String>, related: RelatedRequests) {
+    headers.forEach { (key, value) -> header(key, value) }
+    stayOnServer(related.itemNames(headers))
 }
 
 /**
@@ -1151,6 +1161,10 @@ internal class RelatedRequests(
     fun headersFor(uri: String): Map<String, String> =
         if (itemOrigin != null && originOrNull(uri) == itemOrigin) itemHeaders else defaults
 
+    /** The names in [headers] that a redirect to another server leaves behind: all but the [defaults]. */
+    fun itemNames(headers: Map<String, String>): Set<String> =
+        headers.filter { (name, value) -> defaults[name] != value }.keys
+
     private fun originOrNull(uri: String): String? = runCatching { originOf(Url(uri)) }.getOrNull()
 }
 
@@ -1175,7 +1189,9 @@ public class KtorMediaIoException internal constructor(
  * or wants resolver-wide defaults. Per-item headers override these defaults.
  *
  * The defaults also go to every related address a reader opens, such as an HLS segment on another
- * server. Per-item headers go only to the scheme, host and port of the item's own address.
+ * server, and they follow a redirect. Per-item headers go only to the scheme, host and port of the
+ * item's own address, so a redirect to another server drops them. Ktor still drops an `Authorization`
+ * default on a redirect to another host.
  *
  * An address that answers with a DASH manifest plays as a DASH presentation, as the automatic
  * provider plays it: the manifest is recognised by its content type, by a path that ends in `.mpd`,

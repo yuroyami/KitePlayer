@@ -42,12 +42,13 @@ public data class MediaItem @Throws(IllegalArgumentException::class) constructor
     /**
      * Request headers, for the http and https protocols. Passed to a configured or automatic
      * [MediaIoResolver] when it supplies the transport. An external subtitle gets them only when it
-     * has the same scheme, host and port as [uri]; see [SubtitleSource].
+     * has the same scheme, host and port as [uri]; see [SubtitleSource]. The reader of
+     * `kiteplayer-network` drops them when a redirect leaves that server.
      *
      * Respelled by the FFmpeg backend as the http protocol's own `headers` option, one
-     * CRLF-joined block, through the same pre-open funnel [openOptions] uses. A `headers` key in
-     * [openOptions] as well refuses the open. On media no http protocol opens (a local file), the
-     * unused-option warning reports them, typed.
+     * CRLF-joined block, through the same pre-open funnel [openOptions] uses. FFmpeg keeps that
+     * block on a redirect. A `headers` key in [openOptions] as well refuses the open. On media no
+     * http protocol opens (a local file), the unused-option warning reports them, typed.
      */
     val headers: Map<String, String> = emptyMap(),
     /**

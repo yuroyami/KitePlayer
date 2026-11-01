@@ -493,6 +493,12 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 - A Kotlin/Native executable for `androidNativeArm64` that uses `kiteplayer-core` now links. The C
   audio ring of `kiteplayer-rt` called an atomics helper, `__aarch64_ldadd8_relax`, that no
   Kotlin/Native link for Android provides. The ring now compiles its atomics inline on that target.
+- `MediaItem.headers` no longer follow a redirect to another server. Ktor keeps every header on a
+  redirect except `Authorization`, so a custom header that held a credential reached the other
+  host. `KtorMediaIo` now drops the item's headers when a redirect changes the scheme, host or
+  port. A redirect from `http` to `https` on the same host and the default ports keeps them. The
+  headers of a `KtorMediaIoResolver` still go to every address, so a header that a redirect target
+  needs belongs there.
 
 ## [0.3.0] - 2026-10-09
 

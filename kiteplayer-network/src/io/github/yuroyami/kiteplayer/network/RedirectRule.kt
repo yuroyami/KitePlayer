@@ -2,10 +2,13 @@ package io.github.yuroyami.kiteplayer.network
 
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpResponseRedirectEvent
+import io.ktor.client.plugins.HttpSend
+import io.ktor.client.plugins.plugin
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.HttpHeaders
 import io.ktor.http.URLBuilder
+import io.ktor.http.URLProtocol
 import io.ktor.http.Url
 import io.ktor.http.takeFrom
 import io.ktor.util.AttributeKey
@@ -122,3 +125,52 @@ internal expect fun HttpRequestBuilder.keepRedirectsVisible()
 
 /** Scheme, host and port of [url], as a request to it connects. */
 internal fun originOf(url: Url): String = "${url.protocol.name}://${url.host.lowercase()}:${url.port}"
+
+/**
+ * True when [from] and [to] are one server, so a request may take its headers from one to the other.
+ * A move from http to https on the same host and the default ports counts: it is the most common
+ * redirect there is, and the headers still reach that host, now encrypted.
+ */
+internal fun sameServer(from: Url, to: Url): Boolean =
+    originOf(from) == originOf(to) ||
+        (from.protocol == URLProtocol.HTTP && from.port == URLProtocol.HTTP.defaultPort) &&
+        (to.protocol == URLProtocol.HTTPS && to.port == URLProtocol.HTTPS.defaultPort) &&
+        // Not equals(ignoreCase = true), which folds a dotless i, a letter of another domain, onto an i.
+        from.host.lowercase() == to.host.lowercase()
+
+/** The headers of a request that go only to the server of [address], the one it asked for. */
+private class ServerHeaders(val address: Url, val names: Set<String>)
+
+private val SERVER_HEADERS = AttributeKey<ServerHeaders>("io.github.yuroyami.kiteplayer.network.ServerHeaders")
+
+private val KEEPS_HEADERS_ON_SERVER = AttributeKey<Unit>("io.github.yuroyami.kiteplayer.network.KeepsHeadersOnServer")
+
+/** Keeps the headers [names] of this request, whose address is set, on the server of that address. */
+internal fun HttpRequestBuilder.stayOnServer(names: Set<String>) {
+    if (names.isNotEmpty()) attributes.put(SERVER_HEADERS, ServerHeaders(url.build(), names))
+}
+
+/**
+ * Makes [client] take the headers of [stayOnServer] off a request that a redirect moves to another
+ * server.
+ *
+ * Ktor copies every header to the next request of a redirect and drops only `Authorization`, so a
+ * header that holds a credential would reach any host that the first server redirects to. This step
+ * runs inside Ktor's redirect handling, so it sees each request of a chain, and a header it takes
+ * off stays off, even if the chain comes back: the other server chose that address.
+ *
+ * Ktor cannot take a step off a client, so a client keeps this one, and it acts only on a request
+ * that [stayOnServer] tagged. The caller's own requests on a shared client are left alone. A
+ * browser follows a redirect by itself and shows nothing of it, so there its own rules apply.
+ */
+internal fun keepHeadersOnServer(client: HttpClient) {
+    val send = client.plugin(HttpSend)
+    client.attributes.computeIfAbsent(KEEPS_HEADERS_ON_SERVER) {
+        send.intercept { request ->
+            request.attributes.getOrNull(SERVER_HEADERS)?.let { own ->
+                if (!sameServer(own.address, request.url.build())) own.names.forEach { request.headers.remove(it) }
+            }
+            execute(request)
+        }
+    }
+}

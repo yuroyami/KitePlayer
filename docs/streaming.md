@@ -8,6 +8,13 @@ reads HTTP, HLS, DASH and radio streams, and how it recovers when the network dr
 
 - Android and the JVM use OkHttp with the platform trust store, and Apple uses NSURLSession.
 - `MediaItem.headers` reach whichever transport the player selects.
+- `MediaItem.headers` stay on the item's own server when a request is redirected. A redirect on
+  that server keeps them. A redirect from `http` to `https` on the same host and the default ports
+  keeps them too. A redirect to any other scheme, host or port drops them, and they do not come
+  back if the redirects return to the item's server. To send a header to every server, set it in
+  the `headers` of a `KtorMediaIoResolver`. In a browser, the browser follows redirects and applies
+  its own rules. FFmpeg's own `http` protocol, which reads plain `http` when no resolver answers,
+  keeps the headers on a redirect.
 - Your app declares the `INTERNET` permission. Your app's own policy decides about cleartext
   HTTP. Also declare `ACCESS_NETWORK_STATE`, which Android grants at install, and the provider of
   `kiteplayer-network` that keeps the application context. The

@@ -195,6 +195,12 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- `InterruptionPolicy.duckOnTransient = false` and `duckVolume` work on Android 8 and later
+  (#647). The focus request told Android the player would not pause when ducked, so the system
+  ducked music and film itself, to a level of its own, and never told the player. The request now
+  asks to hear the duckable loss, and the policy decides between its own duck and a pause. The
+  default policy still ducks, now to its `duckVolume` of a fifth. Apple platforms duck in the
+  system and ignore both options, which their KDoc now says.
 - Dither on Android's GPU video path no longer draws a dot grid over smooth gradients (#605). Its
   Bayer formula left out the XOR of the two positions and put the coarse bits on top, so 56 of the
   64 thresholds differed from the Metal matrix and a value just above a level raised one block of

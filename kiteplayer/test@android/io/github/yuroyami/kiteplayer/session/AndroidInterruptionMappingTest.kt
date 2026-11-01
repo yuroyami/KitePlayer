@@ -52,6 +52,27 @@ class AndroidInterruptionMappingTest {
         assertEquals(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK, focusGainFor(AudioFocusKind.TransientMayDuck))
     }
 
+    // Without it, Android 8 and later duck music and film inside the framework and never tell the
+    // player, so neither duckOnTransient = false nor duckVolume did anything (#647).
+    @Test
+    fun theFocusRequestHandsADuckToThePlayer() {
+        val policies = listOf(InterruptionPolicy(), InterruptionPolicy(duckOnTransient = false), InterruptionPolicy(duckVolume = 0.5f))
+        for (policy in policies) {
+            for (content in AudioContent.entries) {
+                assertTrue(focusRequestShape(policy, content).willPauseWhenDucked, "$policy playing $content")
+            }
+        }
+    }
+
+    @Test
+    fun theFocusRequestCarriesTheGainTheWaitAndTheContent() {
+        val shape = focusRequestShape(InterruptionPolicy(focus = AudioFocusKind.TransientMayDuck), AudioContent.Speech)
+        assertEquals(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK, shape.gain)
+        assertFalse(shape.acceptsDelayedGain)
+        assertEquals(AudioAttributes.CONTENT_TYPE_SPEECH, shape.contentType)
+        assertTrue(focusRequestShape(InterruptionPolicy(), AudioContent.Music).acceptsDelayedGain)
+    }
+
     // A delayed answer is not a refusal (#451).
     @Test
     fun `a request is granted, delayed or refused`() {

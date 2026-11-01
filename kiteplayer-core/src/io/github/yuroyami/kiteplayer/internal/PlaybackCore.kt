@@ -3825,8 +3825,15 @@ internal class PlaybackCore(
         val requested = media.startPosition?.takeIf { it > Duration.ZERO }
         val clipStartUs = media.clip.startUs
         val ceilingUs = itemSeekCeilingUs(media.clip.endUs, source)
+        // The media's own start point (#627), only when the item names none, and quietly dropped
+        // where it cannot be honoured, since nobody asked for it by name.
+        val suggested = source.suggestedStart?.takeIf { media.startPosition == null && it > Duration.ZERO && source.seekable }
+            ?.inWholeMicroseconds
+            ?.takeIf { us ->
+                if (timeline != null) us < timeline.lengthUs else ceilingUs == null || clipStartUs + us < ceilingUs
+            }
         val honoured = when {
-            requested == null -> null
+            requested == null -> suggested
             !source.seekable -> {
                 report(PlaybackWarning.StartPositionIgnored(requested, "this source is not seekable"))
                 null

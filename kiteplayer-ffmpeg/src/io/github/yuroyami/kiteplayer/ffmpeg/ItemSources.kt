@@ -41,6 +41,8 @@ internal data class OpenedItem(
     val times: HlsTimeOfDay? = null,
     /** Moves an HLS stream to another variant in place (#464). */
     val switch: HlsVariantSwitch? = null,
+    /** Where a finished HLS playlist asks to start, in microseconds (#627), or null. */
+    val suggestedStartUs: Long? = null,
 ) {
     /**
      * This item under the title a list of streams gave it. A copy, so that no field can fall out:
@@ -165,6 +167,7 @@ internal suspend fun openItem(item: MediaItem, listDepth: Int = 0): OpenedItem {
             OpenedItem(
                 source, bridge, hls?.ledger, hls?.variants.orEmpty(), hls?.selectedVariant,
                 growing = growing, thumbnails = hls?.thumbnails, times = hls?.times, switch = hls?.switch,
+                suggestedStartUs = hls?.suggestedStartUs,
             )
         }
         // No protocol reads the descriptor now, so no protocol is left to consume its key.

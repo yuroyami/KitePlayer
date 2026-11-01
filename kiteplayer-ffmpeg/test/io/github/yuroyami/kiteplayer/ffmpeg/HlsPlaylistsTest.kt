@@ -247,4 +247,25 @@ class HlsPlaylistsTest {
         assertEquals("FairPlay", refused("#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"skd://k\"")?.system)
         assertEquals("SAMPLE-AES-CTR", refused("#EXT-X-KEY:METHOD=SAMPLE-AES-CTR,URI=\"https://k\"")?.system)
     }
+
+    /**
+     * A finished media playlist's EXT-X-START names where it starts (#627): a positive offset from
+     * its start, a negative one back from its end. A live playlist, which FFmpeg starts itself, and
+     * a playlist with no tag name nothing.
+     */
+    @Test
+    fun aFinishedPlaylistNamesItsStartAndALiveOneLeavesItToFfmpeg() {
+        fun playlist(start: String?, ended: Boolean) = buildString {
+            append("#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:4\n")
+            if (start != null) append("#EXT-X-START:$start\n")
+            repeat(5) { append("#EXTINF:4.0,\nseg$it.ts\n") }
+            if (ended) append("#EXT-X-ENDLIST\n")
+        }
+        assertEquals(6_500_000L, hlsSuggestedStartUs(playlist("TIME-OFFSET=6.5", ended = true)))
+        assertEquals(12_000_000L, hlsSuggestedStartUs(playlist("TIME-OFFSET=-8,PRECISE=YES", ended = true)))
+        assertEquals(0L, hlsSuggestedStartUs(playlist("TIME-OFFSET=-60", ended = true)))
+        assertEquals(null, hlsSuggestedStartUs(playlist("TIME-OFFSET=6.5", ended = false)))
+        assertEquals(null, hlsSuggestedStartUs(playlist(null, ended = true)))
+        assertEquals(null, hlsSuggestedStartUs(playlist("PRECISE=YES", ended = true)))
+    }
 }

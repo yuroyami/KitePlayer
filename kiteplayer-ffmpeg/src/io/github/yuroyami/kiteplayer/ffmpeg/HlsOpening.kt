@@ -46,6 +46,8 @@ internal class HlsOpen(
     val times: HlsTimeOfDay = HlsTimeOfDay(),
     /** Moves a master playlist's stream to another variant in place, or null when it cannot (#464). */
     val switch: HlsVariantSwitch? = null,
+    /** Where a finished media playlist asks to start, in microseconds (#627), or null. */
+    val suggestedStartUs: Long? = null,
 ) {
     /**
      * The pre-open options this open adds. A segment address often has no file extension, so
@@ -58,6 +60,27 @@ internal class HlsOpen(
         if (opener != null && "extension_picky" !in item.openOptions) put("extension_picky", "0")
         if ("prefer_x_start" !in item.openOptions) put("prefer_x_start", "1")
     }
+}
+
+/**
+ * Where the finished media playlist [text] asks playback to start, in microseconds, from its
+ * `EXT-X-START` (#627), or null. A negative `TIME-OFFSET` counts back from the end, and one past
+ * either end stops there. A live playlist gives null: FFmpeg applies the tag to it with
+ * `prefer_x_start`, and only to it, so a finished one started at zero.
+ */
+internal fun hlsSuggestedStartUs(text: String): Long? {
+    if (text.lineSequence().none { it.trim() == "#EXT-X-ENDLIST" }) return null
+    val tag = text.lineSequence().map { it.trim() }.firstOrNull { it.startsWith("#EXT-X-START:") } ?: return null
+    val offset = tag.removePrefix("#EXT-X-START:").split(',')
+        .map { it.trim() }
+        .firstOrNull { it.startsWith("TIME-OFFSET=") }
+        ?.removePrefix("TIME-OFFSET=")?.toDoubleOrNull()
+        ?.takeIf { it.isFinite() } ?: return null
+    val totalSeconds = text.lineSequence().map { it.trim() }
+        .filter { it.startsWith("#EXTINF:") }
+        .sumOf { it.removePrefix("#EXTINF:").substringBefore(',').toDoubleOrNull() ?: 0.0 }
+    val seconds = (if (offset < 0) totalSeconds + offset else offset).coerceIn(0.0, totalSeconds)
+    return (seconds * 1_000_000).toLong()
 }
 
 /** The most bytes a playlist may have. A day of two second segments is about 3 MB. */
@@ -130,6 +153,8 @@ internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job, read: 
     val thumbnails = HlsThumbnails.choose(hlsImageStreams(text))?.let { HlsThumbnails(io, base, it) }
     return HlsOpen(
         PlaylistMediaIo(playlist.encodeToByteArray(), owner = io), base, opener, ledger, variants, master?.chosen, thumbnails, times, switch,
+        // A master names its media playlists' starts in them, which this open does not read (#627).
+        suggestedStartUs = if (master == null) hlsSuggestedStartUs(text) else null,
     )
 }
 

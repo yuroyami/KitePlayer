@@ -195,6 +195,11 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- A finished HLS media playlist that names a start point with `EXT-X-START` starts there (#627).
+  FFmpeg applies the tag only to a live playlist, so such a stream started at zero. A negative
+  offset counts back from the end, and an item's own `startPosition` still wins.
+  `PlayerMediaSource.suggestedStart` is new and answers null by default. A master playlist's media
+  playlists are not read for the tag yet.
 - The default controls of the native views stay up as long as the accessibility settings ask
   (#653). On Android they hid three seconds after the last touch whatever time to take action the
   user set, and now wait the time the accessibility manager recommends for controls; on iOS they

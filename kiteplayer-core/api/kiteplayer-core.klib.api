@@ -874,6 +874,8 @@ abstract interface io.github.yuroyami.kiteplayer.spi/PlayerMediaSource : kotlin/
         open fun <get-separateAudioRenditions>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.separateAudioRenditions.<get-separateAudioRenditions>|<get-separateAudioRenditions>(){}[0]
     open val streamDivergences // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.streamDivergences|{}streamDivergences[0]
         open fun <get-streamDivergences>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/StreamDivergence> // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.streamDivergences.<get-streamDivergences>|<get-streamDivergences>(){}[0]
+    open val suggestedStart // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.suggestedStart|{}suggestedStart[0]
+        open fun <get-suggestedStart>(): kotlin.time/Duration? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.suggestedStart.<get-suggestedStart>|<get-suggestedStart>(){}[0]
     open val thumbnails // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.thumbnails|{}thumbnails[0]
         open fun <get-thumbnails>(): io.github.yuroyami.kiteplayer.spi/PlayerThumbnails? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.thumbnails.<get-thumbnails>|<get-thumbnails>(){}[0]
     open val timeOfDaySpan // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.timeOfDaySpan|{}timeOfDaySpan[0]

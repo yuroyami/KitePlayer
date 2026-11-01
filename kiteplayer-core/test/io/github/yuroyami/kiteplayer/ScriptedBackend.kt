@@ -239,6 +239,8 @@ internal class MediaScript(
     val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> = emptyList(),
     /** The variants whose codecs this build does not decode (#625). */
     val undecodableVariants: Set<Int> = emptySet(),
+    /** Where the media asks to start, as a finished HLS playlist's EXT-X-START does (#627), or null. */
+    val suggestedStartUs: Long? = null,
     /** The seek bar pictures the scripted stream carries, or null (#433). */
     val thumbnails: io.github.yuroyami.kiteplayer.spi.PlayerThumbnails? = null,
     /**
@@ -1064,6 +1066,9 @@ internal class ScriptedSource(
     override val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> get() = script.variants
 
     override fun decodesVariant(index: Int): Boolean = index !in script.undecodableVariants
+
+    override val suggestedStart: kotlin.time.Duration?
+        get() = script.suggestedStartUs?.let { with(kotlin.time.Duration) { it.microseconds } }
 
     override val thumbnails: io.github.yuroyami.kiteplayer.spi.PlayerThumbnails? get() = script.thumbnails
 

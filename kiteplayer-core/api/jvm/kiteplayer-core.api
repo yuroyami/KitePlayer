@@ -4142,6 +4142,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/PlayerMediaSou
 	public fun getSeparateAudioRenditions ()Z
 	public fun getStreamDivergences ()Ljava/util/List;
 	public abstract fun getStreams ()Ljava/util/List;
+	public fun getSuggestedStart-FghU774 ()Lkotlin/time/Duration;
 	public fun getThumbnails ()Lio/github/yuroyami/kiteplayer/spi/PlayerThumbnails;
 	public fun getTimeOfDaySpan ()Lkotlin/ranges/LongRange;
 	public abstract fun getTimestampsMayJump ()Z
@@ -4171,6 +4172,7 @@ public final class io/github/yuroyami/kiteplayer/spi/PlayerMediaSource$DefaultIm
 	public static fun getSelectedVariant (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Ljava/lang/Integer;
 	public static fun getSeparateAudioRenditions (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Z
 	public static fun getStreamDivergences (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Ljava/util/List;
+	public static fun getSuggestedStart-FghU774 (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Lkotlin/time/Duration;
 	public static fun getThumbnails (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Lio/github/yuroyami/kiteplayer/spi/PlayerThumbnails;
 	public static fun getTimeOfDaySpan (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Lkotlin/ranges/LongRange;
 	public static fun getVariants (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Ljava/util/List;

@@ -23,6 +23,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.fail
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -106,7 +107,7 @@ class CoreAudioSinkDeviceWatchTest {
     @Test
     fun aBoundSinkWatchesItsDeviceAndNotTheDefaultOutput() = runBlocking {
         val real = MacOutputDevices.defaultOutputDevice()
-        if (real == 0u) return@runBlocking println("skipped: this Mac has no default output")
+        if (real == 0u) fail("this Mac reports no default output, so the device under test is missing")
         val devices = FakeOutputDevices(boundDevice = real)
         val sink = sinkWith(devices, device = "test-uid")
         sink.openWithRing(format) { it.sampleRate / 4 }
@@ -123,7 +124,7 @@ class CoreAudioSinkDeviceWatchTest {
     @Test
     fun theLossOfTheBoundDeviceReachesTheSinkEventsAsAFailure() = runBlocking {
         val real = MacOutputDevices.defaultOutputDevice()
-        if (real == 0u) return@runBlocking println("skipped: this Mac has no default output")
+        if (real == 0u) fail("this Mac reports no default output, so the device under test is missing")
         val devices = FakeOutputDevices(boundDevice = real)
         val sink = sinkWith(devices, device = "test-uid")
         sink.openWithRing(format) { it.sampleRate / 4 }
@@ -142,7 +143,7 @@ class CoreAudioSinkDeviceWatchTest {
     @Test
     fun aLossBeforeAnyoneCollectsStillReachesALateCollector() = runBlocking {
         val real = MacOutputDevices.defaultOutputDevice()
-        if (real == 0u) return@runBlocking println("skipped: this Mac has no default output")
+        if (real == 0u) fail("this Mac reports no default output, so the device under test is missing")
         val devices = FakeOutputDevices(boundDevice = real)
         val sink = sinkWith(devices, device = "test-uid")
         sink.openWithRing(format) { it.sampleRate / 4 }

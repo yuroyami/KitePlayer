@@ -34,6 +34,9 @@ exclude_set() {
         # One assertion in CoreAudioSinkTest needs real audio hardware. A GitHub macOS runner opens
         # CoreAudio and passes every other test of kiteplayer-output. Its virtual output device lags
         # where real hardware leads: the anchor measured -451.7 ms against a window of -5 to +500 ms.
+        # The device tests of CoreAudioSinkOutputLatencyTest, CoreAudioSinkDeviceWatchTest and
+        # AppleAudioOutputDeviceTest fail on a Mac with no default output instead of passing without
+        # running (#641), so a host like that names them with --exclude.
         no-audio-hardware)
             excludes+=("*CoreAudioSinkTest.the anchor the device publishes is in the near future on the engine clock")
             ;;

@@ -195,6 +195,13 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- A Metal renderer gives its layer back in standard range when it closes (#689). A view keeps one
+  Metal layer across a detach or a change of player, and a renderer that closed while showing HDR
+  left it half-float with its extended-range flag, so the next renderer inherited HDR state it
+  never asked for, kept the half-float format as its standard one, and tone mapped to the
+  display's headroom under `HdrPolicy.ToneMap`. Close now restores the format, colour space and
+  flag the layer had, the saved colour space holds its own reference, and the composer gets a
+  headroom only while the renderer asked for extended range.
 - The sample buffer renderer, which picture in picture uses on iOS and macOS, recovers a failed
   layer (#597). A layer that failed after an interruption or a media services reset showed
   nothing more, while the sound played on and every frame counted as shown. Each frame now reads

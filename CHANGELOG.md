@@ -195,6 +195,11 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- The Metal renderer reads left-sited chroma half a luma pixel to the right, not the left (#604).
+  The siting correction of #118 moved the read the wrong way, so the colour of almost every H.264,
+  HEVC and AV1 frame sat a whole luma column right of its edge instead of half a column, and the
+  top and bottom sitings were inverted the same way. The offset now follows libplacebo and mpv, and
+  its test moved to the common tests, so every platform runs it.
 - `InterruptionPolicy.duckOnTransient = false` and `duckVolume` work on Android 8 and later
   (#647). The focus request told Android the player would not pause when ducked, so the system
   ducked music and film itself, to a level of its own, and never told the player. The request now

@@ -3,7 +3,6 @@
 package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.VideoScale
-import io.github.yuroyami.kiteplayer.spi.ChromaLocation
 import io.github.yuroyami.kiteplayer.spi.ColorMatrix
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.OverlayImage
@@ -983,50 +982,6 @@ internal fun MTLDeviceProtocol.makeTargetTexture(
  * The per-format plane recipe: which Metal formats hold each plane, how chroma dimensions derive
  * from the picture's, the 10-bit normalization, and the shader mode.
  */
-/**
- * Where the chroma sample sits relative to the luma one, in normalized texture coordinates.
- *
- * A subsampled chroma plane has half as many texels, so sampling it at the luma's own coordinate
- * lands on a texel centre that sits BETWEEN two luma columns. Left-sited 4:2:0, which is MPEG-2's
- * rule and what almost every file this player opens carries, puts the chroma sample on the even
- * luma column instead, so the coordinate moves half a luma texel left. Centre siting is already
- * where the texel centre is and moves nothing.
- *
- * Vertically only the top and bottom sitings move anything, and only when the format subsamples
- * vertically at all: 4:2:2 is horizontal-only and 4:4:4 is neither, so both come back zero on the
- * axes they do not subsample.
- *
- * Unspecified reads as left, which is the MPEG-2 convention and the one this player meets.
- */
-internal fun chromaSampleOffset(
-    location: ChromaLocation,
-    chromaShiftX: Int,
-    chromaShiftY: Int,
-    width: Int,
-    height: Int,
-): Pair<Float, Float> {
-    val x = if (chromaShiftX == 0 || width <= 0) {
-        0f
-    } else {
-        when (location) {
-            ChromaLocation.Unspecified, ChromaLocation.Left,
-            ChromaLocation.TopLeft, ChromaLocation.BottomLeft,
-            -> -0.5f / width.toFloat()
-            ChromaLocation.Center, ChromaLocation.Top, ChromaLocation.Bottom -> 0f
-        }
-    }
-    val y = if (chromaShiftY == 0 || height <= 0) {
-        0f
-    } else {
-        when (location) {
-            ChromaLocation.TopLeft, ChromaLocation.Top -> -0.5f / height.toFloat()
-            ChromaLocation.BottomLeft, ChromaLocation.Bottom -> 0.5f / height.toFloat()
-            ChromaLocation.Unspecified, ChromaLocation.Left, ChromaLocation.Center -> 0f
-        }
-    }
-    return x to y
-}
-
 /**
  * What a ten-bit sample, read from a sixteen-bit texture as 0 to 1, is multiplied by before the
  * shader multiplies by 255, for a sample in the low ten bits. Studio levels scale by exactly four

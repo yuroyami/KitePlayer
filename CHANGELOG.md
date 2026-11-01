@@ -214,6 +214,10 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- A seek whose reads a server refused for an expired address opens the item again and lands where
+  it was going, on every target (#546). It failed the player instead, as `SourceUnavailable` when
+  the container seek threw and as `Internal` when a later step did, because only a read during
+  playback looked for a refusal.
 - A picture the Apple sample buffer renderer composes, for subtitles, a turn, a crop or the flash
   guard, says what it holds (#489). The composed BGRA buffer carried no colour tags, so the layer
   guessed, and HDR rolled down to standard range was shown without its BT.709 and gamma 2.2 tags.

@@ -5982,6 +5982,21 @@ internal class PlaybackCore(
     }
 
     /**
+     * A seek whose reads a server refused for an expired address, as a seek into the segments of
+     * a stream whose token ran out is (#546), is cured by a fresh address as a read during playback
+     * is (#453): the item opens again through [renewIfRefused], and [request] runs once more in it,
+     * so the seek lands where it was going and its callers are answered then. The rebuild runs
+     * before the queued seek in a pass, and leaves a queued seek to place the new session. False
+     * when nothing was refused, and the seek fails as before.
+     */
+    private fun renewSeekIfRefused(session: OpenSession, request: SeekRequest): Boolean {
+        if (!renewIfRefused(session)) return false
+        seekPhase = SeekPhase.Idle
+        if (pendingSeek == null) pendingSeek = request
+        return true
+    }
+
+    /**
      * The wait of [io.github.yuroyami.kiteplayer.NetworkConfig.recovery] (#461): the error that
      * started it, how to open the item again, and when to try next. See
      * `docs/cancellation-and-bounded-waits.md`.
@@ -11917,6 +11932,7 @@ internal class PlaybackCore(
                     return
                 }
             }
+            if (failed != null && renewSeekIfRefused(failed, request)) return
             // A source that throws mid-seek leaves the pipeline flushed and the cursor nowhere useful, so
             // the session is torn down rather than left in a position nothing knows.
             val error = PlaybackError.Internal("the seek failed", failure)
@@ -12131,6 +12147,7 @@ internal class PlaybackCore(
                 seekPhase = SeekPhase.Idle
                 session.discardBeforeUs.value = Long.MIN_VALUE
                 session.landsBeforeTarget.value = false
+                if (renewSeekIfRefused(session, request)) return
                 val error = PlaybackError.SourceUnavailable(media?.uri ?: "", failure, reason)
                 // Fail first, answer last: a caller resumed by the rejection must observe the
                 // final Failed state, not a session halfway through its teardown.

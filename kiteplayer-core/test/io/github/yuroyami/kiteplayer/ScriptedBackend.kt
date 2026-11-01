@@ -622,6 +622,12 @@ internal class FaultPlan(
     /** True wedges the next container seek like an uncancellable native scan. */
     var seekWedges: Boolean = false
 
+    /**
+     * Runs at the next seek of the source and makes that seek throw, once, as a seek whose reads a
+     * server refused does (#546). Null seeks as the script says.
+     */
+    var seekFailsOnce: (() -> Unit)? = null
+
     /** Reads beyond this count wedge like an uncancellable native read. Null wedges nothing. */
     var readWedgesAfter: Int? = null
 
@@ -1577,6 +1583,11 @@ internal class ScriptedSource(
         check(choice != KeyframeChoice.InSeekDirection) { "the engine resolves the seek's direction itself" }
         seeks++
         if (faults.seekWedges && !wedgeReleased.isCompleted) wedge("seek")
+        faults.seekFailsOnce?.let { before ->
+            faults.seekFailsOnce = null
+            before()
+            throw PlaybackException(PlaybackError.SourceUnavailable("https://cdn.test/seg-7.ts", null, "HTTP 403"))
+        }
         seekTargets += target.micros
         seekChoices += choice
         trace.record("source.seek")

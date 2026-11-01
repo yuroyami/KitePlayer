@@ -306,6 +306,15 @@ jobs:
       # kiteplayer-output runs through scripts/run-native-tests.sh with the simulator-audio set:
       # the two CoreAudio classes that need a device in every test, and nine tests of
       # CoreAudioSinkTest. Its other five tests, the clock and refusal arms, run here.
+      # Before the simulator tests: kiteplayer-compose-video's simulator set reads clips (#637).
+      - name: Install the ffmpeg CLI the clips are recorded against
+        run: |
+          brew update --quiet
+          brew install ffmpeg
+          echo "$(brew --prefix ffmpeg)/bin" >> "$GITHUB_PATH"
+      - name: Generate the test clips
+        run: ./scripts/testmedia.sh
+
       - name: iosSimulatorArm64 tests
         run: |
           . scripts/test-env.sh
@@ -319,13 +328,6 @@ jobs:
           ./kotlin build -p iosArm64 -m kiteplayer-core -m kiteplayer-output -m kiteplayer-ffmpeg \
             -m kiteplayer-libass -m kiteplayer-view -m kiteplayer-audioviz
 
-      - name: Install the ffmpeg CLI the clips are recorded against
-        run: |
-          brew update --quiet
-          brew install ffmpeg
-          echo "$(brew --prefix ffmpeg)/bin" >> "$GITHUB_PATH"
-      - name: Generate the test clips
-        run: ./scripts/testmedia.sh
       - name: The iOS sample app, built, installed and launched in its smoke mode
         run: ./scripts/ios-sample-smoke.sh
 

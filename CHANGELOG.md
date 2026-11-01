@@ -12,6 +12,12 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Added
 
+- `systemSubtitleStyle`, `systemSubtitleScale` and `KitePlayer.followSystemCaptionStyle` read the
+  caption look the viewer set for every app, under Accessibility on Android and Apple (#679): the
+  text, background and window colours, the edge, the typeface on Android and the text size. The
+  follow handle applies them through `setSubtitleStyle` and `setSubtitleScale` and again at every
+  change, from `CaptioningManager` on Android and MediaAccessibility on iOS and macOS, until it is
+  closed. Nothing is followed unless the app asks, so `SubtitleConfig` is unchanged.
 - A signed build provenance attestation for every file a release run of `publish.yml` hands out
   (#684): each jar, klib, AAR, POM and module metadata file on Maven Central, the web zips and the
   bill of materials on the release page. It names the workflow file, the commit and the run, so

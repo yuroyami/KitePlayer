@@ -212,6 +212,15 @@ final class io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession : kotli
 // Targets: [apple]
 final fun (io.github.yuroyami.kiteplayer/KitePlayer).io.github.yuroyami.kiteplayer.session/attachMediaSession(io.github.yuroyami.kiteplayer.session/BackgroundPolicy? = ..., io.github.yuroyami.kiteplayer.session/InterruptionPolicy? = ..., io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture? = ..., kotlin.time/Duration = ...): io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession // io.github.yuroyami.kiteplayer.session/attachMediaSession|attachMediaSession@io.github.yuroyami.kiteplayer.KitePlayer(io.github.yuroyami.kiteplayer.session.BackgroundPolicy?;io.github.yuroyami.kiteplayer.session.InterruptionPolicy?;io.github.yuroyami.kiteplayer.view.KitePlayerPictureInPicture?;kotlin.time.Duration){}[0]
 
+// Targets: [apple]
+final fun (io.github.yuroyami.kiteplayer/KitePlayer).io.github.yuroyami.kiteplayer/followSystemCaptionStyle(): kotlin/AutoCloseable // io.github.yuroyami.kiteplayer/followSystemCaptionStyle|followSystemCaptionStyle@io.github.yuroyami.kiteplayer.KitePlayer(){}[0]
+
+// Targets: [apple]
+final fun io.github.yuroyami.kiteplayer/systemSubtitleScale(): kotlin/Float // io.github.yuroyami.kiteplayer/systemSubtitleScale|systemSubtitleScale(){}[0]
+
+// Targets: [apple]
+final fun io.github.yuroyami.kiteplayer/systemSubtitleStyle(): io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride? // io.github.yuroyami.kiteplayer/systemSubtitleStyle|systemSubtitleStyle(){}[0]
+
 // Targets: [ios]
 final fun (io.github.yuroyami.kiteplayer/KitePlayerPlatform).io.github.yuroyami.kiteplayer.session/attachBackgroundHandling(io.github.yuroyami.kiteplayer/KitePlayer, io.github.yuroyami.kiteplayer.session/BackgroundPolicy = ...): kotlin/AutoCloseable // io.github.yuroyami.kiteplayer.session/attachBackgroundHandling|attachBackgroundHandling@io.github.yuroyami.kiteplayer.KitePlayerPlatform(io.github.yuroyami.kiteplayer.KitePlayer;io.github.yuroyami.kiteplayer.session.BackgroundPolicy){}[0]
 

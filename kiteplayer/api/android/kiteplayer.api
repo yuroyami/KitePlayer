@@ -169,6 +169,12 @@ public final class io/github/yuroyami/kiteplayer/KitePlayers {
 	public static final fun isAvailable (Lio/github/yuroyami/kiteplayer/KitePlayer$Companion;)Z
 }
 
+public final class io/github/yuroyami/kiteplayer/SystemCaptionStyle_androidKt {
+	public static final fun followSystemCaptionStyle (Lio/github/yuroyami/kiteplayer/KitePlayer;Landroid/content/Context;)Ljava/lang/AutoCloseable;
+	public static final fun systemSubtitleScale (Landroid/content/Context;)F
+	public static final fun systemSubtitleStyle (Landroid/content/Context;)Lio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;
+}
+
 public final class io/github/yuroyami/kiteplayer/mobile/MobileBackendsKt {
 	public static final fun mobileBackends ()Lio/github/yuroyami/kiteplayer/Backends;
 }

@@ -68,6 +68,14 @@ on each renderer, and [TTML regions](subtitle-regions.md) describes how TTML tex
   a limited set of system font files.
 - `setSubtitleSafeArea` keeps the built-in text out of a display cutout, rounded corners or a
   control bar.
+- The caption look the viewer set for every app, under Accessibility on Android and Apple, reaches
+  the player through `player.followSystemCaptionStyle(context)` on Android and
+  `player.followSystemCaptionStyle()` on Apple: the text and background colours, the edge, the
+  typeface on Android, and the text size as the subtitle scale, applied now and at every change
+  until the handle closes. `systemSubtitleStyle` and `systemSubtitleScale` read them once for an
+  app that applies them itself. On Android the style is null while the viewer has captions off.
+  Nothing follows the settings unless the app asks, and a typeset ASS track keeps its own look
+  (#679).
 
 ## libass
 

@@ -130,6 +130,8 @@ private class KiteFFmpegBackendSession(private val kiteCodec: KiteFFmpegSource) 
             KiteFFmpegSubtitleDecoderFactory(),
             KiteFFmpegImageSubtitleDecoderFactory(kiteCodec),
             KiteFFmpegCaptionDecoderFactory(kiteCodec),
+            // The CEA-708 services beside CC1 (#678), which FFmpeg's caption decoder skips.
+            io.github.yuroyami.kiteplayer.subtitle.Cea708DecoderFactory(),
         )
 
     override fun close(): Unit = kiteCodec.close()

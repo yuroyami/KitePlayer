@@ -156,6 +156,11 @@ internal class MediaScript(
      * codes, and none in the pictures, as Android's MediaCodec gives none (#611).
      */
     val videoCaptionsInPackets: Boolean = false,
+    /**
+     * The raw `cc_data` each decoded picture carries, by its time, which wins over [videoCaptions]
+     * (#678). The scripted service decoder reads each CEA-708 service's bytes as text.
+     */
+    val videoCaptionBytes: ((ptsUs: Long) -> ByteArray?)? = null,
     /** The video stream's codec name, as FFmpeg names one. */
     val videoCodec: String = "scripted-video",
     val hasVideo: Boolean = true,
@@ -793,6 +798,38 @@ internal object ScriptedCaptionDecoderFactory : SubtitleDecoderFactory {
     }
 }
 
+/**
+ * The decoder of a CEA-708 service the engine found inside a scripted picture (#678): each packet's
+ * bytes, the service's own, read as text that holds until the next.
+ */
+internal object ScriptedServiceDecoderFactory : SubtitleDecoderFactory {
+    override val name: String = "scripted-708"
+
+    override suspend fun create(stream: PlayerStreamInfo): SubtitleDecoder? {
+        if (stream.codec != io.github.yuroyami.kiteplayer.spi.CEA708_CAPTIONS_CODEC) return null
+        return object : SubtitleDecoder {
+            private val pending = ArrayDeque<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>()
+
+            override suspend fun send(packet: PlayerPacket?): Boolean {
+                val pts = packet?.pts?.micros ?: return true
+                val spans = listOf(io.github.yuroyami.kiteplayer.subtitle.StyledSpan(packet.copyBytes().decodeToString()))
+                pending.addLast(io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text(pts, io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.OPEN_END, spans))
+                return true
+            }
+
+            override suspend fun receive(): List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue> {
+                val out = pending.toList()
+                pending.clear()
+                return out
+            }
+
+            override suspend fun flush(newGeneration: Generation) = pending.clear()
+
+            override fun close() = Unit
+        }
+    }
+}
+
 /** The scripted backend. One session per [open]. */
 internal class ScriptedBackend(
     private val script: MediaScript = MediaScript(),
@@ -999,6 +1036,7 @@ internal class ScriptedSession(
         listOfNotNull(
             ScriptedSubtitleDecoderFactory(script, faults).takeIf { script.hasSubtitles },
             ScriptedCaptionDecoderFactory.takeIf { script.videoCaptions != null },
+            ScriptedServiceDecoderFactory.takeIf { script.videoCaptionBytes != null },
         )
 
     var closeCount: Int = 0
@@ -1657,7 +1695,11 @@ internal class ScriptedVideoDecoder(
                 duration = packet.duration ?: Pts(script.videoFrameDurationUs),
                 size = script.videoFrameSize?.invoke(pts.micros) ?: VideoSize(1920, 1080),
                 ledger = ledger,
-                closedCaptions = if (script.videoCaptionsInPackets) null else script.videoCaptions?.invoke(pts.micros)?.encodeToByteArray(),
+                closedCaptions = when {
+                    script.videoCaptionsInPackets -> null
+                    script.videoCaptionBytes != null -> script.videoCaptionBytes.invoke(pts.micros)
+                    else -> script.videoCaptions?.invoke(pts.micros)?.encodeToByteArray()
+                },
             ),
         )
         return true

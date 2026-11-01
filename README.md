@@ -340,7 +340,7 @@ KitePlayer reads these subtitle formats:
 - ASS and SSA, drawn by libass exactly as authored, including signs and karaoke
 - SubRip, WebVTT and TTML
 - image subtitles from Blu-ray, DVD and DVB, and DVB teletext
-- closed captions inside broadcast video
+- closed captions inside broadcast video, CEA-608 and each CEA-708 service
 - synced lyrics
 
 Each subtitle is a track of the item. A subtitle file that you add during playback becomes a track

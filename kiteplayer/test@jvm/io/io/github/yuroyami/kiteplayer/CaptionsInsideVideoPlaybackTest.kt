@@ -15,7 +15,9 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * The whole player on a video whose pictures carry closed captions (#236): the track CC1 appears
  * once the first captioned pictures are decoded, and choosing it shows the caption. The stream is
- * `cc-base.h264` with an A/53 caption message written before every picture, a pop-on HELLO.
+ * `cc-base.h264` with an A/53 caption message written before every picture, a pop-on HELLO, and in
+ * the CEA-708 test the first picture's message also carries a DTVCC packet with HELLO in service 1
+ * and HOLA in service 2 (#678).
  */
 class CaptionsInsideVideoPlaybackTest {
 
@@ -52,7 +54,32 @@ class CaptionsInsideVideoPlaybackTest {
         )
     }
 
-    private fun writeCaptioned(bytes: ByteArray): File {
+    /**
+     * The first picture's message with its CEA-608 pair and one DTVCC packet: service 1 defines a
+     * visible window at the bottom centre and writes HELLO, and service 2 does the same with HOLA.
+     */
+    private fun cea708Sei(index: Int): ByteArray {
+        if (index != 0) return captionSei(index)
+        fun window(text: String) = byteArrayOf(0x98.toByte(), 0x20, 0xDA.toByte(), 0x32, 0x71, 0x1F, 0x09) + text.encodeToByteArray()
+        val one = window("HELLO")
+        val two = window("HOLA")
+        val body = byteArrayOf(((1 shl 5) or one.size).toByte()) + one + byteArrayOf(((2 shl 5) or two.size).toByte()) + two
+        val packet = (byteArrayOf(0) + body).let { if (it.size % 2 == 0) it else it + 0 }
+        packet[0] = (packet.size / 2).toByte()
+        val triplets = ArrayList<Byte>()
+        triplets += listOf(0xFC.toByte(), odd(0x14).toByte(), odd(0x20).toByte())
+        for (pair in 0 until packet.size / 2) {
+            triplets += (if (pair == 0) 0xFF else 0xFE).toByte()
+            triplets += packet[pair * 2]
+            triplets += packet[pair * 2 + 1]
+        }
+        val count = triplets.size / 3
+        val payload = byteArrayOf(0xB5.toByte(), 0x00, 0x31, 0x47, 0x41, 0x39, 0x34, 0x03, (0xC0 or count).toByte(), 0xFF.toByte()) +
+            triplets.toByteArray() + byteArrayOf(0xFF.toByte())
+        return byteArrayOf(0, 0, 0, 1, 0x06, 0x04, payload.size.toByte()) + payload + byteArrayOf(0x80.toByte())
+    }
+
+    private fun writeCaptioned(bytes: ByteArray, sei: (Int) -> ByteArray = ::captionSei): File {
         val starts = (0 until bytes.size - 3).filter { bytes[it] == 0.toByte() && bytes[it + 1] == 0.toByte() && bytes[it + 2] == 1.toByte() }
         val out = ByteArrayOutputStream()
         var picture = 0
@@ -60,7 +87,7 @@ class CaptionsInsideVideoPlaybackTest {
             val from = if (start > 0 && bytes[start - 1] == 0.toByte()) start - 1 else start
             val end = starts.getOrNull(n + 1)?.let { next -> if (bytes[next - 1] == 0.toByte()) next - 1 else next } ?: bytes.size
             val type = bytes[start + 3].toInt() and 0x1F
-            if (type == 1 || type == 5) out.write(captionSei(picture++))
+            if (type == 1 || type == 5) out.write(sei(picture++))
             out.write(bytes, from, end - from)
         }
         captioned.writeBytes(out.toByteArray())
@@ -92,6 +119,40 @@ class CaptionsInsideVideoPlaybackTest {
                 @Suppress("UNREACHABLE_CODE") error("unreachable")
             }
             assertEquals("HELLO", shown.spans.joinToString("") { it.text }.trim())
+        } finally {
+            withTimeout(15.seconds) { player.closeAndAwait() }
+        }
+    }
+
+    @Test
+    fun eachCea708ServiceIsATrackThatShowsItsOwnWindow() = runBlocking {
+        val file = writeCaptioned(requireTestMedia(base, "no $MEDIA to play; run scripts/testmedia.sh").readBytes(), ::cea708Sei)
+        val player = KitePlayer()
+        try {
+            player.open(MediaItem(file.path, formatHint = "h264"))
+            player.play()
+            val second = withTimeout(10.seconds) {
+                while (true) {
+                    player.state.value.tracks.all.firstOrNull { it.kind == TrackKind.Subtitle && it.title == "Service 2" }?.let { return@withTimeout it }
+                    delay(20)
+                }
+                @Suppress("UNREACHABLE_CODE") error("unreachable")
+            }
+            val titles = player.state.value.tracks.all.filter { it.kind == TrackKind.Subtitle }.map { it.title }
+            assertEquals(listOf("CC1", "Service 1", "Service 2"), titles.sortedBy { it })
+            assertIs<TrackChange.Applied>(player.selectTrack(TrackKind.Subtitle, second.id))
+            val shown = withTimeout(10.seconds) {
+                while (true) {
+                    player.subtitleCues.value.filterIsInstance<SubtitleCue.Text>()
+                        .firstOrNull { cue -> cue.plainText.isNotBlank() }
+                        ?.let { return@withTimeout it }
+                    delay(20)
+                }
+                @Suppress("UNREACHABLE_CODE") error("unreachable")
+            }
+            assertEquals("HOLA", shown.plainText, "service 2's window, not service 1's")
+            assertEquals(io.github.yuroyami.kiteplayer.subtitle.CueAlignment.BottomCenter, shown.layout.alignment)
+            assertEquals(50 / 99f, shown.layout.positionX)
         } finally {
             withTimeout(15.seconds) { player.closeAndAwait() }
         }

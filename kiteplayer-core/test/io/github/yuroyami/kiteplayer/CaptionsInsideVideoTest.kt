@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.internal.captionTrackIndex
+import io.github.yuroyami.kiteplayer.internal.dtvccTriplets
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -188,5 +189,61 @@ class CaptionsInsideVideoTest {
         harness.run(1500.milliseconds)
         assertEquals(null, harness.tracks.find(ccTrack), "a software lane read its packets")
         harness.close()
+    }
+
+    /**
+     * CEA-708 only, as some broadcasts carry a second language (#678): service 1 says HELLO and
+     * service 2 HOLA at one second, and service 1 AGAIN at five.
+     */
+    private fun services(durationUs: Long = 10_000_000) = MediaScript(
+        durationUs = durationUs,
+        videoCaptionBytes = { pts ->
+            when (pts) {
+                1_000_000L -> dtvccTriplets(0, 1 to "HELLO".encodeToByteArray(), 2 to "HOLA".encodeToByteArray())
+                5_000_000L -> dtvccTriplets(1, 1 to "AGAIN".encodeToByteArray())
+                else -> null
+            }
+        },
+    )
+
+    private val service1 = TrackId(captionTrackIndex(0, service = 1))
+    private val service2 = TrackId(captionTrackIndex(0, service = 2))
+
+    @Test
+    fun eachCea708ServiceBecomesATrackOfItsOwn() = runTest {
+        val harness = opened(services())
+        harness.core.play()
+        harness.run(1500.milliseconds)
+
+        val first = assertNotNull(harness.tracks.find(service1), "no track for service 1: ${harness.tracks.all}")
+        val second = assertNotNull(harness.tracks.find(service2), "no track for service 2: ${harness.tracks.all}")
+        assertEquals("Service 1", first.title)
+        assertEquals("Service 2", second.title)
+        assertEquals(TrackKind.Subtitle, second.kind)
+        assertEquals(null, harness.tracks.find(ccTrack), "pictures with CEA-708 bytes alone make no CC1")
+        assertEquals(null, harness.tracks.selectedSubtitle, "captions show when asked for")
+
+        assertIs<TrackChange.Applied>(harness.core.selectTrack(TrackKind.Subtitle, service2))
+        harness.run(500.milliseconds)
+        assertEquals(listOf("HOLA"), harness.shown, "at ${harness.core.position()}")
+        harness.run(3500.milliseconds)
+        assertEquals(listOf("HOLA"), harness.shown, "service 1's AGAIN is not service 2's")
+        assertIs<TrackChange.Applied>(harness.core.selectTrack(TrackKind.Subtitle, service1))
+        harness.run(500.milliseconds)
+        assertEquals(listOf("AGAIN"), harness.shown, "at ${harness.core.position()}")
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount)
+    }
+
+    @Test
+    fun theItemEndsWithACea708ServiceChosen() = runTest {
+        val harness = opened(services(durationUs = 6_000_000))
+        harness.core.play()
+        harness.run(1500.milliseconds)
+        assertIs<TrackChange.Applied>(harness.core.selectTrack(TrackKind.Subtitle, service2))
+        harness.run(6.seconds)
+        assertEquals(PlaybackStatus.Ended, harness.core.snapshots.value.status, harness.core.debugState)
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount)
     }
 }

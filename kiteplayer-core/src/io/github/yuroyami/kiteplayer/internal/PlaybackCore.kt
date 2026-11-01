@@ -14285,7 +14285,7 @@ internal class PlaybackCore(
                     ending = false
                     session.videoWaitingForKeyframe.value = true
                     // Its captions ended with it, and come back with it.
-                    session.videoStream?.let { session.subtitleQueues[captionTrackIndex(it.index)] }?.reopen(epoch)
+                    session.videoStream?.let { session.captionQueuesOf(it.index) }?.forEach { it.reopen(epoch) }
                 }
                 if (queue.isEndOfStream && queue.count == 0) {
                     if (!ending) {
@@ -14304,8 +14304,8 @@ internal class PlaybackCore(
                     }
                     // Every picture is out, so its captions are too (#236).
                     if (decoder.isDrained) {
-                        session.videoStream?.let { session.subtitleQueues[captionTrackIndex(it.index)] }
-                            ?.signalEndOfStream(epoch)
+                        session.videoStream?.let { session.captionQueuesOf(it.index) }
+                            ?.forEach { it.signalEndOfStream(epoch) }
                     }
                     // The last frames still leave the schedule, and each may owe its decoder a release.
                     worker.napUntil(WORKER_POLL) { video.awaitDeparture() }
@@ -14493,18 +14493,31 @@ internal class PlaybackCore(
     }
 
     /**
-     * Queues [bytes], the captions of the picture shown at [pts], as a packet of the caption track
-     * inside the picture (#236). The first picture that carries any makes the track's cache here, so
-     * no caption waits for the actor, and asks the actor to list the track. Video lane.
+     * Queues [bytes], the captions of the picture shown at [pts], as packets of the caption tracks
+     * inside the picture: CC1 (#236) and each CEA-708 service (#678). Video lane.
      */
     private fun takeCaptions(session: OpenSession, bytes: ByteArray, pts: Pts, epoch: Generation) {
         if (bytes.isEmpty()) return
         val video = session.videoStream ?: return
-        val index = captionTrackIndex(video.index)
+        // CC1 reads the whole of the bytes, as FFmpeg's caption decoder takes them, unless they hold
+        // CEA-708 alone, which would make it a track that never shows anything (#678).
+        if (!onlyCea708(bytes)) offerCaptions(session, captionStreamOf(video), bytes, pts, epoch)
+        // Each CEA-708 service is a track of its own, from the packets this picture completed.
+        for ((service, data) in session.captionServices.read(bytes, epoch)) {
+            offerCaptions(session, cea708StreamOf(video, service), data, pts, epoch)
+        }
+    }
+
+    /**
+     * Queues [bytes] as a packet of [stream], a caption track inside the picture. The first packet
+     * makes the track's cache here, so no caption waits for the actor, and asks the actor to list
+     * the track. Video lane.
+     */
+    private fun offerCaptions(session: OpenSession, stream: PlayerStreamInfo, bytes: ByteArray, pts: Pts, epoch: Generation) {
+        val index = stream.index
         val queue = session.subtitleQueues[index] ?: run {
             val made = PacketQueue(index, config.buffer.softTarget.inWholeMicroseconds).also { it.flushTo(epoch) }
             if (session.addCaptionQueue(made)) {
-                val stream = captionStreamOf(video)
                 commands.trySend(CoreCommand.StreamsChanged { adoptCaptions(session, stream) })
                 made
             } else {
@@ -15741,6 +15754,13 @@ internal class PlaybackCore(
          * inside the picture: the video lane fills those, and ends them when the picture ends (#236).
          */
         val demuxQueues: List<PacketQueue> get() = allPacketQueues.filterNot { isCaptionTrack(it.streamIndex) }
+
+        /** The queues of the caption tracks inside the picture of [videoIndex], CC1 and each CEA-708 service (#678). */
+        fun captionQueuesOf(videoIndex: Int): List<PacketQueue> =
+            queueTable.value.subtitle.values.filter { isCaptionTrack(it.streamIndex) && captionVideoOf(it.streamIndex) == videoIndex }
+
+        /** The CEA-708 packets of the picture, read across pictures (#678). Video lane only. */
+        val captionServices: DtvccServices = DtvccServices()
 
         /**
          * The tracks the engine made of the captions inside the picture (#236), each listed from the

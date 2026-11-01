@@ -102,8 +102,9 @@ public interface VideoFrame : AutoCloseable {
      * The engine makes them a subtitle track of its own, CC1, from the first picture that carries
      * any: a stream whose codec is [CLOSED_CAPTIONS_CODEC], each of whose packets holds one
      * picture's bytes at the picture's time, decoded by whichever [SubtitleDecoderFactory] takes
-     * that codec. A frame decoded where these bytes cannot be read, such as one a platform decoder
-     * writes straight to a surface, answers null.
+     * that codec. The CEA-708 services in the same bytes are tracks of their own, one per service,
+     * whose codec is [CEA708_CAPTIONS_CODEC] (#678). A frame decoded where these bytes cannot be
+     * read, such as one a platform decoder writes straight to a surface, answers null.
      */
     public val closedCaptions: ByteArray? get() = null
 
@@ -125,6 +126,15 @@ public val VideoFrame.visibleSize: VideoSize get() = size.cropped(crop)
  * (#236): see [VideoFrame.closedCaptions]. Named after FFmpeg's `A53_CC` frame data.
  */
 public const val CLOSED_CAPTIONS_CODEC: String = "a53_cc"
+
+/**
+ * The codec of a subtitle track the engine makes of one CEA-708 caption service inside a video
+ * stream (#678), Service 1, Service 2 and so on, beside [CLOSED_CAPTIONS_CODEC]'s CC1, from the same
+ * bytes: see [VideoFrame.closedCaptions]. The engine reads the DTVCC packets those bytes carry and
+ * splits them by service, so each packet of such a track holds one service's commands and text,
+ * the service blocks that a picture completed, at that picture's time.
+ */
+public const val CEA708_CAPTIONS_CODEC: String = "cea_708"
 
 /**
  * A frame whose pixels can be read, for the cases that genuinely need them: a screenshot, a

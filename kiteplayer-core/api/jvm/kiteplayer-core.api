@@ -4715,6 +4715,7 @@ public final class io/github/yuroyami/kiteplayer/spi/VideoFrame$DefaultImpls {
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/VideoFrameKt {
+	public static final field CEA708_CAPTIONS_CODEC Ljava/lang/String;
 	public static final field CLOSED_CAPTIONS_CODEC Ljava/lang/String;
 	public static final fun getToneMapPeakNits (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;)Ljava/lang/Float;
 	public static final fun getVisibleSize (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;)Lio/github/yuroyami/kiteplayer/VideoSize;

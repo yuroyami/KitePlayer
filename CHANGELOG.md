@@ -12,6 +12,13 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Added
 
+- The CEA-708 caption services inside broadcast video, read in Kotlin on every platform (#678).
+  Each service that carries data is a subtitle track of its own, Service 1, Service 2 and so on,
+  beside CC1, so a second language that a broadcast sends only in 708 shows. Each visible window is
+  a cue at its anchor, with its pen's colours, background, italics, underline, size and edge. The
+  FFmpeg backend lists the new `Cea708DecoderFactory` from `kiteplayer-subtitles`, and a custom
+  backend can list it too; its tracks have the codec `CEA708_CAPTIONS_CODEC`. Pictures whose bytes
+  carry CEA-708 and no CEA-608 no longer make a CC1 that never shows anything.
 - `systemSubtitleStyle`, `systemSubtitleScale` and `KitePlayer.followSystemCaptionStyle` read the
   caption look the viewer set for every app, under Accessibility on Android and Apple (#679): the
   text, background and window colours, the edge, the typeface on Android and the text size. The

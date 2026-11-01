@@ -1101,8 +1101,10 @@ internal fun hdrStaticInfo(stream: PlayerStreamInfo): ByteBuffer? {
 internal fun canRepresentMediaCodecColorExactly(color: ColorSpaceInfo?): Boolean {
     color ?: return true
     val hints = mediaCodecColorHints(color)
-    val standardDeclared = color.matrix != ColorMatrix.Unspecified ||
-        color.primaries != ColorPrimaries.Unspecified
+    // A matrix and primaries that are both a guess name no standard (#606), so they are not a
+    // declaration the codec has to be told, and the codec's own default stands in for them.
+    val standardDeclared = (color.matrixSpecified || color.primariesSpecified) &&
+        (color.matrix != ColorMatrix.Unspecified || color.primaries != ColorPrimaries.Unspecified)
     val transferDeclared = color.transfer != ColorTransfer.Unspecified
     return (!standardDeclared || hints.standard != null) &&
         (!transferDeclared || hints.transfer != null) &&

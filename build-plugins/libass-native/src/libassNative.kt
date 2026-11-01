@@ -6,6 +6,7 @@ import io.github.yuroyami.kiteplayer.build.AssChain
 import io.github.yuroyami.kiteplayer.build.BuildFailure
 import io.github.yuroyami.kiteplayer.build.CompileKiteRt
 import io.github.yuroyami.kiteplayer.build.LibassAdapters
+import io.github.yuroyami.kiteplayer.build.defPath
 import io.github.yuroyami.kiteplayer.build.defWithProperties
 import io.github.yuroyami.kiteplayer.build.findJniJavaHome
 import io.github.yuroyami.kiteplayer.build.hostIsMac
@@ -55,8 +56,8 @@ fun mergeAssChain(
             defTemplate.readText(),
             listOf(
                 "# Added by the libass-native plugin for $konanTarget.",
-                "libraryPaths = ${archive.parentFile.absolutePath}",
-                "compilerOpts = -I${chain.includeDir.absolutePath} -I${driverDir.toAbsolutePath()}",
+                "libraryPaths = ${defPath(archive.parentFile)}",
+                "compilerOpts = -I${defPath(chain.includeDir)} -I${defPath(driverDir.toFile())}",
                 "# ${AssChain.ARCHIVE_NAME} sha256 ${sha256(archive)}",
             ),
         ),

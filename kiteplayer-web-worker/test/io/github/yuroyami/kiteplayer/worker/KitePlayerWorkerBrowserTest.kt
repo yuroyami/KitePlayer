@@ -796,6 +796,43 @@ class KitePlayerWorkerBrowserTest {
         assertIs<PlaybackError.Internal>(assertIs<PlaybackException>(failure).error)
     }
 
+    // A start that failed before the worker answered left the page's audio context and its worklet
+    // running, with no player for the application to close (#686).
+    @Test
+    fun aStartThatCannotTakeTheCanvasClosesTheAudioItOpened() = runTest(timeout = 1.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n") ?: return@runTest
+        val counter = countAudioContexts()
+        try {
+            val canvas = pageCanvas(32, 32)
+            // A canvas that already has a 2D context cannot pass its drawing to a worker.
+            takeCanvas2d(canvas)
+            val failure = withContext(Dispatchers.Default) {
+                runCatching { KitePlayerWorker.start(canvas, setup[0], setup[1]) }
+            }.exceptionOrNull()
+            assertNotNull(failure, "a canvas with a 2D context passed to the worker")
+            assertTrue(audioContextsOpened(counter) > 0, "the start opened no audio context, so it proves nothing")
+            assertEquals(audioContextsOpened(counter), audioContextsClosed(counter), "the failed start left its audio open")
+        } finally {
+            stopCountingAudioContexts(counter)
+        }
+    }
+
+    @Test
+    fun aWorkerAddressTheBrowserRefusesClosesTheAudioItOpened() = runTest(timeout = 1.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n") ?: return@runTest
+        val counter = countAudioContexts()
+        try {
+            val failure = withContext(Dispatchers.Default) {
+                runCatching { KitePlayerWorker.start(null, "http://[not an address", setup[1]) }
+            }.exceptionOrNull()
+            assertNotNull(failure, "the browser took a worker address it cannot read")
+            assertTrue(audioContextsOpened(counter) > 0, "the start opened no audio context, so it proves nothing")
+            assertEquals(audioContextsOpened(counter), audioContextsClosed(counter), "the failed start left its audio open")
+        } finally {
+            stopCountingAudioContexts(counter)
+        }
+    }
+
     @Test
     fun aCodecModuleThatCannotLoadFailsTheStart() = runTest(timeout = 1.minutes) {
         val setup = karmaWorkerConfig()?.split("\n") ?: return@runTest
@@ -914,3 +951,34 @@ private external fun heartbeatFrames(heartbeat: JsAny): Int
 /** Stops the loop and answers the longest gap in milliseconds, counting the one still open. */
 @JsFun("(h) => { h.on = false; return Math.max(h.worst, performance.now() - h.last); }")
 private external fun heartbeatStop(heartbeat: JsAny): Double
+
+/**
+ * Puts a counting `AudioContext` in place of the page's own, so a test can tell how many the
+ * player opened and how many it closed (#686). The count lives on the returned object.
+ */
+@JsFun(
+    """() => {
+        const Real = globalThis.AudioContext;
+        const counter = { opened: 0, closed: 0, Real: Real };
+        if (!Real) return counter;
+        class Counting extends Real {
+            constructor(...args) { super(...args); counter.opened += 1; }
+            close() { counter.closed += 1; return super.close(); }
+        }
+        globalThis.AudioContext = Counting;
+        return counter;
+    }""",
+)
+private external fun countAudioContexts(): JsAny
+
+@JsFun("(counter) => { if (counter.Real) globalThis.AudioContext = counter.Real; }")
+private external fun stopCountingAudioContexts(counter: JsAny)
+
+@JsFun("(counter) => counter.opened")
+private external fun audioContextsOpened(counter: JsAny): Int
+
+@JsFun("(counter) => counter.closed")
+private external fun audioContextsClosed(counter: JsAny): Int
+
+@JsFun("(canvas) => { canvas.getContext('2d'); }")
+private external fun takeCanvas2d(canvas: JsAny)

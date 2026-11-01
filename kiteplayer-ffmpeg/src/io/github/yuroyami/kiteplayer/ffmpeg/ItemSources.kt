@@ -69,8 +69,9 @@ internal data class OpenedItem(
  * here, a master playlist keeps one variant, and the reader opens the addresses the playlist names.
  */
 internal suspend fun openItem(item: MediaItem, listDepth: Int = 0): OpenedItem {
-    FFmpegLogForwarding.install()
+    // Before anything native: a refused item never loads the codec library (#637).
     val options = preOpenOptions(item)
+    FFmpegLogForwarding.install()
     // Called once per open: the reader it makes belongs to this source and is closed with it.
     val opened = item.io?.open()
     // A playlist that nothing marks is recognised by its first bytes (#400). The reader keeps them.

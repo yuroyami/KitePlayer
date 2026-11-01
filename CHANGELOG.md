@@ -195,6 +195,9 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- An adaptive stream opened before its view described an HDR display moves to its HDR rung once
+  the display does, and back to SDR when it stops showing HDR (#600). The open took the SDR rung,
+  and every later step kept the range that played. The step down to a view's size landed earlier.
 - A finished HLS media playlist that names a start point with `EXT-X-START` starts there (#627).
   FFmpeg applies the tag only to a live playlist, so such a stream started at zero. A negative
   offset counts back from the end, and an item's own `startPosition` still wins.

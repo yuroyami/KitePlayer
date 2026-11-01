@@ -8078,6 +8078,21 @@ internal class PlaybackCore(
             pendingVariant = VariantRequest(inside.index, CompletableDeferred())
             return
         }
+        // The range the display shows now, as when the view described an HDR display after the
+        // stream opened and took SDR: the largest variant of that range inside the caps, at once
+        // (#600). The steps below keep the range that plays, so nothing else ever changed it.
+        val wantsHdr = (item.demux.fit ?: outputFit()).showsHdr
+        if (current.hdr != wantsHdr) {
+            val other = decodableVariants()
+                .filter { it.hdr == wantsHdr && withinCaps(it, item.demux) }
+                .maxByOrNull { it.bitrate }
+            if (other != null) {
+                variantChosenByPlayer = true
+                lastStepWasUp = false
+                pendingVariant = VariantRequest(other.index, CompletableDeferred())
+                return
+            }
+        }
         if (stepUpNotBeforeNanos != NO_POSITION && clock.nanos() < stepUpNotBeforeNanos) return
         // Within the range that plays: a step is a matter of bitrate, never of SDR or HDR (#447).
         val higher = decodableVariants()

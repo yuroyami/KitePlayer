@@ -495,6 +495,37 @@ class SelectVariantTest {
         harness.close()
     }
 
+    /**
+     * A display that reports HDR after the open moves the stream to its HDR rung, and back to SDR
+     * when it stops (#600). The open ran before the view described its display, took the SDR rung,
+     * and no step ever changed the range.
+     */
+    @Test
+    fun aDisplayThatReportsHdrAfterTheOpenMovesTheStreamToItsHdrRung() = runTest {
+        val mixed = listOf(
+            StreamVariant(index = 0, bitrate = 800_000, width = 640, height = 360),
+            StreamVariant(index = 1, bitrate = 5_000_000, width = 1920, height = 1080),
+            StreamVariant(index = 2, bitrate = 9_000_000, width = 1920, height = 1080, hdr = true),
+        )
+        val script = MediaScript(durationUs = 240_000_000, variants = mixed, linkBitsPerSecond = { 50_000_000 })
+        val harness = CoreHarness(this, script = script)
+        harness.attachRenderer()
+        harness.core.open(MediaItem("scripted://media", io = { LinkIo(script, harness.clock) }))
+        assertEquals(1, harness.core.snapshots.value.tracks.selectedVariant, "with no HDR answer the open took SDR")
+        harness.core.play()
+        harness.run(5.seconds)
+
+        assertNotNull(harness.renderer).showsHdrOverride = true
+        harness.run(30.seconds)
+        assertEquals(2, harness.core.snapshots.value.tracks.selectedVariant, "the stream stayed SDR on an HDR display")
+
+        assertNotNull(harness.renderer).showsHdrOverride = false
+        harness.run(30.seconds)
+        assertEquals(1, harness.core.snapshots.value.tracks.selectedVariant, "the stream stayed HDR on a display that stopped showing it")
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        harness.close()
+    }
+
     @Test
     fun aVariantTheCallerChoseIsNotRaised() = runTest {
         val script = MediaScript(durationUs = 120_000_000, variants = variants, linkBitsPerSecond = { 50_000_000 })

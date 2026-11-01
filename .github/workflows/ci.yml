@@ -299,7 +299,9 @@ jobs:
   ios-simulator:
     name: iOS simulator arm64 (device-free suites)
     runs-on: macos-latest
-    timeout-minutes: 60
+    # Eleven modules' simulator suites, the output suite, the device compile and the sample smoke:
+    # an hour ran out inside the audio visualiser's suite, which runs Compose graphics.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -515,7 +517,9 @@ jobs:
   device-test-artifacts:
     name: Stage the artifacts for the device tests (macOS)
     runs-on: macos-latest
-    timeout-minutes: 90
+    # A publish compiles every platform of these modules and their dependencies; on a cold cache
+    # that took an hour on one run and outlasted ninety minutes on the next.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4

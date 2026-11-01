@@ -195,6 +195,11 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- One `AudioVizState` can be shown by several `KiteAudioViz` views (#674). Both views stepped the
+  state's own drawings, so each drawing stepped twice a frame and restarted. The first view now
+  draws the state's drawings, which the director and the controls act on, and each further view
+  draws copies of its own that follow it, with the same settings. The warning a second view logged
+  is gone.
 - An adaptive stream opened before its view described an HDR display moves to its HDR rung once
   the display does, and back to SDR when it stops showing HDR (#600). The open took the SDR rung,
   and every later step kept the range that played. The step down to a view's size landed earlier.

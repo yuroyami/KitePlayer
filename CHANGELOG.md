@@ -195,6 +195,11 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- Dither on Android's GPU video path no longer draws a dot grid over smooth gradients (#605). Its
+  Bayer formula left out the XOR of the two positions and put the coarse bits on top, so 56 of the
+  64 thresholds differed from the Metal matrix and a value just above a level raised one block of
+  pixels in the same corner of every 8 by 8 tile. The shader now computes the Metal matrix, and the
+  device test checks it against that literal table rather than against the shader's own formula.
 - A D-pad can reach the mute button of the default Compose controls on a screen 480 dp or wider
   (#666). The volume slider took every left and right press, even at silence or at full, so
   focus never left it sideways and a television remote could not reach mute. The slider and the

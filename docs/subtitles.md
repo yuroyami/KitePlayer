@@ -20,8 +20,11 @@ on each renderer, and [TTML regions](subtitle-regions.md) describes how TTML tex
 - The closed captions that broadcast H.264, HEVC and MPEG-2 carry inside the picture (with no
   subtitle stream of their own) become a track, CC1, from the first picture that carries any. Each
   screen shows as it is sent. Like a television, the player shows them when the viewer's
-  preferences or the viewer ask, not by default. A platform decoder that draws straight to a
-  surface gives no captions.
+  preferences or the viewer ask, not by default. A hardware decoder whose pictures carry no
+  captions, as Android's MediaCodec on `KitePlayerView`, the Compose views and a live stream's
+  route, still gives CC1 for H.264 and HEVC: the player reads the captions from the SEI of the
+  packets it holds, and hands each picture those up to its time (#611). MPEG-2 decodes through
+  FFmpeg and gives them with its pictures.
 - Synced lyrics: an `.lrc` file, or LRC lines in a song's own tags (an ID3 `USLT` frame, a Vorbis
   or Matroska `LYRICS`, an MP4 `©lyr`), become a track that shows line by line through
   `subtitleCues`. The player selects that track when no other track is selected. Lyrics without

@@ -14240,6 +14240,8 @@ internal class PlaybackCore(
         // the decoder's setting as it was, so this carries across one too.
         var skippingNonReference = false
         val held = HeldLanding()
+        // The captions a hardware decoder's pictures may not carry, read from the packets (#611).
+        var captions = PacketCaptions.forLane(session.videoStream, decoder)
         try {
             while (true) {
                 // Every park ends in a restart, which drops the held frame, so it goes before the
@@ -14263,10 +14265,13 @@ internal class PlaybackCore(
                     // lane was parked (#527). A new decoder skips nothing until it is told to.
                     queue = session.videoQueue ?: return
                     val current = session.videoDecoder ?: return
-                    if (current !== decoder) skippingNonReference = false
+                    if (current !== decoder) {
+                        skippingNonReference = false
+                        captions = PacketCaptions.forLane(session.videoStream, current)
+                    }
                     decoder = current
                 }
-                if (drainFrames(session, worker, decoder, video, epoch, held)) continue
+                if (drainFrames(session, worker, decoder, video, epoch, held, captions)) continue
                 if (ending && !queue.isEndOfStream) {
                     // The picture was over only for now and gives packets again (#570). The drained
                     // decoder starts over, on the next keyframe.
@@ -14353,6 +14358,7 @@ internal class PlaybackCore(
                     skippingNonReference = skipNonReference
                 }
                 try {
+                    captions?.read(packet, epoch)
                     while (!videoDecoderSend(decoder, packet)) {
                         // False means the decoder did NOT take this packet. A synchronous codec usually
                         // has output immediately, but Android's asynchronous internals can transiently
@@ -14362,7 +14368,7 @@ internal class PlaybackCore(
                         if (frame != null) {
                             session.decodedVideoFrames.incrementAndGet()
                             session.videoInFlight.incrementAndGet()
-                            if (!handOver(session, worker, video, frame, epoch, held)) break
+                            if (!handOver(session, worker, video, frame, epoch, held, captions)) break
                         } else {
                             if (worker.quiesceRequested) break
                             worker.napUntil(handoverRetry(session)) { video.awaitDeparture() }
@@ -14417,11 +14423,12 @@ internal class PlaybackCore(
         video: VideoPlayback,
         epoch: Generation,
         held: HeldLanding,
+        captions: PacketCaptions?,
     ): Boolean {
         val frame = timedVideoReceive(session, decoder) ?: return false
         session.decodedVideoFrames.incrementAndGet()
         session.videoInFlight.incrementAndGet()
-        handOver(session, worker, video, frame, epoch, held)
+        handOver(session, worker, video, frame, epoch, held, captions)
         return true
     }
 
@@ -14524,13 +14531,17 @@ internal class PlaybackCore(
         frame: VideoFrame,
         epoch: Generation,
         held: HeldLanding,
+        /** The captions read from the packets, for a decoder whose pictures may carry none (#611). */
+        captions: PacketCaptions? = null,
     ): Boolean {
         var ownsFrame = true
         try {
             if (frame.generation != epoch) return true
             // Every picture of the epoch gives its captions, those before a precise seek's target
             // too, because a caption is built over the pictures before the one that shows it (#236).
-            frame.closedCaptions?.let { takeCaptions(session, it, frame.pts, epoch) }
+            val own = frame.closedCaptions
+            own?.let { takeCaptions(session, it, frame.pts, epoch) }
+            captions?.picture(frame.pts.micros, epoch, own) { ptsUs, bytes -> takeCaptions(session, bytes, Pts(ptsUs), epoch) }
             // Recorded before the discard, because this is where the seek actually landed and that is what
             // the overshoot ladder has to judge. A precise seek that landed correctly still throws away up to
             // a whole group of pictures, so judging the landing by the first frame that survived the discard

@@ -151,6 +151,13 @@ internal class MediaScript(
      * [SCRIPTED_CAPTION_CLEAR] an empty one that clears the screen.
      */
     val videoCaptions: ((ptsUs: Long) -> String?)? = null,
+    /**
+     * True puts [videoCaptions] in the packets, as the A/53 SEI of an H.264 access unit with start
+     * codes, and none in the pictures, as Android's MediaCodec gives none (#611).
+     */
+    val videoCaptionsInPackets: Boolean = false,
+    /** The video stream's codec name, as FFmpeg names one. */
+    val videoCodec: String = "scripted-video",
     val hasVideo: Boolean = true,
     val hasAudio: Boolean = true,
     /** The chapter table the scripted container declares. */
@@ -1189,7 +1196,7 @@ internal class ScriptedSource(
                 PlayerStreamInfo(
                     index = script.videoIndex,
                     kind = TrackKind.Video,
-                    codec = "scripted-video",
+                    codec = script.videoCodec,
                     isDefault = true,
                     startTime = Pts.Zero,
                     videoSize = VideoSize(1920, 1080),
@@ -1497,6 +1504,11 @@ internal class ScriptedSource(
                         duration = Pts(next - pts),
                         isKeyframe = script.isVideoKeyframe(pts),
                         ledger = ledger,
+                        packetBytes = if (script.videoCaptionsInPackets && video == script.videoIndex) {
+                            script.videoCaptions?.invoke(pts)?.let(::a53CaptionAccessUnit)
+                        } else {
+                            null
+                        },
                     ),
                 )
             }
@@ -1645,7 +1657,7 @@ internal class ScriptedVideoDecoder(
                 duration = packet.duration ?: Pts(script.videoFrameDurationUs),
                 size = script.videoFrameSize?.invoke(pts.micros) ?: VideoSize(1920, 1080),
                 ledger = ledger,
-                closedCaptions = script.videoCaptions?.invoke(pts.micros)?.encodeToByteArray(),
+                closedCaptions = if (script.videoCaptionsInPackets) null else script.videoCaptions?.invoke(pts.micros)?.encodeToByteArray(),
             ),
         )
         return true
@@ -2219,4 +2231,20 @@ internal class SampleRecord {
     operator fun get(index: Int): Float = data[index]
 
     fun toFloatArray(): FloatArray = data.copyOf(size)
+}
+
+/**
+ * An H.264 access unit with start codes whose SEI carries [text] as its A/53 caption data, a
+ * triplet per three bytes, so the scripted caption decoder reads the text back (#611). [text] is a
+ * multiple of three bytes long.
+ */
+internal fun a53CaptionAccessUnit(text: String): ByteArray {
+    val triplets = text.encodeToByteArray()
+    require(triplets.size % 3 == 0 && triplets.isNotEmpty()) { "caption text is whole triplets: $text" }
+    val t35 = byteArrayOf(0xB5.toByte(), 0x00, 0x31, 'G'.code.toByte(), 'A'.code.toByte(), '9'.code.toByte(), '4'.code.toByte(), 0x03,
+        (0x40 or triplets.size / 3).toByte(), 0xFF.toByte()) + triplets + byteArrayOf(0xFF.toByte())
+    val sei = byteArrayOf(0x06, 0x04, t35.size.toByte()) + t35 + byteArrayOf(0x80.toByte())
+    val slice = byteArrayOf(0x65, 0x88.toByte(), 0x84.toByte(), 0x10)
+    val start = byteArrayOf(0, 0, 0, 1)
+    return start + sei + start + slice
 }

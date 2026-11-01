@@ -146,4 +146,47 @@ class CaptionsInsideVideoTest {
         assertTrue(harness.events.none { it is PlayerEvent.TracksAdded })
         harness.close()
     }
+
+    /** HELLO! and AGAIN! in the SEI of an H.264 stream's packets, and none in its pictures (#611). */
+    private fun inPackets() = MediaScript(
+        durationUs = 10_000_000,
+        videoCodec = "h264",
+        videoCaptionsInPackets = true,
+        videoCaptions = { pts ->
+            when (pts) {
+                1_000_000L -> "HELLO!"
+                5_000_000L -> "AGAIN!"
+                else -> null
+            }
+        },
+    )
+
+    // Android's MediaCodec, on the view's own route or FFmpeg's, gives pictures no captions.
+    @Test
+    fun aHardwareDecoderWhosePicturesCarryNoCaptionsStillMakesCc1FromThePackets() = runTest {
+        val harness = CoreHarness(this, script = inPackets())
+        harness.backend.videoDecoderStatus.value = HwdecStatus.HardwareZeroCopy(HwdecKind.MediaCodec)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1500.milliseconds)
+        assertNotNull(harness.tracks.find(ccTrack), "no CC1 track from the packets: ${harness.tracks.all}")
+        assertIs<TrackChange.Applied>(harness.core.selectTrack(TrackKind.Subtitle, ccTrack))
+        harness.run(500.milliseconds)
+        assertEquals(listOf("HELLO!"), harness.shown, "at ${harness.core.position()}")
+        harness.run(4.seconds)
+        assertEquals(listOf("AGAIN!"), harness.shown, "at ${harness.core.position()}")
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount)
+    }
+
+    // A software decoder gives the captions with its pictures, so its packets are never copied.
+    @Test
+    fun aSoftwareDecoderLeavesThePacketsUnread() = runTest {
+        val harness = CoreHarness(this, script = inPackets())
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1500.milliseconds)
+        assertEquals(null, harness.tracks.find(ccTrack), "a software lane read its packets")
+        harness.close()
+    }
 }

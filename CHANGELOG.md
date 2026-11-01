@@ -195,6 +195,12 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- Broadcast H.264 and HEVC show their CC1 captions on Android's hardware video path (#611).
+  MediaCodec, on the view's own route and on FFmpeg's, gives its pictures no caption data, so the
+  track never existed there. A lane whose hardware decoder gives none now reads the A/53 captions
+  from the SEI of each packet, framed with start codes or with lengths, and hands each picture the
+  captions up to its time, so they keep the order they were written in. A software decoder, and a
+  hardware one whose pictures carry their own, reads no packet.
 - A `MediaItem.videoFilter` and the deinterlacer apply on the Android views too (#609). The engine
   asked the renderer's own decoders first, and they apply neither, so on Android the view's
   MediaCodec decoder played a cropped item uncropped and an interlaced one undeinterlaced, with no

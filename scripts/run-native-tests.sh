@@ -39,6 +39,9 @@ exclude_set() {
         # running (#641), so a host like that names them with --exclude.
         no-audio-hardware)
             excludes+=("*CoreAudioSinkTest.the anchor the device publishes is in the near future on the engine clock")
+            # The same virtual device stalls under load: in two runs of three its clock moved
+            # 171 ms while 353 ms passed, and not at all in 228 ms. It passes on real hardware.
+            excludes+=("*CoreAudioSinkRealTimeTest.the anchor advances with the device rather than with the clock")
             ;;
         # The iOS simulator cannot open an audio device ("opening the audio device failed" from a
         # simctl-spawned process). The same suites pass on macosArm64 and on a device. Two classes

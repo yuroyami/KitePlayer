@@ -115,7 +115,11 @@ jobs:
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      # Restored here and saved after the ratchets, not by actions/cache at the end of the job: that
+      # saves only when every step passed, so a job that kept failing later never saved one, and each
+      # run compiled every target's caches from nothing, two to three hours of the four.
+      - uses: actions/cache/restore@v4
+        id: toolchain
         with:
           path: |
             ~/Library/Caches/JetBrains/Kotlin
@@ -182,6 +186,15 @@ jobs:
       # objects can prove that, so this runs after the build above wrote the macOS, iOS device and
       # iOS simulator archives the cinterop klibs embed, and its negative controls prove it rejects
       # each forbidden call (#640). The build logic's own tests ride here too.
+      - name: Keep the toolchain the ratchets filled
+        if: always() && steps.toolchain.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/Library/Caches/JetBrains/Kotlin
+            ~/.konan
+          key: ${{ steps.toolchain.outputs.cache-primary-key }}
+
       - name: The render audit of the audio callback, and the build logic tests
         run: |
           kiteplayer-rt/native/scripts/render-audit.sh

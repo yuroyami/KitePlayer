@@ -1051,6 +1051,9 @@ jobs:
         run: |
           set +e
           mkdir -p "$RUNNER_TEMP/test-logs"
+          # The FFmpeg backend's tests write their pictures and sound beside the clips, in build/,
+          # which a job that downloads its binaries and builds nothing does not have.
+          mkdir -p "$GITHUB_WORKSPACE/build"
           status=0
           for module in kiteplayer-core kiteplayer-subtitles kiteplayer-io kiteplayer-output \
                         kiteplayer-rt kiteplayer-libass kiteplayer kiteplayer-ffmpeg; do

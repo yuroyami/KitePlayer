@@ -848,7 +848,7 @@ jobs:
   linux-native:
     name: Linux x64 (Kotlin/Native, executed not just linked)
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -866,9 +866,27 @@ jobs:
           ./kotlin test -p linuxX64 -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
             -m kiteplayer-output -m kiteplayer-rt -m kiteplayer-libass -m kiteplayer
 
-      # kiteplayer-ffmpeg's suites read clips, so this runner links its test binary only.
-      - name: Link the FFmpeg backend for linuxX64
-        run: ./kotlin task :kiteplayer-ffmpeg:linkLinuxX64TestDebug
+      # kiteplayer-ffmpeg's suites read clips, so the clips are made as the JVM job makes them and
+      # the suite runs on the Linux native FFmpeg it links (#639). It was linked and never run: its
+      # first run here passed 376 of 378, the two others failing on a reference clip that ffmpeg 6.1
+      # drew a step apart from the clip it describes, since fixed in testmedia.sh.
+      - name: Install the ffmpeg CLI the clips are recorded against
+        run: |
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          brew install --quiet ffmpeg
+          echo "$(brew --prefix ffmpeg)/bin" >> "$GITHUB_PATH"
+
+      - name: Generate the test clips
+        run: ./scripts/testmedia.sh
+        env:
+          TESTMEDIA_STRICT_FFMPEG: "1"
+
+      - name: linuxX64 tests, the FFmpeg backend on real media
+        env:
+          KITEPLAYER_REQUIRE_TESTMEDIA: "1"
+        run: |
+          . scripts/test-env.sh
+          ./kotlin test -p linuxX64 -m kiteplayer-ffmpeg
 
       - name: Link the androidNativeArm32 test binaries
         run: |

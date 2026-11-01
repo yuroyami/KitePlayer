@@ -23,6 +23,7 @@ import platform.CoreFoundation.kCFTypeDictionaryValueCallBacks
 import platform.CoreGraphics.CGColorSpaceCreateWithName
 import platform.CoreGraphics.CGColorSpaceRef
 import platform.CoreGraphics.kCGColorSpaceITUR_709
+import platform.CoreVideo.CVBufferRemoveAttachment
 import platform.CoreVideo.CVBufferSetAttachment
 import platform.CoreVideo.CVImageBufferCreateColorSpaceFromAttachments
 import platform.CoreVideo.CVPixelBufferRef
@@ -127,6 +128,28 @@ internal val toneMappedColorTags: ColorTags = ColorTags(
     matrix = kCVImageBufferYCbCrMatrix_ITU_R_709_2,
     gamma = 2.2,
 )
+
+/**
+ * The tags of what the composer writes for a picture of [width] by [height] in [colorSpace] (#489):
+ * the tone mapped output for HDR it rolls down to standard range, and the picture's own primaries
+ * and curve otherwise, because it converts the values to RGB and leaves them in the picture's own
+ * encoding. The rule the Metal layer is tagged by, so a composed picture and a plain one agree.
+ */
+internal fun composedColorTags(colorSpace: ColorSpaceInfo, width: Int, height: Int): ColorTags =
+    if (colorSpace.willToneMap()) toneMappedColorTags else colorTagsOf(colorSpace, width, height)
+
+/**
+ * Writes [tags] onto [buffer], an RGB buffer the composer drew, in place of whatever a buffer of a
+ * pool carried from its last use (#489): a stale gamma or primaries would describe another encoding.
+ * No matrix, because the buffer holds RGB.
+ */
+internal fun retagComposedBuffer(buffer: CVPixelBufferRef, tags: ColorTags) {
+    CVBufferRemoveAttachment(buffer, kCVImageBufferColorPrimariesKey)
+    CVBufferRemoveAttachment(buffer, kCVImageBufferTransferFunctionKey)
+    CVBufferRemoveAttachment(buffer, kCVImageBufferGammaLevelKey)
+    CVBufferRemoveAttachment(buffer, kCVImageBufferYCbCrMatrixKey)
+    tagPixelBuffer(buffer, tags, withMatrix = false)
+}
 
 /** Writes [tags] onto [buffer], to travel with it to whatever shows it. */
 internal fun tagPixelBuffer(buffer: CVPixelBufferRef, tags: ColorTags, withMatrix: Boolean) {

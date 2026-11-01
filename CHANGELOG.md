@@ -208,6 +208,13 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- A picture the Apple sample buffer renderer composes, for subtitles, a turn, a crop or the flash
+  guard, says what it holds (#489). The composed BGRA buffer carried no colour tags, so the layer
+  guessed, and HDR rolled down to standard range was shown without its BT.709 and gamma 2.2 tags.
+  Each composed buffer now carries the tags the Metal layer would get for the same picture, a
+  pooled buffer drops those of its last use, and text drawn on black is tagged sRGB. The frame's
+  HDR title and scene peaks now reach the composer, so it rolls off from the scene's peak as the
+  plain Metal path does instead of from the assumed 1000 nits.
 - A live AV1, VP9 or VP8 stream on Android decodes on the phone's hardware decoder (#643). The
   FFmpeg route, which a live stream takes, named MediaCodec only for H.264 and HEVC, so the others
   decoded on the CPU although KiteFFmpeg builds their MediaCodec decoders and the view's own path

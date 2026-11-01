@@ -3572,6 +3572,8 @@ internal class PlaybackCore(
         if (active.videoDecoderOrigin != VideoDecoderOrigin.Backend || active.videoDecoderDeferred) return false
         if (active.rendererDecodersAsked || stream.isCoverArt) return false
         if (attached.videoDecoderFactories().isEmpty()) return false
+        // A filtered stream stays on the backend's decoder, which applies the filter (#609).
+        if (softwareFramesNeeded(active.videoFilter, stream) != null) return false
         val selection = if (forceBackendSoftwareForMedia) {
             VideoDecoderSelection.BackendSoftwareOnly
         } else {
@@ -4156,6 +4158,8 @@ internal class PlaybackCore(
         plain: Boolean = false,
     ): OpenSession {
         val report: (PlaybackWarning) -> Unit = pending?.report ?: ::warn
+        @OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
+        val itemVideoFilter = item.videoFilter
         fun stage(next: OpenStage) {
             if (pending == null) openStage = next
         }
@@ -4269,13 +4273,15 @@ internal class PlaybackCore(
             // Cover art decodes on the backend's decoders either way.
             val deferVideoDecoder = pending != null && videoStream != null && !videoStream.isCoverArt &&
                 pendingRenderer?.videoDecoderFactories().orEmpty().isNotEmpty() &&
-                rendererDecodes(videoSelection, config.hardwareDecode, source.seekable)
+                rendererDecodes(videoSelection, config.hardwareDecode, source.seekable) &&
+                softwareFramesNeeded(itemVideoFilter, videoStream) == null
             val selectedVideoDecoder = if (deferVideoDecoder) null else videoStream?.let {
                 createVideoDecoder(
                     session = backendSession,
                     stream = it,
                     sourceSeekable = source.seekable,
                     selection = videoSelection,
+                    itemFilter = itemVideoFilter,
                     pending = pending,
                 )
             }
@@ -4481,6 +4487,7 @@ internal class PlaybackCore(
                 token = pending?.token ?: nextSessionToken++,
                 backendSession = backendSession,
                 source = source,
+                videoFilter = itemVideoFilter,
                 videoStream = videoStream,
                 videoDecoder = if (videoStream == null) null else videoDecoder,
                 videoDecoderOrigin = if (videoStream == null) null else selectedVideoDecoder?.origin,
@@ -4559,6 +4566,8 @@ internal class PlaybackCore(
         stream: PlayerStreamInfo,
         sourceSeekable: Boolean,
         selection: VideoDecoderSelection,
+        /** The item's own video filter, which the backend's decoders apply and a renderer's do not. */
+        itemFilter: String?,
         pending: PendingBuild? = null,
     ): SelectedVideoDecoder? {
         if (stream.kind != TrackKind.Video) return null
@@ -4570,11 +4579,29 @@ internal class PlaybackCore(
             VideoDecoderSelection.Configured -> config.hardwareDecode
             VideoDecoderSelection.BackendSoftwareOnly -> HwdecPolicy.Off
         }
+        // A filter or the deinterlacer runs on the software frames of the backend's own decoders,
+        // and a renderer's decoder knows nothing of either, so a stream that needs one never goes
+        // there, and under Require, which asks for hardware, it gets no decoder at all (#609).
+        val filtered = softwareFramesNeeded(itemFilter, stream)
+        if (filtered != null && policy == HwdecPolicy.Require) {
+            failures += "$filtered, and HwdecPolicy.Require asks for hardware"
+            report(PlaybackWarning.HardwareDecodeUnavailable(stream.codec, filtered))
+            return null
+        }
         // A preload never takes a renderer's own decoder: that decoder needs the renderer's
         // surface, which the current item holds until the swap. buildSession refuses a preload
         // that would need one.
         val rendererEligible = pending == null && rendererDecodes(selection, policy, sourceSeekable)
-        val rendererFactories = if (rendererEligible) pendingRenderer?.videoDecoderFactories().orEmpty() else emptyList()
+        val offered = if (rendererEligible) pendingRenderer?.videoDecoderFactories().orEmpty() else emptyList()
+        if (filtered != null && offered.isNotEmpty()) {
+            report(
+                PlaybackWarning.HardwareDecodeUnavailable(
+                    stream.codec,
+                    "$filtered, so the renderer's own decoder (${offered.joinToString { it.name }}) is not used",
+                ),
+            )
+        }
+        val rendererFactories = if (filtered == null) offered else emptyList()
         val rendererAsked = rendererFactories.isNotEmpty()
         for (factory in rendererFactories) {
             val decoder = tryCreateVideoDecoder(factory, stream, policy, failures)
@@ -4666,6 +4693,21 @@ internal class PlaybackCore(
         },
         closeAbandoned = { it.close() },
     )
+
+    /**
+     * Why [stream]'s frames must pass a filter, which runs on the software frames of the backend's
+     * own decoders, or null when they need none: the item's [itemFilter], or the deinterlacer the
+     * policy asks for. The same reasons the FFmpeg backend gives when its own hardware route stands
+     * down, decided here so a renderer's decoder, which applies neither, is never handed such a
+     * stream (#609).
+     */
+    private fun softwareFramesNeeded(itemFilter: String?, stream: PlayerStreamInfo): String? = when {
+        itemFilter != null -> "a video filter is attached and filters run on software frames"
+        config.deinterlace == io.github.yuroyami.kiteplayer.DeinterlacePolicy.Always ||
+            (config.deinterlace == io.github.yuroyami.kiteplayer.DeinterlacePolicy.Auto && stream.fieldOrder.isInterlaced) ->
+            "the stream is deinterlaced, and the deinterlacer runs on software frames"
+        else -> null
+    }
 
     /** True when the configured policy would try the attached renderer's own decoders first. */
     private fun rendererDecodes(selection: VideoDecoderSelection, policy: HwdecPolicy, sourceSeekable: Boolean): Boolean =
@@ -5808,6 +5850,7 @@ internal class PlaybackCore(
             session = session.backendSession,
             stream = stream,
             sourceSeekable = session.source.seekable,
+            itemFilter = session.videoFilter,
             selection = if (forceBackendSoftwareForMedia) {
                 VideoDecoderSelection.BackendSoftwareOnly
             } else {
@@ -11231,6 +11274,7 @@ internal class PlaybackCore(
             stream = stream,
             sourceSeekable = incoming.source.seekable,
             selection = VideoDecoderSelection.Configured,
+            itemFilter = incoming.videoFilter,
         )
         val decoder = selected?.decoder
         val aligned = decoder != null && try {
@@ -15325,6 +15369,8 @@ internal class PlaybackCore(
         val token: Long,
         val backendSession: BackendSession,
         val source: PlayerMediaSource,
+        /** The item's own video filter, which keeps the stream off a renderer's decoder (#609). */
+        val videoFilter: String?,
         videoStream: PlayerStreamInfo?,
         /**
          * Set before the video decode worker starts: at build, at the swap for a preload, or with

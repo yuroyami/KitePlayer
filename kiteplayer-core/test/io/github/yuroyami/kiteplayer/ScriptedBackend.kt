@@ -178,6 +178,8 @@ internal class MediaScript(
     val videoColor: io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo? = null,
     /** How the video stream's pictures cover the sphere, for a 360 degree video, or null for a flat one (#460). */
     val videoProjection: io.github.yuroyami.kiteplayer.VideoProjection? = null,
+    /** Whether the video stream is interlaced, as its container states it (#609). */
+    val videoFieldOrder: io.github.yuroyami.kiteplayer.spi.FieldOrder = io.github.yuroyami.kiteplayer.spi.FieldOrder.Unknown,
     val seekable: Boolean = true,
     /** Extra container tags, for the suites that read them. Merged over the harness's own three. */
     val containerTags: Map<String, String> = emptyMap(),
@@ -1196,6 +1198,7 @@ internal class ScriptedSource(
                     rotationDegrees = script.videoRotationDegrees,
                     colorSpace = script.videoColor,
                     projection = script.videoProjection,
+                    fieldOrder = script.videoFieldOrder,
                     // A key with no TrackInfo field of its own, so a test can prove the raw tags
                     // travel and not just the two the type happens to parse.
                     metadata = mapOf("handler_name" to "scripted video handler"),

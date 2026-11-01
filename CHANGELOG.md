@@ -195,6 +195,13 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- A `MediaItem.videoFilter` and the deinterlacer apply on the Android views too (#609). The engine
+  asked the renderer's own decoders first, and they apply neither, so on Android the view's
+  MediaCodec decoder played a cropped item uncropped and an interlaced one undeinterlaced, with no
+  warning, and a filtered item under `HwdecPolicy.Require` played in hardware. A stream that needs
+  a filter now decodes on the backend's decoder with a `HardwareDecodeUnavailable` warning that
+  names the renderer's decoder, and under `Require` its video track is refused, as the KDoc of
+  `videoFilter` and `deinterlace` say.
 - A media session attached while the app is off screen applies its background policy at once
   (#690). The background handling assumed the app was on screen when it attached, so a player
   started from the resume card decoded video nobody saw until the app came to the screen and left

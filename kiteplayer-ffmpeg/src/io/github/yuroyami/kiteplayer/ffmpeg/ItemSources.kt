@@ -22,7 +22,7 @@ import kotlin.time.Duration.Companion.seconds
  * cannot end a read that waits inside the reader. [hls] is set for an HLS stream read through the
  * item's reader.
  */
-internal class OpenedItem(
+internal data class OpenedItem(
     val source: MediaSource,
     val bridge: BlockingMediaIo?,
     val hls: HlsLedger? = null,
@@ -41,9 +41,15 @@ internal class OpenedItem(
     val times: HlsTimeOfDay? = null,
     /** Moves an HLS stream to another variant in place (#464). */
     val switch: HlsVariantSwitch? = null,
+    /** Where a finished HLS playlist asks to start, in microseconds (#627), or null. */
+    val suggestedStartUs: Long? = null,
 ) {
-    fun withListedTitle(title: String?): OpenedItem =
-        OpenedItem(source, bridge, hls, variants, selectedVariant, realTimeScheme, title ?: listedTitle, growing, thumbnails, times)
+    /**
+     * This item under the title a list of streams gave it. A copy, so that no field can fall out:
+     * the hand-written constructor call this replaced lost the variant switch, and an HLS stream
+     * opened from a station list opened again at every quality change (#669).
+     */
+    fun withListedTitle(title: String?): OpenedItem = copy(listedTitle = title ?: listedTitle)
 }
 
 /**
@@ -63,8 +69,9 @@ internal class OpenedItem(
  * here, a master playlist keeps one variant, and the reader opens the addresses the playlist names.
  */
 internal suspend fun openItem(item: MediaItem, listDepth: Int = 0): OpenedItem {
-    FFmpegLogForwarding.install()
+    // Before anything native: a refused item never loads the codec library (#637).
     val options = preOpenOptions(item)
+    FFmpegLogForwarding.install()
     // Called once per open: the reader it makes belongs to this source and is closed with it.
     val opened = item.io?.open()
     // A playlist that nothing marks is recognised by its first bytes (#400). The reader keeps them.
@@ -134,23 +141,34 @@ internal suspend fun openItem(item: MediaItem, listDepth: Int = 0): OpenedItem {
             // A file still being written is read on past its end while the source reads packets (#430).
             val growing = if (hls == null) item.growth?.let { GrowingMediaIo(io, it.endsAfter) } else null
             val bridge = BlockingMediaIo(hls?.playlist ?: growing ?: io, lifetime)
-            val source = openCancellably({ cancel.interrupt(); bridge.interrupt() }) {
-                if (hls == null) {
-                    MediaSource.open(bridge, options, cancel)
-                } else {
-                    MediaSource.open(
-                        bridge,
-                        options + hls.options(item),
-                        cancel,
-                        url = hls.url,
-                        mimeType = HLS_MEDIA_TYPE,
-                        nestedOpener = hls.opener,
-                    )
+            val source = try {
+                openCancellably({ cancel.interrupt(); bridge.interrupt() }) {
+                    if (hls == null) {
+                        MediaSource.open(bridge, options, cancel)
+                    } else {
+                        MediaSource.open(
+                            bridge,
+                            options + hls.options(item),
+                            cancel,
+                            url = hls.url,
+                            mimeType = HLS_MEDIA_TYPE,
+                            nestedOpener = hls.opener,
+                        )
+                    }
                 }
+            } catch (failure: Throwable) {
+                // A protected playlist the open met says so, in place of what FFmpeg made of it (#624).
+                if (failure !is CancellationException) hls?.ledger?.refusal?.let { throw it }
+                throw failure
+            }
+            hls?.ledger?.refusal?.let { refusal ->
+                runCatching { source.close() }
+                throw refusal
             }
             OpenedItem(
                 source, bridge, hls?.ledger, hls?.variants.orEmpty(), hls?.selectedVariant,
                 growing = growing, thumbnails = hls?.thumbnails, times = hls?.times, switch = hls?.switch,
+                suggestedStartUs = hls?.suggestedStartUs,
             )
         }
         // No protocol reads the descriptor now, so no protocol is left to consume its key.

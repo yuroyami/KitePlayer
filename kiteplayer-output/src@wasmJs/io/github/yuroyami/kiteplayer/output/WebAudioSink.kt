@@ -54,6 +54,7 @@ internal class WebAudioSink(
     private var block: InterleavedBlock? = null
     private var accepted: AudioFormat? = null
     private var reportedUnderrunFrames = 0
+    private var closed = false
 
     private val _events = MutableSharedFlow<AudioSinkEvent>(extraBufferCapacity = 8)
     override val events: Flow<AudioSinkEvent> = _events
@@ -63,6 +64,9 @@ internal class WebAudioSink(
      * back. A sink never converts, so nothing here touches the samples.
      */
     override suspend fun open(request: AudioFormat, render: AudioRenderCallback): AudioFormat {
+        // As the Android and desktop sinks refuse it: close closed the device, and an open after it
+        // kept its state beside a device that no longer plays (#693).
+        check(!closed) { "WebAudioSink is closed" }
         val format = AudioFormat(
             sampleRate = device.sampleRate,
             channels = device.channels,
@@ -120,6 +124,7 @@ internal class WebAudioSink(
     }
 
     override fun close() {
+        closed = true
         feeder?.cancel()
         feeder = null
         render = null
@@ -140,6 +145,11 @@ internal class WebAudioSink(
         val callback = render ?: return
         val buffer = block ?: return
         val frames = deviceBufferFrames
+        // Only silence played while this sink feeds is an underrun. The device counts every frame
+        // of silence it plays, during a seek's stop, before the first block and after the end, and a
+        // worker's sinks share one device, so a count from before this feed was reported as the
+        // first refill's underrun and spent the engine's one warning of the session (#668).
+        reportedUnderrunFrames = device.underrunFrames()
         while (coroutineContext.isActive) {
             while (coroutineContext.isActive && device.queuedFrames() + frames <= highWaterFrames) {
                 val pending = device.queuedFrames()

@@ -1316,25 +1316,29 @@ internal class GlState private constructor(
                 return fract(sin(dot(vec3(p, seed), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
             }
 
-            /* The 8x8 ordered Bayer value for a pixel, in 0..63.
+            /* The 8x8 ordered Bayer value for a pixel, in 0..63: the matrix the Metal body spells
+             * out literally, which is what lets both renderers band a gradient the same way.
              *
              * Computed rather than read from a const array, because GLES2 cannot index an array
-             * with a non-constant expression. This is the standard bit-interleave of the recursive
-             * construction and produces the SAME matrix the Metal body spells out literally, which
-             * is what lets both renderers band a gradient the same way. */
+             * with a non-constant expression. With a as x XOR y, bit by bit, the value interleaves
+             * a0 y0 a1 y1 a2 y2, most significant first, so neighbours differ in the top bits and
+             * the raised pixels spread over the tile. GLES2 has no integer XOR either, and each
+             * bit of a is mod(xb + yb, 2). Without the XOR, and with the coarse bits on top, the
+             * threshold rose in blocks and drew a dot grid at an 8 pixel pitch (#605). */
             float kpBayer8(vec2 pixel) {
                 vec2 p = floor(mod(pixel, 8.0));
                 float x = p.x;
                 float y = p.y;
-                float xb2 = floor(x / 4.0);
-                float xb1 = floor(mod(x / 2.0, 2.0));
                 float xb0 = mod(x, 2.0);
-                float yb2 = floor(y / 4.0);
-                float yb1 = floor(mod(y / 2.0, 2.0));
+                float xb1 = mod(floor(x / 2.0), 2.0);
+                float xb2 = floor(x / 4.0);
                 float yb0 = mod(y, 2.0);
-                /* Interleaved as x2 y2 x1 y1 x0 y0, most significant first: the y bits carry the
-                 * coarse split and the x bits the fine one, which is the classic ordering. */
-                return 32.0 * xb2 + 16.0 * yb2 + 8.0 * xb1 + 4.0 * yb1 + 2.0 * xb0 + yb0;
+                float yb1 = mod(floor(y / 2.0), 2.0);
+                float yb2 = floor(y / 4.0);
+                float a0 = mod(xb0 + yb0, 2.0);
+                float a1 = mod(xb1 + yb1, 2.0);
+                float a2 = mod(xb2 + yb2, 2.0);
+                return 32.0 * a0 + 16.0 * yb0 + 8.0 * a1 + 4.0 * yb1 + 2.0 * a2 + yb2;
             }
 
             /* The sRGB curve, both ways, for linear-light scaling: the same curve the Metal body

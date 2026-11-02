@@ -32,8 +32,13 @@ internal actual class BlockingMediaIo actual constructor(
 
     actual override fun read(into: ByteArray, offset: Int, length: Int): Int = runBlocking(lifetime) {
         var r = io.read(into, offset, length)
+        // Each empty answer waits twice as long as the one before, up to a ceiling, so a reader that
+        // waits a long time for its data does not wake the demux thread a thousand times a second
+        // (#660). The wait starts again from the shortest on the next read.
+        var wait = FIRST_EMPTY_READ_WAIT_MS
         while (r == 0) {
-            delay(1)
+            delay(wait)
+            wait = (wait * 2).coerceAtMost(LONGEST_EMPTY_READ_WAIT_MS)
             r = io.read(into, offset, length)
         }
         r
@@ -53,3 +58,9 @@ internal actual class BlockingMediaIo actual constructor(
 internal actual fun <T> blockingIn(lifetime: Job, block: suspend () -> T): T = runBlocking(lifetime) { block() }
 
 internal actual val nestedOpensSupported: Boolean = true
+
+/** The wait after a read's first empty answer, in milliseconds. */
+internal const val FIRST_EMPTY_READ_WAIT_MS: Long = 1
+
+/** The longest wait between two empty answers, in milliseconds: small beside how long new data takes to come. */
+internal const val LONGEST_EMPTY_READ_WAIT_MS: Long = 20

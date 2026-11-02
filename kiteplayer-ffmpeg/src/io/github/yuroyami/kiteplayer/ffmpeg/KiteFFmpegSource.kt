@@ -105,7 +105,7 @@ public class KiteFFmpegSourceFactory : MediaSourceFactory {
  * own and left out the variants, so the player listed no quality to choose or step to (#543).
  */
 internal fun OpenedItem.toSource(): KiteFFmpegSource =
-    KiteFFmpegSource(source, bridge, hls, variants, selectedVariant, realTimeScheme, listedTitle, growing, thumbnails, times, switch)
+    KiteFFmpegSource(source, bridge, hls, variants, selectedVariant, realTimeScheme, listedTitle, growing, thumbnails, times, switch, suggestedStartUs)
 
 /**
  * Applies [media]'s filter chains to this source. An audio chain on a build without filter graphs,
@@ -146,11 +146,22 @@ public class KiteFFmpegSource internal constructor(
     private val times: HlsTimeOfDay? = null,
     /** Moves an HLS stream to another variant without a new open, when it has one (#464). */
     private val switch: HlsVariantSwitch? = null,
+    /** Where a finished HLS playlist asks to start, in microseconds (#627), or null. */
+    private val suggestedStartUs: Long? = null,
 ) : PlayerMediaSource, RecordingCapable {
+
+    override val suggestedStart: kotlin.time.Duration?
+        get() = suggestedStartUs?.let { with(kotlin.time.Duration) { it.microseconds } }
 
     override val selectedVariant: Int? get() = switch?.selected ?: openedVariant
 
     override suspend fun switchVariant(index: Int?): Boolean = switch?.request(index) ?: false
+
+    /** Whether FFmpeg here decodes each codec the variant's `CODECS` names, as the open's choice asks (#625). */
+    override fun decodesVariant(index: Int): Boolean {
+        val codecs = variants.firstOrNull { it.index == index }?.codecs ?: return true
+        return codecs.split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() }.all(::hlsCodecDecodable)
+    }
 
     private var reader: PacketReader? = null
 

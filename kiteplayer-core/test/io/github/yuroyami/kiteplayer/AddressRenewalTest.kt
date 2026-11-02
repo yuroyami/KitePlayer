@@ -77,4 +77,25 @@ class AddressRenewalTest {
         assertEquals(listOf(403, 401), harness.renewals().map { it.status })
         harness.close()
     }
+
+    /**
+     * A seek whose reads the server refused, as a seek into the segments of a stream whose token
+     * expired is (#546): the item opens again for a fresh address, and the seek lands where it was
+     * going, instead of the player failing because the seek did.
+     */
+    @Test
+    fun aSeekTheServerRefusedOpensTheItemAgainAndLandsWhereItWasGoing() = runTest {
+        val faults = FaultPlan()
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 20_000_000), faults = faults)
+        harness.start()
+        faults.seekFailsOnce = { made.last().refusal = SourceRefusal("https://cdn.test/seg-7.ts?token=old", 403) }
+        harness.core.seek(Pts(12_000_000), SeekMode.Precise)
+        harness.run(1.seconds)
+        assertEquals(null, harness.core.snapshots.value.error, "the refused seek failed the player")
+        assertEquals(2, made.size, "the item was not opened again for a fresh address")
+        assertEquals(listOf(PlaybackWarning.AddressRenewed("seg-7.ts", 403)), harness.renewals().toList())
+        val at = harness.core.position()
+        assertTrue(at >= 12.seconds && at < 13.5.seconds, "the seek landed at $at, not where it was going")
+        harness.close()
+    }
 }

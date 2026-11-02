@@ -86,12 +86,18 @@ public class RenderQuality(scale: Float = 1f, public var dynamic: Boolean = true
             current = scale
             return
         }
-        if (millis > SLOW_MILLIS * 2f) {
+        // The limits were set for a 60 Hz frame, and they scale with the frame the display really
+        // has: on a 120 Hz screen 11 ms of trail work is more than a whole frame, and the 60 Hz
+        // limits held it there for good (#658). Never above the 60 Hz frame, so a stall, whose step
+        // is long, does not raise them, and a 60 Hz display meets exactly the limits it always had.
+        val share = (deltaSeconds * 60f).takeIf { it.isFinite() && it > 0f }?.coerceIn(SMALLEST_SHARE, 1f) ?: 1f
+        val slowMillis = SLOW_MILLIS * share
+        if (millis > slowMillis * 2f) {
             // Raster cost grows with area. Avoid spending several more half-second frames making
             // tiny reductions, and leave the foreground and finishing pass part of the frame budget.
-            current = (current * kotlin.math.sqrt(TARGET_MILLIS / millis)).coerceAtLeast(DYNAMIC_SMALLEST)
+            current = (current * kotlin.math.sqrt(TARGET_MILLIS * share / millis)).coerceAtLeast(DYNAMIC_SMALLEST)
             slowFrames = 0
-        } else if (millis > SLOW_MILLIS) {
+        } else if (millis > slowMillis) {
             slowFrames++
             if (slowFrames >= SLOW_RUN) {
                 current = (current * 0.9f).coerceAtLeast(DYNAMIC_SMALLEST)
@@ -99,7 +105,7 @@ public class RenderQuality(scale: Float = 1f, public var dynamic: Boolean = true
             }
         } else {
             slowFrames = 0
-            if (millis < QUICK_MILLIS) current += 0.02f * deltaSeconds
+            if (millis < QUICK_MILLIS * share) current += 0.02f * deltaSeconds
         }
         current = current.coerceIn(DYNAMIC_SMALLEST, scale)
     }
@@ -114,5 +120,8 @@ public class RenderQuality(scale: Float = 1f, public var dynamic: Boolean = true
         const val SLOW_MILLIS = 14f
         const val QUICK_MILLIS = 10f
         const val SLOW_RUN = 5
+
+        /** The shortest frame the limits scale to, a 240 Hz one, as a share of a 60 Hz frame. */
+        const val SMALLEST_SHARE = 0.25f
     }
 }

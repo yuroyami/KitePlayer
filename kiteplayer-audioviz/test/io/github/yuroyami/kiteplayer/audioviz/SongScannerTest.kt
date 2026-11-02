@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.audioviz
 
 import io.github.yuroyami.kiteplayer.AudioScanRange
 import io.github.yuroyami.kiteplayer.AudioScanSink
+import io.github.yuroyami.kiteplayer.MediaClip
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.Pts
@@ -22,6 +23,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 /** When a scan starts, what it installs, and what it must never do. Times are virtual. */
 class SongScannerTest {
@@ -42,6 +44,9 @@ class SongScannerTest {
         /** An item whose every open fails. */
         var failingUri: String? = null
 
+        /** How far past what was asked a seek into the song lands, as an estimate seek can. */
+        var lateLandingMicros = 0L
+
         override suspend fun scan(target: ScanTarget, range: AudioScanRange?, sink: AudioScanSink): ScanOutcome {
             scans++
             started.value++
@@ -51,8 +56,11 @@ class SongScannerTest {
             val format = AudioFormat(48_000, 2, SampleFormat.F32)
             val block = FloatArray(2048)
             // A seek lands on a block boundary at or before what was asked for, as a container does.
-            var start = (((range?.from?.micros ?: 0L) * 48_000 / 1_000_000L) / 1024 * 1024)
+            val asked = range?.from?.micros ?: 0L
+            val landing = if (asked > 0L) asked + lateLandingMicros else asked
+            var start = ((landing * 48_000 / 1_000_000L) / 1024 * 1024)
                 .toInt().coerceIn(0, audio.size)
+            val firstMicros = start * 1_000_000L / 48_000
             val until = range?.until?.micros
             var first = true
             var end = 0L
@@ -70,7 +78,7 @@ class SongScannerTest {
                 cancelled++
                 throw cancellation
             }
-            return ScanOutcome(target.track ?: TrackId(0), reachedEnd = start >= audio.size, end)
+            return ScanOutcome(target.track ?: TrackId(0), reachedEnd = start >= audio.size, end, firstMicros)
         }
     }
 
@@ -404,6 +412,47 @@ class SongScannerTest {
         rig.settleAll()
         assertEquals(1, rig.source.scans, "a six second song scanned in one pass")
         assertNull(rig.source.ranges.single(), "one pass asks for no range")
+        rig.close()
+    }
+
+    /**
+     * A seek that lands long past what a range asked for leaves a hole at the start of the stretch
+     * the range owns, so the song is scanned again in one pass (#671). Joined, the map called the
+     * hole covered and was installed as complete.
+     */
+    @Test
+    fun aRangeWhoseSeekLandedPastItsWarmUpSendsTheSongToOnePass() {
+        val source = FakeSource(SyntheticSong.drumLoop(130f))
+        source.lateLandingMicros = 50_000_000L
+        val rig = Rig(source, workers = 2)
+        rig.target(ScanTarget(MediaItem("file:///long.flac"), TrackId(1), null, 130_000_000L, true))
+        rig.settleAll()
+        assertEquals(2, source.ranges.count { it != null }, "the song was not cut into two ranges")
+        assertTrue(source.ranges.last() == null, "a range that started 50 s late was joined: ${source.ranges}")
+        assertTrue(rig.installs.maps.single().map.complete)
+        rig.close()
+    }
+
+    /**
+     * A clipped item's duration counts from its clip's start, while the scan reads the file's own
+     * times, so its ranges are planned from the clip's start (#672). Planned from zero, the ranges of
+     * a track in the middle of an album's file fell before the track.
+     */
+    @Test
+    fun aClippedItemIsScannedInRangesOfItsClip() {
+        val source = FakeSource(SyntheticSong.drumLoop(200f))
+        val rig = Rig(source, workers = 2)
+        val track = MediaItem("file:///album.flac", clip = MediaClip(40.seconds, 170.seconds))
+        rig.target(ScanTarget(track, TrackId(1), null, 130_000_000L, true))
+        rig.settleAll()
+        val asked = source.ranges.filterNotNull()
+        assertEquals(2, asked.size, "the clip was not cut into two ranges: ${source.ranges}")
+        assertEquals(
+            listOf(0L, 40_000_000L + 65_000_000L - SongMapBuilder.WARM_UP_MICROS),
+            asked.map { it.from?.micros },
+            "each range starts its warm-up before the stretch of the clip it owns",
+        )
+        assertEquals(40_000_000L + 65_000_000L + SongMapBuilder.LOOK_AHEAD_MICROS, asked.first().until?.micros)
         rig.close()
     }
 }

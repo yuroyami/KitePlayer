@@ -60,6 +60,19 @@ public sealed class PlaybackError {
         override val message: String get() = "no data from ${redactUri(uri)} for $stalledFor"
     }
 
+    /**
+     * The media is protected by digital rights management, which this player does not play, by
+     * decision (#624). [system] names the protection when the media states it, such as Widevine,
+     * FairPlay, PlayReady or `SAMPLE-AES-CTR`, and is null when it does not. Refused before any of
+     * the media is decoded, so an application can say that protected content is not supported, or
+     * hand the item to a platform player, rather than show noise.
+     */
+    public data class DrmUnsupported(val uri: String, val system: String? = null) : PlaybackError() {
+        override val message: String
+            get() = "${redactUri(uri)} is protected" + (system?.let { " by $it" } ?: "") +
+                ", and digital rights management is not supported"
+    }
+
     /** The bytes were reached and are not media the demuxer recognises. */
     public data class NotMedia(val uri: String, val detail: String? = null) : PlaybackError() {
         override val message: String
@@ -413,8 +426,8 @@ public sealed class PlaybackWarning {
      * converts at all.
      *
      * A renderer can also report a limit of its own conversion, through
-     * [io.github.yuroyami.kiteplayer.spi.RendererEvent.ColorApproximated]: the web canvas, for
-     * example, shows HDR without tone mapping. That one arrives when the first such frame is drawn.
+     * [io.github.yuroyami.kiteplayer.spi.RendererEvent.ColorApproximated], which arrives when the
+     * first frame it cannot draw exactly is drawn.
      */
     public data class ColorApproximated(val detail: String) : PlaybackWarning() {
         override val message: String get() = "colour approximated: $detail"
@@ -539,6 +552,16 @@ public sealed class PlaybackWarning {
 
         override val fields: Map<String, String>
             get() = super.fields + ("segmentUid" to segmentUid)
+    }
+
+    /**
+     * The picture controls of [KitePlayer.setVideoAdjustments] are set, and the attached [renderer]
+     * does not draw them, so the picture shows as decoded (#610). Told once for each renderer while
+     * the controls are other than the neutral ones. The snapshot still reports what was set.
+     */
+    public data class PictureControlsUnavailable(val renderer: String) : PlaybackWarning() {
+        override val message: String
+            get() = "the picture controls are set, and the renderer $renderer does not draw them"
     }
 
     /**

@@ -57,6 +57,14 @@ internal class ScriptedTarget(snapshot: PlayerSnapshot = PlayerSnapshot(), progr
         snapshot.value = snapshot.value.copy(subtitlePosition = value)
     }
 
+    /** The inset the controls asked for, which the snapshot never shows (#648). */
+    var insetAsked: Float = 0f
+
+    override fun setControlsInset(bottom: Float) {
+        record("inset $bottom")
+        insetAsked = bottom
+    }
+
     override suspend fun next() = record("next")
     override suspend fun previous() = record("previous")
     override suspend fun selectTrack(kind: TrackKind, track: TrackId?) = record("select $kind $track")

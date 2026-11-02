@@ -142,8 +142,15 @@ class AppKitVideoRendererTest {
         assertEquals(0, ledger.doubleCloseCount, "a frame with two owners is a use after free waiting to happen")
         assertEquals(0, ledger.liveCount, "a frame stranded in a slot is a leaked decoder buffer")
 
-        delay(200)
-        val threadsAfter = liveThreadCount()
+        // The system winds a finished thread down on its own time, slower on a busy machine, so the
+        // count is read until it settles or three seconds pass. A leak keeps close to a hundred more.
+        var threadsAfter = liveThreadCount()
+        var waited = 0
+        while (threadsAfter > threadsBefore + 4 && waited < 3_000) {
+            delay(100)
+            waited += 100
+            threadsAfter = liveThreadCount()
+        }
         assertTrue(
             threadsAfter <= threadsBefore + 4,
             "closing a renderer must end its conversion thread: $threadsBefore threads before " +
@@ -1142,7 +1149,7 @@ class AppKitVideoRendererTest {
         override val generation: Generation = Generation.Initial,
         override val duration: Pts? = null,
         override val pixelFormat: PlayerPixelFormat = PlayerPixelFormat.Yuv420p,
-        override val colorSpace: ColorSpaceInfo = ColorSpaceInfo.guessFor(16),
+        override val colorSpace: ColorSpaceInfo = ColorSpaceInfo.guessFor(16, 16),
         override val hardwareSurface: Nothing? = null,
         override val rotationDegrees: Int = 0,
         private val ledger: LeakLedger,

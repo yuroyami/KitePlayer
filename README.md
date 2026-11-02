@@ -44,7 +44,7 @@ device has one) a hardware decoder. Here is what each platform gives you today:
 
 | | Android | iOS | macOS | Desktop JVM | Web |
 | --- | :---: | :---: | :---: | :---: | :---: |
-| **Hardware decoding** | H.264, HEVC | H.264, HEVC, AV1 | H.264, HEVC, AV1 | On a Mac | |
+| **Hardware decoding** | H.264, HEVC, VP9, AV1 | H.264, HEVC, AV1 | H.264, HEVC, AV1 | On a Mac, and Direct3D 11 on Windows | |
 | **HDR on an HDR screen** | In `KitePlayerView` | ✓ | ✓ | | |
 | **HLS and DASH** | ✓ | ✓ | ✓ | ✓ | In a web worker |
 | **Video in** | Compose, `View` | Compose, `UIView` | AppKit | Compose, AWT | `<canvas>` |
@@ -52,7 +52,9 @@ device has one) a hardware decoder. Here is what each platform gives you today:
 | **Picture-in-picture** | ✓ | ✓ | ✓ | A floating window | ✓ |
 
 An empty cell means the player falls back to something else: software decoding, or HDR tone mapped
-for a standard screen. The engine alone also builds for Linux and Windows native, tvOS and watchOS,
+for a standard screen. On Android, VP9 and AV1 decode in hardware through the view's direct
+MediaCodec path, and H.264 and HEVC through FFmpeg as well. The Direct3D 11 route on Windows is on
+by default but has not yet run on a real Windows GPU, which #101 tracks. The engine alone also builds for Linux and Windows native, tvOS and watchOS,
 where your app supplies the missing parts ([Platforms](#platforms) lists them).
 
 > [!NOTE]
@@ -74,8 +76,15 @@ commonMain.dependencies {
 }
 ```
 
+This page describes `main`, which is ahead of 0.3.0. Three parts are marked *not released yet*:
+Matroska editions with linked files, 360 degree video, and `kiteplayer-compose` on the web. They
+come with the next release, and code that uses them does not compile against 0.3.0.
+
 You don't install FFmpeg (it comes inside the artifacts), and there is no Gradle plugin to apply.
-On Android, every artifact needs `minSdk` 26. To build a smaller stack of your own, the
+On Android, every artifact needs `minSdk` 26, and your app must compile against SDK 37.2 or later
+(`compileSdk` 37 with minor API level 2), or the Android Gradle plugin refuses the build when it
+checks the AAR metadata. The Compose, OkHttp and KiteFFmpeg artifacts that KitePlayer brings in
+ask for 37 on their own. To build a smaller stack of your own, the
 [module contract](docs/module-contract.md) explains what each module brings in.
 
 ### What else you need
@@ -278,8 +287,9 @@ player.setVolume(0.8f)
 
 // Every audio, video and subtitle track of the open item
 val tracks = player.state.value.tracks
-val french = tracks.audio.first { it.language == "fr" }
-player.selectTrack(TrackKind.Audio, french.id)
+// isLanguage matches every spelling a container uses, such as fr, fra and fre
+val french = tracks.audio.firstOrNull { it.isLanguage("fr") }
+if (french != null) player.selectTrack(TrackKind.Audio, french.id)
 ```
 
 Collect `player.state` for the status, the tracks and every setting, and `player.progress` for the
@@ -295,9 +305,10 @@ The player can also:
 - step frame by frame and take screenshots
 - record what plays into a Matroska file, without re-encoding
 - play Matroska editions, including ordered chapters that take a season's opening and ending from
-  other files ([Editions and linked files](docs/media-sources.md#editions-and-linked-files))
+  other files ([Editions and linked files](docs/media-sources.md#editions-and-linked-files)),
+  *not released yet*
 - show a 360 degree video as a view that your app turns with a drag or with the phone's motion
-  ([360 degree video](docs/spherical-video.md))
+  ([360 degree video](docs/spherical-video.md)), *not released yet*
 
 [Controlling the player](docs/player-api.md) lists every call by area.
 
@@ -329,7 +340,7 @@ KitePlayer reads these subtitle formats:
 - ASS and SSA, drawn by libass exactly as authored, including signs and karaoke
 - SubRip, WebVTT and TTML
 - image subtitles from Blu-ray, DVD and DVB, and DVB teletext
-- closed captions inside broadcast video
+- closed captions inside broadcast video, CEA-608 and each CEA-708 service
 - synced lyrics
 
 Each subtitle is a track of the item. A subtitle file that you add during playback becomes a track
@@ -464,7 +475,7 @@ in a live grid.
 | **iOS** | ✓ | ✓ | ✓ |
 | **Desktop JVM** | ✓ | ✓ | ✓ |
 | **macOS** (native) | ✓ | | |
-| **Web** (`wasmJs`) | ✓ | ✓ | |
+| **Web** (`wasmJs`) | ✓ | ✓ (not released yet) | |
 | **Linux and Windows** (native) | No audio output | | |
 
 - On iOS, the artifacts target `iosArm64` and `iosSimulatorArm64`, with no `iosX64`.
@@ -473,10 +484,10 @@ in a live grid.
 - On Linux and Windows native, KitePlayer has no audio output and no HTTPS. `KitePlayer()` throws
   there, and `KitePlayer.isAvailable` is false. Pass `KiteFFmpegMediaBackend()` and your own
   `OutputBackend` to `KitePlayer.create`.
-- On the web, `kiteplayer-compose` draws the video inside Compose's own WebGL context, so it needs
-  a browser with WebGL2. Clipping, alpha and other Compose content apply to it as on the other
-  platforms. It runs the player on the page's main thread. The worker player draws on a canvas of
-  its own.
+- *Not released yet:* on the web, `kiteplayer-compose` draws the video inside Compose's own WebGL
+  context, so it needs a browser with WebGL2. Clipping, alpha and other Compose content apply to it
+  as on the other platforms. It runs the player on the page's main thread. The worker player draws
+  on a canvas of its own.
 - `kiteplayer` also compiles for `js`, where `KitePlayer()` reports that the target is not
   available.
 - The engine modules (`kiteplayer-core`, `kiteplayer-io` and `kiteplayer-subtitles`) also build
@@ -512,17 +523,27 @@ case in detail.
 ## A few limitations to know about
 
 - KitePlayer does not play media protected by DRM (digital rights management). It skips encrypted
-  DASH adaptation sets. When every audio and video set of a DASH manifest is encrypted, it refuses
-  the manifest with `DashUnsupportedException`.
-- The web build has no software AV1 decoder. The AV1 decoder (dav1d) needs threads, and the web
-  build runs on one thread.
+  DASH adaptation sets. When every audio and video set of a DASH manifest is encrypted, or an HLS
+  stream names a Widevine, PlayReady or FairPlay key or uses `SAMPLE-AES-CTR`, the open fails with
+  `PlaybackError.DrmUnsupported`, which names the system, so an app can say so or hand the item to
+  a platform player.
+- The web build plays a much smaller set of formats than the other platforms, because its codec
+  module is a much smaller FFmpeg. It opens MP4 and MOV, Matroska and WebM, MPEG-TS, MP3, raw AAC,
+  FLAC, HLS and WebVTT, and decodes H.264, HEVC, VP9, AAC, MP3, FLAC, Opus, Vorbis and PCM. So an
+  Ogg, WAV or AVI file does not open there, and AC-3, E-AC-3, DTS, TrueHD and ALAC audio and VP8,
+  MPEG-2 and MPEG-4 Part 2 video do not decode. There is no software AV1 decoder either: dav1d
+  needs threads, and the web build runs on one thread. The web
+  draws only text subtitles, which are SubRip, WebVTT, TTML, ASS, LRC and teletext; image
+  subtitles from Blu-ray, DVD and DVB and the captions inside the picture do not decode there.
+  [KiteFFmpeg's platform page](https://github.com/yuroyami/KiteFFmpeg/blob/main/docs/platforms.md)
+  has the full web list.
 - KitePlayer converts Dolby Vision profile 5 and 10.0 to HDR10 on the CPU. That keeps up at 1080p,
   but not at 4K.
 - Nobody has played sound with the desktop JVM build on a real Linux or Windows computer yet.
-- You can only look around in a 360 degree video where `KiteVideo` draws it. The native views that
-  `KitePlayerVideo` uses by default on Android, iOS and the desktop JVM show the whole frame flat,
-  so pass `path = KiteRenderPath.ComposeCanvas` there. On Android, the 360 degree view needs
-  Android 13 or later.
+- *Not released yet:* you can only look around in a 360 degree video where `KiteVideo` draws it. The
+  native views that `KitePlayerVideo` uses by default on Android, iOS and the desktop JVM show the
+  whole frame flat, so pass `path = KiteRenderPath.ComposeCanvas` there. On Android, the 360 degree
+  view needs Android 13 or later.
 
 Missing features and known bugs are [open issues](https://github.com/yuroyami/KitePlayer/issues).
 

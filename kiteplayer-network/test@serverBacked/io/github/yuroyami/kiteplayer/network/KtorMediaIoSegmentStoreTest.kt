@@ -224,6 +224,54 @@ class KtorMediaIoSegmentStoreTest {
         store.close()
     }
 
+    /**
+     * A 304 decides what is kept as a full answer does (#547): one that forbids storing, or that
+     * varies by everything, serves its reader once and leaves no entry, where it used to renew the
+     * old one as fresh for its new lifetime.
+     */
+    @Test
+    fun a304ThatForbidsStorageLeavesNoFreshEntry() = runBlocking {
+        for (forbids in listOf(
+            mapOf(HttpHeaders.CacheControl to "no-store, max-age=600"),
+            mapOf(HttpHeaders.CacheControl to "max-age=600", HttpHeaders.Vary to "*"),
+        )) {
+            log.store(emptyList())
+            start()
+            val body = bytes(20_000, seed = 30)
+            playlist("seg1.ts")
+            serve("/seg1.ts", body, mapOf(HttpHeaders.ETag to "\"v1\""))
+            val store = newStore()
+            assertContentEquals(body, play(store) { it.segment("/seg1.ts") })
+            serve("/seg1.ts", body, mapOf(HttpHeaders.ETag to "\"v1\"") + forbids)
+            assertContentEquals(body, play(store) { it.segment("/seg1.ts") }, "the 304 still serves its own reader")
+            assertContentEquals(body, play(store) { it.segment("/seg1.ts") })
+            assertEquals(
+                listOf(Seen("/seg1.ts"), Seen("/seg1.ts", ifNoneMatch = "\"v1\""), Seen("/seg1.ts")),
+                requests("/seg1.ts"),
+                "after a 304 with $forbids the entry was still used",
+            )
+            store.close()
+            cleanup()
+        }
+    }
+
+    /** A 304 that starts to vary by a request header retires the entry it answered for (#547). */
+    @Test
+    fun a304ThatStartsToVaryKeepsTheOldBytesFromAnotherRequest() = runBlocking {
+        start()
+        val body = bytes(20_000, seed = 31)
+        playlist("seg1.ts")
+        serve("/seg1.ts", body, mapOf(HttpHeaders.ETag to "\"v1\""))
+        val store = newStore()
+        assertContentEquals(body, play(store, mapOf("X-Device" to "phone")) { it.segment("/seg1.ts") })
+        serve("/seg1.ts", body, mapOf(HttpHeaders.ETag to "\"v1\"", HttpHeaders.CacheControl to "max-age=600", HttpHeaders.Vary to "X-Device"))
+        play(store, mapOf("X-Device" to "phone")) { it.segment("/seg1.ts") }
+        play(store, mapOf("X-Device" to "tv")) { it.segment("/seg1.ts") }
+        assertEquals(3, requests("/seg1.ts").size, "another value of the varied header read the unvaried bytes")
+        assertEquals(null, requests("/seg1.ts").last().ifNoneMatch, "the tv request asked about an entry that is not its own")
+        store.close()
+    }
+
     @Test
     fun aSegmentWithOnlyADateOfChangeIsFreshForATenthOfItsAgeAndThenAsks() = runBlocking {
         start()

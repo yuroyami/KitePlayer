@@ -62,7 +62,7 @@ internal class SongMapBuilder(
         if (format != this.format || jumped) {
             // A new analysis; what was learned so far stays in the map.
             closeKey(pts.micros)
-            analyzer = SpectrumAnalyzer(sampleRate = format.sampleRate).also { it.onAnalysis = ::collect }
+            analyzer = SpectrumAnalyzer(sampleRate = format.sampleRate).also { it.onScan = ::collect }
             this.format = format
         }
         checkNotNull(analyzer).feed(interleaved, frames, format, pts.micros)
@@ -71,17 +71,15 @@ internal class SongMapBuilder(
         coveredThrough = maxOf(coveredThrough, endMicros)
     }
 
-    private fun collect(frame: SpectrumFrame) {
+    private fun collect(frame: ScanReading) {
         if (!frame.hasTimestamp) return
         val at = frame.ptsMicros
         // Before the owned part this is warm-up, and after it another builder owns the answer.
         if (at < ownedFromMicros || at >= ownedUntilMicros) return
-        frame.programme?.let { programme ->
-            val window = programme.window
-            val meanSquare = programme.meanSquare
-            if (programme.availability == AnalysisAvailability.Ready && window?.referenceMicros != null && meanSquare != null) {
-                record(window.referenceMicros, if (programme.digitalSilence) SILENT_DB else toDb(meanSquare))
-            }
+        val reference = frame.programmeReferenceMicros
+        val meanSquare = frame.meanSquare
+        if (frame.programmeReady && reference != null && meanSquare != null) {
+            record(reference, if (frame.digitalSilence) SILENT_DB else toDb(meanSquare))
         }
         frame.structure?.let { batch -> for (index in 0 until batch.size) structure += batch[index] }
         followKey(frame.key, at)

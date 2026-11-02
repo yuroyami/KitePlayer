@@ -31,6 +31,7 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.test.swipe
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import io.github.yuroyami.kiteplayer.MediaItem
@@ -77,19 +78,20 @@ class ControlsUiTest {
         target: ScriptedTarget,
         layoutDirection: LayoutDirection = LayoutDirection.Ltr,
         visibility: ControlsVisibility? = null,
+        size: DpSize = DpSize(640.dp, 360.dp),
     ) {
         setContent {
             CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
                 val source = remember { target.source() }
                 val shown = visibility ?: remember { ControlsVisibility() }
                 ControlsTimeout(shown, source.snapshot.playRequested, 3.seconds)
-                Controls(source, Modifier.size(640.dp, 360.dp), shown, DefaultControlsStyle, DefaultControlsLabels, onFullScreen = {}, onPictureInPicture = {})
+                Controls(source, Modifier.size(size), shown, DefaultControlsStyle, DefaultControlsLabels, onFullScreen = {}, onPictureInPicture = {})
             }
         }
     }
 
     /** What the controls asked of the player, leaving out the subtitle lift that showing them makes. */
-    private fun ScriptedTarget.commands(): List<String> = callsSoFar().filterNot { it.startsWith("subtitles") }
+    private fun ScriptedTarget.commands(): List<String> = callsSoFar().filterNot { it.startsWith("inset") }
 
     /** A tap on the picture away from the buttons in its middle. */
     private fun SemanticsNodeInteraction.tapPicture() {
@@ -155,6 +157,43 @@ class ControlsUiTest {
         assertEquals(listOf("seek 50s KeyframeThenRefine", "play", "play"), target.commands())
     }
 
+    /** The label of the control that has focus. */
+    private fun ComposeUiTest.focusedLabel(): String? =
+        onNode(isFocused()).fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription)?.firstOrNull()
+
+    @Test
+    fun theVolumeSliderLetsFocusGoAtEitherEnd() = runComposeUiTest {
+        // A television's width, where the slider sits between the mute button and the menus (#666).
+        showControls(ScriptedTarget(everything), size = DpSize(960.dp, 540.dp))
+        onNodeWithContentDescription("Volume").requestFocus().assert(isFocused())
+        repeat(12) { onNode(isFocused()).performKeyInput { pressKey(Key.DirectionLeft) } }
+        onNodeWithContentDescription("Mute").assert(isFocused())
+    }
+
+    @Test
+    fun arrowKeysAloneReachMuteAndSpeedOnAWideScreen() = runComposeUiTest {
+        showControls(ScriptedTarget(everything), size = DpSize(960.dp, 540.dp))
+        onNodeWithContentDescription("Play").requestFocus().assert(isFocused())
+        val reached = mutableSetOf<String>()
+        fun press(key: Key, times: Int) = repeat(times) {
+            onNode(isFocused()).performKeyInput { pressKey(key) }
+            focusedLabel()?.let { reached += it }
+        }
+        press(Key.DirectionDown, 2)
+        press(Key.DirectionLeft, 24)
+        press(Key.DirectionRight, 36)
+        assertTrue(reached.containsAll(listOf("Mute", "Volume", "Audio", "Speed")), "the arrow keys reached only $reached")
+    }
+
+    @Test
+    fun theSeekBarDoesNotSeekPastEitherEnd() = runComposeUiTest {
+        val target = ScriptedTarget(everything, Progress(position = 0.seconds))
+        showControls(target)
+        onNodeWithContentDescription("Seek").requestFocus().assert(isFocused())
+        onNode(isFocused()).performKeyInput { pressKey(Key.DirectionLeft) }
+        assertEquals(emptyList(), target.commands(), "a left press at the start seeked")
+    }
+
     @Test
     fun `a tap and the timeout hide the controls alike`() = runComposeUiTest {
         mainClock.autoAdvance = false
@@ -163,7 +202,7 @@ class ControlsUiTest {
         showControls(target, visibility = visibility)
         mainClock.advanceTimeBy(100)
         onNodeWithContentDescription("Pause").assertExists()
-        assertTrue(target.snapshot.value.subtitlePosition < 1f, "the controls lifted no subtitles")
+        assertTrue(target.insetAsked > 0f, "the controls lifted no subtitles")
 
         mainClock.advanceTimeBy(3_100)
         val timedOut = hiddenState(target)
@@ -181,7 +220,34 @@ class ControlsUiTest {
         onNodeWithContentDescription("Pause").assertDoesNotExist()
         onNodeWithContentDescription("Seek").assertDoesNotExist()
         onNodeWithContentDescription("Show controls").assertExists()
-        return "subtitles at ${target.snapshot.value.subtitlePosition}"
+        return "subtitles above ${target.insetAsked}"
+    }
+
+    /** The controls stay as long as an accessibility service recommends, the user's time to take action (#653). */
+    @Test
+    fun theControlsWaitAsLongAsAScreenReaderAsks() = runComposeUiTest {
+        mainClock.autoAdvance = false
+        val target = ScriptedTarget(everything.copy(status = PlaybackStatus.Playing, playRequested = true))
+        val twoMinutes = object : androidx.compose.ui.platform.AccessibilityManager {
+            override fun calculateRecommendedTimeoutMillis(
+                originalTimeoutMillis: Long,
+                containsIcons: Boolean,
+                containsText: Boolean,
+                containsControls: Boolean,
+            ): Long = 120_000
+        }
+        setContent {
+            CompositionLocalProvider(androidx.compose.ui.platform.LocalAccessibilityManager provides twoMinutes) {
+                val source = remember { target.source() }
+                val shown = remember { ControlsVisibility() }
+                ControlsTimeout(shown, source.snapshot.playRequested, 3.seconds)
+                Controls(source, Modifier.size(640.dp, 360.dp), shown, DefaultControlsStyle, DefaultControlsLabels, onFullScreen = {}, onPictureInPicture = {})
+            }
+        }
+        mainClock.advanceTimeBy(5_000)
+        onNodeWithContentDescription("Pause").assertExists()
+        mainClock.advanceTimeBy(120_000)
+        onNodeWithContentDescription("Pause").assertDoesNotExist()
     }
 
     @Test
@@ -245,10 +311,13 @@ class ControlsUiTest {
         val visibility = ControlsVisibility()
         showControls(target, visibility = visibility)
         waitForIdle()
-        val lifted = target.snapshot.value.subtitlePosition
-        assertTrue(lifted < 1f && lifted > 0.5f, "lifted to $lifted")
+        val lifted = target.insetAsked
+        assertTrue(lifted > 0f && lifted < 0.5f, "lifted above $lifted")
+        // The user's own position is never touched, so a memento taken now saves no lift (#648).
+        assertEquals(1f, target.snapshot.value.subtitlePosition)
         runOnIdle { visibility.hide() }
         waitForIdle()
+        assertEquals(0f, target.insetAsked)
         assertEquals(1f, target.snapshot.value.subtitlePosition)
     }
 

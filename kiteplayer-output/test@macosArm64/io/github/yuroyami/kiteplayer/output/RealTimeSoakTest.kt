@@ -74,6 +74,8 @@ import kotlin.test.assertTrue
  * set, and the reason it matters is that this is a serial
  * human-supervised run on one machine, and a gate that silently spent twenty five minutes in the middle
  * of an ordinary test run would be turned off within a week. The gate command is in the report.
+ * Without the variable each case fails rather than passing over an assertion nobody made (#641), and
+ * `scripts/run-native-tests.sh`, the gate and CI leave the class out, so it reports as not run.
  *
  *     KPRT_DEVICE_SOAK=1 KPRT_DEVICE_SOAK_MINUTES=10 \
  *       ./kotlin test -m kiteplayer-output -p macosArm64 --include-classes='*RealTimeSoakTest'
@@ -140,15 +142,14 @@ class RealTimeSoakTest {
 
     private val enabled: Boolean get() = getenv("KPRT_DEVICE_SOAK") != null
 
+    private val NOT_ENABLED = "set KPRT_DEVICE_SOAK=1 to run the supervised device run; the gate leaves this class out"
+
     private val minutes: Double
         get() = getenv("KPRT_DEVICE_SOAK_MINUTES")?.toKString()?.toDoubleOrNull()?.takeIf { it > 0.0 } ?: 10.0
 
     @Test
     fun `the C callback holds its deadline through ten minutes of hard collector pressure`() = runBlocking {
-        if (!enabled) {
-            println("RealTimeSoakTest: skipped, set KPRT_DEVICE_SOAK=1 to run the supervised device run")
-            return@runBlocking
-        }
+        check(enabled) { NOT_ENABLED }
 
         val sink = CoreAudioSink()
         val handoff = sink.openWithRing(format) { negotiated -> negotiated.sampleRate / 2 }
@@ -228,10 +229,7 @@ class RealTimeSoakTest {
 
     @Test
     fun `the same run against a Kotlin callback is the negative control and must fail`() = runBlocking {
-        if (!enabled) {
-            println("RealTimeSoakTest: skipped, set KPRT_DEVICE_SOAK=1 to run the negative control")
-            return@runBlocking
-        }
+        check(enabled) { NOT_ENABLED }
 
         // Two arms of the same arrangement, and the second one is the correction an independent
         // review asked for. Both are the shape the C callback replaced: a real device, a Kotlin lambda reached
@@ -334,10 +332,7 @@ class RealTimeSoakTest {
 
     @Test
     fun `the Kotlin heap does not drift across ten minutes of playback`() = runBlocking {
-        if (!enabled) {
-            println("RealTimeSoakTest: skipped, set KPRT_DEVICE_SOAK=1 to run the heap drift check")
-            return@runBlocking
-        }
+        check(enabled) { NOT_ENABLED }
 
         // The fourth assertion, and corroboration only. It is weak evidence and
         // never the gate, for a reason this test cannot escape: it cannot attribute growth to the callback

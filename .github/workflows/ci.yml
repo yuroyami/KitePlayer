@@ -87,6 +87,13 @@ jobs:
         working-directory: kiteplayer-rt/native
         run: ./scripts/build-host.sh tsan && ./scripts/run-c-tests.sh tsan
 
+      # TSan grades atomicity, not ordering strength: every suite passed with the ring's release
+      # store and acquire load made relaxed. This reads the eighteen orderings from the source, and
+      # its negative controls prove it rejects each weakened one (#640).
+      - name: kiteplayer-rt, the ring's memory orderings
+        working-directory: kiteplayer-rt/native
+        run: ./scripts/source-discipline.sh && ./scripts/source-discipline.sh --prove-it-can-fail
+
       # The packing suite needs neither jni.h nor libass; the driver suite needs a real libass and
       # asserts pixels, which is why the formula is installed here.
       - name: Install libass for the driver suite
@@ -99,12 +106,20 @@ jobs:
   # The macOS host: the only runner that gets the real media, plus every ratchet.
   # ---------------------------------------------------------------------------------------------
   macos-host:
-    name: macOS arm64 (real media, JVM + native, the ratchets)
+    name: macOS arm64 (real media, native, the ratchets)
     runs-on: macos-latest
-    timeout-minutes: 120
+    # The ratchets compile every published module for every platform from a cold cache, and the
+    # native suites follow; two hours ran out inside the ratchets. The JVM suites are macos-jvm's.
+    # A cold cache has since made the ratchets alone take from 12 minutes to 2 h 18, and three hours
+    # ran out in the published-format consumer after them.
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      # Restored here and saved after the ratchets, not by actions/cache at the end of the job: that
+      # saves only when every step passed, so a job that kept failing later never saved one, and each
+      # run compiled every target's caches from nothing, two to three hours of the four.
+      - uses: actions/cache/restore@v4
+        id: toolchain
         with:
           path: |
             ~/Library/Caches/JetBrains/Kotlin
@@ -144,55 +159,47 @@ jobs:
         run: cat testmedia/MANIFEST.txt
 
       # The ratchets first, because a surface change should fail before a long test suite does.
-      # The klib and Android dumps read the compiled libraries, so every published module is built
-      # for every platform first. kitertCoupling holds the kitert boundary against a committed
-      # baseline.
+      # The klib and Android dumps read the compiled libraries, so every published module's main
+      # code is compiled for every platform first. Only the main code: `./kotlin build` compiles
+      # every test source set of every platform too, and on this runner that alone outlasted the
+      # job's two hours. Each platform's tests compile in the job that runs them. kitertCoupling
+      # holds the kitert boundary against a committed baseline.
       - name: The ratchets
         run: |
-          modules=$(scripts/published-modules.sh | sed 's/^/-m /' | tr '\n' ' ')
-          # shellcheck disable=SC2086 # one word per flag
-          ./kotlin build $modules
+          tasks=$(./kotlin show tasks)
+          compiles=$(for module in $(scripts/published-modules.sh); do
+            # A build plugin's own tasks, named like compileIosArm64@kitert-c, run as dependencies.
+            echo "$tasks" | grep -oE ":$module:compile[A-Za-z0-9]+(@[A-Za-z0-9-]+)?" | grep -vE '@|Test|Metadata|Release$'
+          done | sort -u)
+          # shellcheck disable=SC2086 # one word per task
+          ./kotlin task $compiles
           # Only a publish compiles the shared folders such as src@native. Compile them here, so an
           # error in one fails this job and not the release.
-          metadata=$(./kotlin show tasks | grep -oE ':kiteplayer[a-z-]*:compileMetadata[A-Za-z0-9]+' |
+          metadata=$(echo "$tasks" | grep -oE ':kiteplayer[a-z-]*:compileMetadata[A-Za-z0-9]+' |
             grep -v ':kiteplayer-sample' | sort -u)
           # shellcheck disable=SC2086 # one word per task
           ./kotlin task $metadata
           ./kotlin check abi klibAbi klibOnlyAbi androidAbi kitertCoupling duplicateClasses
           ./scripts/check-dependency-hygiene.sh
 
-      # Every module that HAS jvm tests. The ones that need the clips (ffmpeg, kiteplayer,
-      # compose-video, audioviz) are here rather than on Linux for the generator reason above.
-      # This job generated the clips above, so a test that finds one missing fails rather than
-      # skipping. One module per run, because the wall-clock gates must not compete with other
-      # modules' tests or compilation. audioviz runs through its gate script, which leaves out the
-      # long rendering surveys.
-      - name: JVM tests, every module that has them
-        env:
-          KITEPLAYER_REQUIRE_TESTMEDIA: "1"
-        run: |
-          . scripts/test-env.sh
-          for module in kiteplayer-core kiteplayer-subtitles kiteplayer-io kiteplayer-output \
-              kiteplayer-view kiteplayer-adaptive kiteplayer-network kiteplayer-ffmpeg kiteplayer-libass \
-              kiteplayer kiteplayer-compose-video kiteplayer-compose-ui kiteplayer-compose-interop \
-              kiteplayer-compose kiteplayer-sample-shared; do
-            ./kotlin test -m "$module" -p jvm
-          done
-          ./scripts/audioviz-tests.sh gate
+      # The device callback may reach no allocator, lock, log or framework call. Only the compiled
+      # objects can prove that, so this runs after the build above wrote the macOS, iOS device and
+      # iOS simulator archives the cinterop klibs embed, and its negative controls prove it rejects
+      # each forbidden call (#640). The build logic's own tests ride here too.
+      - name: Keep the toolchain the ratchets filled
+        if: always() && steps.toolchain.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/Library/Caches/JetBrains/Kotlin
+            ~/.konan
+          key: ${{ steps.toolchain.outputs.cache-primary-key }}
 
-      # One line per hot path gate (HotPathGate.kt in the core and FFmpeg JVM tests). A slow drift
-      # shows here long before it reaches a bound of ten times the measured median.
-      - name: The hot path numbers
-        if: always()
+      - name: The render audit of the audio callback, and the build logic tests
         run: |
-          {
-            echo "### Hot paths on $RUNNER_OS, median of seven runs"
-            echo
-            echo "| Hot path | Median | Bound |"
-            echo "|---|---:|---:|"
-            find build/reports -path '*/jvm/*.xml' -exec cat {} + 2>/dev/null |
-              grep -o 'HOTPATH | .*' | grep -v 'HotPathGateTest' | sed 's/^HOTPATH //' || true
-          } >> "$GITHUB_STEP_SUMMARY"
+          kiteplayer-rt/native/scripts/render-audit.sh
+          kiteplayer-rt/native/scripts/render-audit.sh --prove-it-can-fail
+          ./kotlin test -m build-support
 
       # The Kotlin/Native host target. kiteplayer-ffmpeg here is the format conformance matrix
       # against real clips, and kiteplayer plays one clip through KitePlayerPlatform.createOrNull().
@@ -205,9 +212,10 @@ jobs:
       - name: Kotlin/Native macosArm64 tests
         run: |
           . scripts/test-env.sh
+          # The device soaks fail without KPRT_DEVICE_SOAK and are left out (#641).
           ./kotlin test -p macosArm64 -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
             -m kiteplayer-rt -m kiteplayer-libass -m kiteplayer-adaptive -m kiteplayer-network \
-            -m kiteplayer-ffmpeg -m kiteplayer
+            -m kiteplayer-ffmpeg -m kiteplayer -m kiteplayer-view --exclude-classes='*SoakTest'
           ./scripts/run-native-tests.sh -m kiteplayer-output -p macosArm64 --exclude-set no-audio-hardware
 
       # An isolated external Gradle consumer must retain optional registration after Native
@@ -268,12 +276,119 @@ jobs:
           if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------------------------
+  # macOS: the JVM suites on the macOS library and real clips, beside macos-host. In one job with
+  # the ratchets and the native suites they outlasted three hours.
+  # ---------------------------------------------------------------------------------------------
+  macos-jvm:
+    name: macOS arm64 (real media, JVM)
+    runs-on: macos-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/JetBrains/Kotlin
+            ~/.konan
+          key: kotlin-macos-jvm-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
+          restore-keys: |
+            kotlin-macos-jvm-
+            kotlin-macos-host-
+
+      # kiteplayer-libass embeds the libass chain that KiteFFmpeg cross-builds, downloaded from the
+      # KiteFFmpeg release pinned in kiteplayer-libass/ass-chain.sha256. ffmpeg is the fixture
+      # generator below.
+      #
+      # THE GENERATOR IS PINNED TO A SERIES, the one the clips are recorded against
+      # (EXPECTED_FFMPEG_SERIES in testmedia.sh) and the one the player's own library is on. Some
+      # fixtures are oracles that FFmpeg itself produces, and an oracle from another major is a
+      # different answer. The strict check below refuses when the formula moves to the next major.
+      # brew update first: the runner image ships a formula index from the day it was built.
+      - name: Install the ffmpeg CLI the clips are recorded against
+        run: |
+          brew update --quiet
+          brew install ffmpeg
+          echo "$(brew --prefix ffmpeg)/bin" >> "$GITHUB_PATH"
+
+      - name: Check the ffmpeg the clips are pinned to
+        run: ./scripts/testmedia.sh --check-only
+        env:
+          TESTMEDIA_STRICT_FFMPEG: "1"
+
+      # Generated per run rather than cached: the cache would cost more to move than the clips
+      # cost to make.
+      - name: Generate the test clips
+        run: ./scripts/testmedia.sh
+
+      # Printed rather than verified, deliberately: a printed manifest turns "why did that matrix
+      # row behave differently on the runner" into a diff between two logs.
+      - name: The clips, and what made them
+        run: cat testmedia/MANIFEST.txt
+
+      # Every module that HAS jvm tests. The ones that need the clips (ffmpeg, kiteplayer,
+      # compose-video, audioviz) run here on the macOS library; ffmpeg and kiteplayer run on the
+      # Linux one too, in linux-jvm-android (#639).
+      # This job generated the clips above, so a test that finds one missing fails rather than
+      # skipping. One module per run, because the wall-clock gates must not compete with other
+      # modules' tests or compilation. audioviz runs through its gate script, which leaves out the
+      # long rendering surveys.
+      - name: JVM tests, every module that has them
+        env:
+          KITEPLAYER_REQUIRE_TESTMEDIA: "1"
+        run: |
+          . scripts/test-env.sh
+          for module in kiteplayer-core kiteplayer-subtitles kiteplayer-io kiteplayer-output \
+              kiteplayer-view kiteplayer-adaptive kiteplayer-network kiteplayer-ffmpeg kiteplayer-libass \
+              kiteplayer kiteplayer-compose-video kiteplayer-compose-ui kiteplayer-compose-interop \
+              kiteplayer-compose kiteplayer-sample-shared; do
+            ./kotlin test -m "$module" -p jvm
+          done
+          ./scripts/audioviz-tests.sh gate
+
+      # One line per hot path gate (HotPathGate.kt in the core and FFmpeg JVM tests). A slow drift
+      # shows here long before it reaches a bound of ten times the measured median.
+      - name: The hot path numbers
+        if: always()
+        run: |
+          {
+            echo "### Hot paths on $RUNNER_OS, median of seven runs"
+            echo
+            echo "| Hot path | Median | Bound |"
+            echo "|---|---:|---:|"
+            find build/reports -path '*/jvm/*.xml' -exec cat {} + 2>/dev/null |
+              grep -o 'HOTPATH | .*' | grep -v 'HotPathGateTest' | sed 's/^HOTPATH //' || true
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: The conformance report
+        if: always()
+        run: |
+          for report in kiteplayer-ffmpeg/build/reports/conformance/*.md; do
+            [ -f "$report" ] || continue
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-jvm-reports
+          path: |
+            build/reports/**
+            build/logs/**
+            testmedia/MANIFEST.txt
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------------------------
   # iOS, on the simulator, for the suites that do not need a device.
   # ---------------------------------------------------------------------------------------------
   ios-simulator:
     name: iOS simulator arm64 (device-free suites)
     runs-on: macos-latest
-    timeout-minutes: 60
+    # Eleven modules' simulator suites, the output suite, the device compile and the sample smoke:
+    # an hour ran out inside the audio visualiser's suite, which runs Compose graphics.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -288,19 +403,7 @@ jobs:
       # kiteplayer-output runs through scripts/run-native-tests.sh with the simulator-audio set:
       # the two CoreAudio classes that need a device in every test, and nine tests of
       # CoreAudioSinkTest. Its other five tests, the clock and refusal arms, run here.
-      - name: iosSimulatorArm64 tests
-        run: |
-          . scripts/test-env.sh
-          ./kotlin test -p iosSimulatorArm64 -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
-            -m kiteplayer-rt -m kiteplayer-view -m kiteplayer-adaptive -m kiteplayer-network \
-            -m kiteplayer-libass -m kiteplayer-audioviz -m kiteplayer
-          ./scripts/run-native-tests.sh -m kiteplayer-output -p iosSimulatorArm64 --exclude-set simulator-audio
-
-      - name: Compile the iOS device targets
-        run: |
-          ./kotlin build -p iosArm64 -m kiteplayer-core -m kiteplayer-output -m kiteplayer-ffmpeg \
-            -m kiteplayer-libass -m kiteplayer-view -m kiteplayer-audioviz
-
+      # Before the simulator tests: kiteplayer-compose-video's simulator set reads clips (#637).
       - name: Install the ffmpeg CLI the clips are recorded against
         run: |
           brew update --quiet
@@ -308,6 +411,20 @@ jobs:
           echo "$(brew --prefix ffmpeg)/bin" >> "$GITHUB_PATH"
       - name: Generate the test clips
         run: ./scripts/testmedia.sh
+
+      - name: iosSimulatorArm64 tests
+        run: |
+          . scripts/test-env.sh
+          ./kotlin test -p iosSimulatorArm64 -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
+            -m kiteplayer-rt -m kiteplayer-view -m kiteplayer-adaptive -m kiteplayer-network \
+            -m kiteplayer-libass -m kiteplayer-audioviz -m kiteplayer -m kiteplayer-compose-video
+          ./scripts/run-native-tests.sh -m kiteplayer-output -p iosSimulatorArm64 --exclude-set simulator-audio
+
+      - name: Compile the iOS device targets
+        run: |
+          ./kotlin build -p iosArm64 -m kiteplayer-core -m kiteplayer-output -m kiteplayer-ffmpeg \
+            -m kiteplayer-libass -m kiteplayer-view -m kiteplayer-audioviz
+
       - name: The iOS sample app, built, installed and launched in its smoke mode
         run: ./scripts/ios-sample-smoke.sh
 
@@ -382,7 +499,7 @@ jobs:
   linux-jvm-android:
     name: Linux x64 (JVM + Android host tests)
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -392,11 +509,51 @@ jobs:
           restore-keys: |
             kotlin-linux-jvm-android-
 
+      # A test folder for a platform that no job names compiles only when something pulls it in and
+      # never runs; 83 tests sat that way (#637). This fails on the next one, before any build.
+      - name: Every test folder is run by a job
+        run: python3 scripts/check-test-coverage.py
+
+      # The gate's em dash scan, which only the macOS gate ran (#640). The two Kotlin Toolchain
+      # wrappers are JetBrains' files, replaced at each toolchain upgrade.
+      - name: No em dash in tracked source
+        run: |
+          if git grep -n "$(printf '\342\200\224')" -- . ':!kotlin' ':!kotlin.bat'; then
+            echo "::error::Em dash found in tracked source."
+            exit 1
+          fi
+
       - name: JVM tests, media-free modules
         run: |
           . scripts/test-env.sh
           ./kotlin test -p jvm -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
             -m kiteplayer-output -m kiteplayer-view -m kiteplayer-adaptive -m kiteplayer-network
+
+      # The clips as the web job makes them, with the pinned series and the strict check, so the
+      # Linux x64 JNI library of the published KiteFFmpeg jar plays real media in CI (#639). Only
+      # macOS loaded a native library in a test before, so a Linux library that failed to load or
+      # to decode reached users with every job green.
+      - name: Install the ffmpeg CLI the clips are recorded against
+        run: |
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          brew install --quiet ffmpeg
+          echo "$(brew --prefix ffmpeg)/bin" >> "$GITHUB_PATH"
+
+      - name: Generate the test clips
+        run: ./scripts/testmedia.sh
+        env:
+          TESTMEDIA_STRICT_FFMPEG: "1"
+
+      # One module per run, as on macos-jvm, so the wall-clock gates do not compete. The job made
+      # the clips, so a test that finds one missing fails rather than skipping.
+      - name: JVM tests, media-backed modules on the Linux library
+        env:
+          KITEPLAYER_REQUIRE_TESTMEDIA: "1"
+        run: |
+          . scripts/test-env.sh
+          for module in kiteplayer-ffmpeg kiteplayer; do
+            ./kotlin test -m "$module" -p jvm
+          done
 
       - name: The hot path numbers
         if: always()
@@ -410,13 +567,15 @@ jobs:
               grep -o 'HOTPATH | .*' | grep -v 'HotPathGateTest' | sed 's/^HOTPATH //' || true
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # `-p android` runs the Android unit tests on the JVM, the Android host tests.
+      # `-p android` runs the Android unit tests on the JVM, the Android host tests. kiteplayer holds
+      # the media session's, and kiteplayer-ffmpeg the decoder choice's, which no job ran (#637).
       - name: Android host tests, media-free tests
         run: |
           . scripts/test-env.sh
           ./kotlin test -p android -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
             -m kiteplayer-output -m kiteplayer-compose-video -m kiteplayer-view -m kiteplayer-adaptive \
-            -m kiteplayer-network -m kiteplayer-audioviz -m kiteplayer-sample-shared -m kiteplayer-libass
+            -m kiteplayer-network -m kiteplayer-audioviz -m kiteplayer-sample-shared -m kiteplayer-libass \
+            -m kiteplayer -m kiteplayer-ffmpeg
 
       - name: No class compiled by two published modules
         run: |
@@ -425,7 +584,8 @@ jobs:
           ./kotlin build -p jvm -p android $modules
           ./kotlin check duplicateClasses
 
-      # The sample bundles the clip as an asset, so a placeholder stands in on this media-free runner.
+      # The sample bundles the clip as an asset; the clips step above made it, and a placeholder
+      # stands in should that step have been skipped.
       - name: Package the sample app for every Android ABI
         run: |
           mkdir -p testmedia
@@ -458,7 +618,9 @@ jobs:
   device-test-artifacts:
     name: Stage the artifacts for the device tests (macOS)
     runs-on: macos-latest
-    timeout-minutes: 90
+    # A publish compiles every platform of these modules and their dependencies; on a cold cache
+    # that took an hour on one run and outlasted ninety minutes on the next.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -490,7 +652,9 @@ jobs:
     needs: device-test-artifacts
     runs-on: ubuntu-latest
     timeout-minutes: 90
-    continue-on-error: true
+    # A red device test fails the run, and so stops a release that runs this file (#638). The job
+    # was report-only until it had been trusted; it has since been green on twenty runs in a row.
+    # The one allowance left is the second run of ReopenDeviceTest inside its step (#301).
     env:
       AVD_PACKAGE: system-images;android-35;google_apis;x86_64
       NEEDS_PUSHED_MEDIA: io.github.yuroyami.kiteplayer.NeedsPushedMedia
@@ -554,7 +718,19 @@ jobs:
           nohup emulator -avd kite -no-window -no-audio -no-boot-anim -no-snapshot \
             -gpu swiftshader_indirect -accel on > "$RUNNER_TEMP/emulator.log" 2>&1 &
 
-      # While the emulator boots: the Android native test binaries, and the device test APKs.
+      # While the emulator boots: the clips, which the sample app's test APK packs one of, then the
+      # Android native test binaries and the device test APKs.
+      - name: Install the ffmpeg CLI the clips are recorded against
+        run: |
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          brew install --quiet ffmpeg
+          echo "$(brew --prefix ffmpeg)/bin" >> "$GITHUB_PATH"
+
+      - name: Generate the test clips
+        run: ./scripts/testmedia.sh
+        env:
+          TESTMEDIA_STRICT_FFMPEG: "1"
+
       - name: Build the Android native test binaries and the device test APKs
         run: |
           for module in kiteplayer-core kiteplayer-subtitles kiteplayer-io kiteplayer-rt; do
@@ -590,19 +766,6 @@ jobs:
             "-Pandroid.testInstrumentationRunnerArguments.notAnnotation=$NEEDS_PUSHED_MEDIA" \
             :io:connectedAndroidTest :output:connectedAndroidTest :ffmpeg:connectedAndroidTest \
             :libass:connectedAndroidTest :compose-video:connectedAndroidTest
-
-      - name: Install the ffmpeg CLI the clips are recorded against
-        if: ${{ !cancelled() && steps.boot.outcome == 'success' }}
-        run: |
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          brew install --quiet ffmpeg
-          echo "$(brew --prefix ffmpeg)/bin" >> "$GITHUB_PATH"
-
-      - name: Generate the test clips
-        if: ${{ !cancelled() && steps.boot.outcome == 'success' }}
-        run: ./scripts/testmedia.sh
-        env:
-          TESTMEDIA_STRICT_FFMPEG: "1"
 
       # The clips go into each test APK's own external storage, as root, with the APK's uid.
       # ReopenDeviceTest runs once more after a failure (#301), and both runs count.
@@ -785,7 +948,7 @@ jobs:
   linux-native:
     name: Linux x64 (Kotlin/Native, executed not just linked)
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -803,9 +966,27 @@ jobs:
           ./kotlin test -p linuxX64 -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
             -m kiteplayer-output -m kiteplayer-rt -m kiteplayer-libass -m kiteplayer
 
-      # kiteplayer-ffmpeg's suites read clips, so this runner links its test binary only.
-      - name: Link the FFmpeg backend for linuxX64
-        run: ./kotlin task :kiteplayer-ffmpeg:linkLinuxX64TestDebug
+      # kiteplayer-ffmpeg's suites read clips, so the clips are made as the JVM job makes them and
+      # the suite runs on the Linux native FFmpeg it links (#639). It was linked and never run: its
+      # first run here passed 376 of 378, the two others failing on a reference clip that ffmpeg 6.1
+      # drew a step apart from the clip it describes, since fixed in testmedia.sh.
+      - name: Install the ffmpeg CLI the clips are recorded against
+        run: |
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          brew install --quiet ffmpeg
+          echo "$(brew --prefix ffmpeg)/bin" >> "$GITHUB_PATH"
+
+      - name: Generate the test clips
+        run: ./scripts/testmedia.sh
+        env:
+          TESTMEDIA_STRICT_FFMPEG: "1"
+
+      - name: linuxX64 tests, the FFmpeg backend on real media
+        env:
+          KITEPLAYER_REQUIRE_TESTMEDIA: "1"
+        run: |
+          . scripts/test-env.sh
+          ./kotlin test -p linuxX64 -m kiteplayer-ffmpeg
 
       - name: Link the androidNativeArm32 test binaries
         run: |
@@ -864,7 +1045,7 @@ jobs:
     name: Linux arm64 (Kotlin/Native, executed on an arm64 runner)
     needs: linux-arm64-link
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -872,14 +1053,25 @@ jobs:
           name: linux-arm64-test-binaries
           path: linux-arm64-tests
 
-      # kiteplayer-ffmpeg's binary is linked above but not run: its suites read clips.
-      - name: linuxArm64 tests, media-free modules
+      # kiteplayer-ffmpeg's suites read clips, so this runner makes them, with Ubuntu's ffmpeg 6.1,
+      # whose clips the suite passes against, and runs the Linux arm64 FFmpeg it links (#639). The
+      # strict check is off because this series is not the pinned one; the MANIFEST says so.
+      - name: Install the ffmpeg CLI and generate the test clips
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q ffmpeg
+          ./scripts/testmedia.sh
+
+      - name: linuxArm64 tests, the media-free modules and the FFmpeg backend on real media
         run: |
           set +e
           mkdir -p "$RUNNER_TEMP/test-logs"
+          # The FFmpeg backend's tests write their pictures and sound beside the clips, in build/,
+          # which a job that downloads its binaries and builds nothing does not have.
+          mkdir -p "$GITHUB_WORKSPACE/build"
           status=0
           for module in kiteplayer-core kiteplayer-subtitles kiteplayer-io kiteplayer-output \
-                        kiteplayer-rt kiteplayer-libass kiteplayer; do
+                        kiteplayer-rt kiteplayer-libass kiteplayer kiteplayer-ffmpeg; do
             binary="$GITHUB_WORKSPACE/linux-arm64-tests/$module.kexe"
             if [ ! -f "$binary" ]; then
               echo "::error::$module: no test binary at $binary"
@@ -907,7 +1099,7 @@ jobs:
           print("### linuxArm64 test binaries, executed on an arm64 runner\n")
           print("| Test binary | Tests | Failed | Skipped |\n|---|---:|---:|---:|")
           for module in ("kiteplayer-core", "kiteplayer-subtitles", "kiteplayer-io", "kiteplayer-output",
-                         "kiteplayer-rt", "kiteplayer-libass", "kiteplayer"):
+                         "kiteplayer-rt", "kiteplayer-libass", "kiteplayer", "kiteplayer-ffmpeg"):
               path = os.path.join(os.environ["RUNNER_TEMP"], "test-logs", f"{module}.log")
               text = open(path, errors="replace").read() if os.path.exists(path) else ""
               ran = re.search(r"^\[=+\] (\d+) tests? from .* ran", text, re.M)

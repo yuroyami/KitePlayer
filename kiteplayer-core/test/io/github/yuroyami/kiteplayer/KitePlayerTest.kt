@@ -326,6 +326,31 @@ class KitePlayerTest {
         fixed.close()
     }
 
+    /**
+     * A finished HLS playlist that names a start point with EXT-X-START starts there (#627), and
+     * the item's own start position wins over it. FFmpeg applies the tag only to a live playlist,
+     * so the player started such a stream at zero.
+     */
+    @Test
+    fun theMediaSuggestedStartIsWhereAnOpenStartsUnlessTheItemNamesOne() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 30_000_000, suggestedStartUs = 12_000_000))
+        val player = player(harness)
+        player.open(MediaItem("scripted://suggested-start"))
+        harness.run(3.seconds)
+        val at = player.position()
+        assertTrue(at >= 11.seconds && at <= 13.seconds, "the open must start near the 12 s the media asks for, sat at $at")
+        assertTrue(player.warningHistory().none { it.warning is PlaybackWarning.StartPositionIgnored })
+        harness.close()
+
+        val own = CoreHarness(this, script = MediaScript(durationUs = 30_000_000, suggestedStartUs = 12_000_000))
+        val ownPlayer = player(own)
+        ownPlayer.open(MediaItem("scripted://own-start", startPosition = 4.seconds))
+        own.run(3.seconds)
+        val ownAt = ownPlayer.position()
+        assertTrue(ownAt >= 3.seconds && ownAt <= 5.seconds, "the item's own start must win, sat at $ownAt")
+        own.close()
+    }
+
     @Test
     fun `picture controls are validated and published and reach the attached renderer`() = runTest {
         val harness = CoreHarness(this)

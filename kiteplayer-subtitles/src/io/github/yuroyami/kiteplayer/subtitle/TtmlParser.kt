@@ -70,7 +70,7 @@ public object TtmlParser {
 
     internal fun read(text: String, work: TtmlWork, maxCues: Int = MAX_FILE_CUES): List<SubtitleCue.Text> {
         val root = try {
-            XmlMini.parse(text.removePrefix("﻿"), XmlMini.Limits(keepContent = true))
+            XmlMini.parse(text, XmlMini.Limits(keepContent = true))
         } catch (refusal: XmlSyntaxException) {
             throw IllegalArgumentException("not a well formed TTML document: ${refusal.message}", refusal)
         }
@@ -97,7 +97,8 @@ public object TtmlParser {
         private var lastEnd = 0L
 
         fun cues(): List<SubtitleCue.Text> {
-            root.child("body")?.let { body -> walk(body, 0L, null, emptyList(), null) }
+            val preserved = root.attr("space") == "preserve"
+            root.child("body")?.let { body -> walk(body, 0L, null, emptyList(), null, preserved) }
             // A visible background that shows with no text is a cue of its own for the region's time.
             for (def in regions.values) {
                 val region = def.region ?: continue
@@ -113,9 +114,19 @@ public object TtmlParser {
 
         /**
          * Times [element] inside a parent that began at [parentBegin] and ends at [parentEnd], with
-         * [chain] the styles of its ancestors in order and [regionId] the region they named.
+         * [chain] the styles of its ancestors in order, [regionId] the region they named and
+         * [preserve] the `xml:space` they hold. Answers where [element] ends: its own end, else the
+         * end its children give it (#492), as TTML's implicit duration of a container is, so a
+         * sequence of containers with no times of their own goes on past the first one.
          */
-        private fun walk(element: XmlElement, parentBegin: Long, parentEnd: Long?, chain: List<Effect>, regionId: String?): Long? {
+        private fun walk(
+            element: XmlElement,
+            parentBegin: Long,
+            parentEnd: Long?,
+            chain: List<Effect>,
+            regionId: String?,
+            preserve: Boolean,
+        ): Long? {
             if (paragraphs >= maxCues) return null
             val begin = parentBegin + (element.attr("begin")?.let(clock::micros) ?: 0L)
             var end = element.attr("end")?.let { parentBegin + clock.micros(it) }
@@ -124,30 +135,52 @@ public object TtmlParser {
             if (end != null && parentEnd != null) end = minOf(end, parentEnd)
             val ownChain = chain + effectOf(element)
             val ownRegion = element.attr("region") ?: regionId
+            val ownPreserve = spaceOf(element, preserve)
             if (element.name == "p") {
-                paragraph(element, begin, end, ownChain, ownRegion)
+                paragraph(element, begin, end, ownChain, ownRegion, ownPreserve)
                 return end
             }
             val sequence = element.attr("timeContainer") == "seq"
             var childBegin = begin
+            var lastChildEnd: Long? = null
             for (child in element.children) {
                 if (child.name !in TIMED) continue
-                val childEnd = walk(child, if (sequence) childBegin else begin, end, ownChain, ownRegion)
+                val childEnd = walk(child, if (sequence) childBegin else begin, end, ownChain, ownRegion, ownPreserve)
+                if (childEnd != null) lastChildEnd = maxOf(lastChildEnd ?: childEnd, childEnd)
                 // In a sequence each child begins where the one before it ended.
                 if (sequence) childBegin = childEnd ?: break
             }
-            return end
+            return end ?: lastChildEnd
         }
 
-        private fun paragraph(element: XmlElement, begin: Long, end: Long?, chain: List<Effect>, regionId: String?) {
+        /** The `xml:space` of [element]: its own `preserve` or `default`, else [inherited]. */
+        private fun spaceOf(element: XmlElement, inherited: Boolean): Boolean = when (element.attr("space")) {
+            "preserve" -> true
+            "default" -> false
+            else -> inherited
+        }
+
+        private fun paragraph(element: XmlElement, begin: Long, end: Long?, chain: List<Effect>, regionId: String?, preserve: Boolean) {
             paragraphs++
+            if (end == null || end <= begin) return
             val def = regionId?.let(regions::get)
             var look = Look.DEFAULT.with(def?.effect, space)
             for (effect in chain) look = look.with(effect, space)
             val runs = ArrayList<Run>()
-            runs(element, look, ownBackground(chain.last()), preserve = element.attr("space") == "preserve", runs)
-            val spans = spansOf(runs)
-            if (end == null || end <= begin || spans.isEmpty()) return
+            runs(element, look, ownBackground(chain.last()), preserve, begin, end, runs)
+            // A span with times of its own shows only then, so the paragraph is a cue for each
+            // stretch in which the same spans show (#492): it used to show every span throughout.
+            val edges = (listOf(begin, end) + runs.flatMap { listOf(it.begin, it.end) }).filter { it in begin..end }.distinct().sorted()
+            for (index in 0 until edges.lastIndex) {
+                val from = edges[index]
+                val until = edges[index + 1]
+                val spans = spansOf(runs.filter { it.begin <= from && it.end >= until })
+                if (spans.isEmpty()) continue
+                cueOf(from, until, spans, runs, look, def)
+            }
+        }
+
+        private fun cueOf(begin: Long, end: Long, spans: List<StyledSpan>, runs: List<Run>, look: Look, def: RegionDef?) {
             if (end > lastEnd) lastEnd = end
             val region = def?.region
             // TTML starts a line at its start edge, but a paragraph with no region and no alignment
@@ -173,23 +206,41 @@ public object TtmlParser {
             )
         }
 
-        /** The runs inside [element], in order, with each span in its own look and `br` as a line break. */
-        private fun runs(element: XmlElement, look: Look, background: Int?, preserve: Boolean, out: MutableList<Run>) {
+        /**
+         * The runs inside [element], in order, with each span in its own look and `br` as a line
+         * break, each shown from [begin] to [end] or within it for a span with times of its own.
+         */
+        private fun runs(
+            element: XmlElement,
+            look: Look,
+            background: Int?,
+            preserve: Boolean,
+            begin: Long,
+            end: Long,
+            out: MutableList<Run>,
+        ) {
             for (node in element.content) {
                 when (node) {
                     is XmlText -> {
                         val text = if (preserve) node.value else node.value.replace(WHITESPACE, " ")
-                        if (text.isNotEmpty()) out += Run(text, look, background)
+                        if (text.isNotEmpty()) out += Run(text, look, background, begin, end, preserve)
                     }
                     is XmlElement -> when (node.name) {
-                        "br" -> out += Run("\n", look, background)
+                        "br" -> out += Run("\n", look, background, begin, end, preserve)
                         "span" -> {
                             val effect = effectOf(node)
+                            // A span's times count from its parent's begin, and stay inside it.
+                            val spanBegin = (begin + (node.attr("begin")?.let(clock::micros) ?: 0L)).coerceIn(begin, end)
+                            val spanEnd = (node.attr("end")?.let { begin + clock.micros(it) }
+                                ?: node.attr("dur")?.let { spanBegin + clock.micros(it) }
+                                ?: end).coerceIn(spanBegin, end)
                             runs(
                                 node,
                                 look.with(effect, space),
                                 ownBackground(effect) ?: background,
-                                preserve || node.attr("space") == "preserve",
+                                spaceOf(node, preserve),
+                                spanBegin,
+                                spanEnd,
                                 out,
                             )
                         }
@@ -219,8 +270,20 @@ public object TtmlParser {
     /** A region of the document: its box, or null when it cannot be placed, and the styles it gives its text. */
     private class RegionDef(val region: CueRegion?, val effect: Effect, val layer: Int, val begin: Long?, val end: Long?)
 
-    /** A run of text in one look; a line break when [text] is a newline. */
-    private class Run(val text: String, val look: Look, val background: Int?)
+    /**
+     * A run of text in one look; a line break when [text] is a newline. It shows from [begin] to
+     * [end], and [preserve] keeps its spaces as written, under `xml:space="preserve"`.
+     */
+    private class Run(
+        val text: String,
+        val look: Look,
+        val background: Int?,
+        val begin: Long = 0L,
+        val end: Long = Long.MAX_VALUE,
+        val preserve: Boolean = false,
+    ) {
+        fun with(text: String): Run = Run(text, look, background, begin, end, preserve)
+    }
 
     /**
      * [runs] as spans: each line with its spaces collapsed and trimmed, no blank line at either end,
@@ -237,7 +300,7 @@ public object TtmlParser {
                     lines += line
                     line = ArrayList()
                 }
-                if (part.isNotEmpty()) line += Run(part, run.look, run.background)
+                if (part.isNotEmpty()) line += run.with(part)
             }
         }
         lines += line
@@ -266,11 +329,19 @@ public object TtmlParser {
         return spans
     }
 
-    /** One line's runs with each run of spaces made one, across runs, and the ends trimmed. */
+    /**
+     * One line's runs with each run of spaces made one, across runs, and the ends trimmed. A run
+     * under `xml:space="preserve"` keeps its spaces as written, at an end of the line too (#492).
+     */
     private fun tidyLine(runs: List<Run>): List<Run> {
         val collapsed = ArrayList<Run>(runs.size)
         var lastWasSpace = false
         for (run in runs) {
+            if (run.preserve) {
+                collapsed += run
+                lastWasSpace = run.text.endsWith(' ')
+                continue
+            }
             val text = buildString {
                 for (c in run.text) {
                     if (c == ' ' && lastWasSpace) continue
@@ -278,14 +349,14 @@ public object TtmlParser {
                     lastWasSpace = c == ' '
                 }
             }
-            if (text.isNotEmpty()) collapsed += Run(text, run.look, run.background)
+            if (text.isNotEmpty()) collapsed += run.with(text)
         }
-        while (collapsed.isNotEmpty()) {
-            val head = collapsed.first().let { Run(it.text.trimStart(), it.look, it.background) }
+        while (collapsed.isNotEmpty() && !collapsed.first().preserve) {
+            val head = collapsed.first().let { it.with(it.text.trimStart()) }
             if (head.text.isEmpty()) collapsed.removeAt(0) else { collapsed[0] = head; break }
         }
-        while (collapsed.isNotEmpty()) {
-            val tail = collapsed.last().let { Run(it.text.trimEnd(), it.look, it.background) }
+        while (collapsed.isNotEmpty() && !collapsed.last().preserve) {
+            val tail = collapsed.last().let { it.with(it.text.trimEnd()) }
             if (tail.text.isEmpty()) collapsed.removeAt(collapsed.lastIndex) else { collapsed[collapsed.lastIndex] = tail; break }
         }
         return collapsed
@@ -638,7 +709,8 @@ public object TtmlParser {
                 var seconds = g[1].toDouble() * 3600 + g[2].toDouble() * 60 + g[3].toDouble()
                 if (g[4].isNotEmpty()) seconds += "0${g[4]}".toDouble()
                 if (g[5].isNotEmpty()) seconds += g[5].toDouble() / frameRate
-                if (g[6].isNotEmpty()) seconds += "0.${g[6]}".toDouble() / frameRate
+                // Sub-frames are a whole count, at ttp:subFrameRate of them in each frame (#628).
+                if (g[6].isNotEmpty()) seconds += g[6].toDouble() / subFrameRate / frameRate
                 return (seconds * 1_000_000).roundToLong()
             }
             OFFSET_TIME.matchEntire(value)?.let { match ->

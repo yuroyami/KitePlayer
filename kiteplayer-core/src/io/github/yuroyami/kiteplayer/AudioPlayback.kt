@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.internal.AudioPipeline
+import io.github.yuroyami.kiteplayer.internal.CEILING_MAX
 import io.github.yuroyami.kiteplayer.internal.GAIN_MAX
 import io.github.yuroyami.kiteplayer.internal.KotlinAudioRing
 import io.github.yuroyami.kiteplayer.internal.AudioRingHandle
@@ -300,10 +301,16 @@ public class AudioPlayback(
     /**
      * Opens the device and sizes the ring for it.
      *
+     * A closed instance does not open again: a new audio path needs a new `AudioPlayback`.
+     *
      * @param request the format the decoder produces.
      * @return the format the device accepted. Resample to this before calling [submit].
+     * @throws IllegalStateException when this path is already open, or is closed.
      */
     public suspend fun open(request: AudioFormat): AudioFormat {
+        // Before the sink: close cleared the ring, so an open after it passed the check below and
+        // opened the closed sink again, which on Apple succeeded and could never be released (#693).
+        check(!closed) { "this AudioPlayback is closed; a new audio path needs a new one" }
         check(ring == null) { "this audio path is already open" }
 
         // The device and the ring, opened together, because the ring's format is the format the device
@@ -429,7 +436,10 @@ public class AudioPlayback(
      * The stage is keyed on [sourceFormat] against the format it was built for, so a decoder that
      * changes format mid-stream gets a new one on the buffer that changed rather than one buffer
      * later. The old one plays out what it still holds first. When [sourceFormat] already is the
-     * negotiated format every stage is a copy and the cost is one pass over the samples.
+     * negotiated format and every setting is at its default, the samples go to the ring with no copy.
+     *
+     * [interleaved] is never written to, whatever the settings, so one array may be submitted again
+     * and again, and the caller may reuse it once this call returns.
      *
      * @param pts the media timestamp of the first frame, when the decoder gave one. Passing null is
      *        normal for buffers that continue from the previous one.
@@ -705,13 +715,32 @@ public class AudioPlayback(
         if (playout.micros >= joinBoundaryUs) join = Join.Crossed
     }
 
+    /**
+     * Applies the device's latest anchor to the clock.
+     *
+     * An anchor dates the end of what the device took, which can be a whole buffer ahead of the
+     * ear. A running clock reads it in time; a paused clock reads its anchor as it is, so an anchor
+     * still to come moved the paused position that far ahead of the sound, 130 ms on Android
+     * (#646). A paused clock therefore takes the anchor as it stands now, its time less what is
+     * still to play before it, and only when that moves it back: a device paused before it played
+     * what it was handed never plays it, while at the end of a drain or a fade the clock ran on
+     * past the last sound and the anchor brings it back to it.
+     */
     private fun anchorLocked() {
         val anchor = ring?.anchor() ?: return
         anchorFloorNanos?.let { floor ->
             if (anchor.audibleAtNanos <= floor) return
             anchorFloorNanos = null
         }
-        playoutClock.setAt(anchor.pts, generation, anchor.audibleAtNanos)
+        if (playoutClock.paused) {
+            val now = clock.nanos()
+            val toCome = (anchor.audibleAtNanos - now).coerceAtLeast(0L) / 1_000L
+            val heardNow = anchor.pts.micros - toCome
+            val frozen = playoutClock.nowOrNull()?.micros
+            if (frozen == null || heardNow < frozen) playoutClock.setAt(Pts(heardNow), generation, now)
+        } else {
+            playoutClock.setAt(anchor.pts, generation, anchor.audibleAtNanos)
+        }
         // The clock reads up to the device's latency behind the anchor, so lines are kept for a
         // generous margin before it.
         timeline.prune(anchor.pts.micros - TIMELINE_KEEP_US)
@@ -1115,12 +1144,23 @@ public class AudioPlayback(
      */
     private fun pushGain(): Unit = synchronized(lock) {
         val target = if (wantedMute.value) 0f else wantedVolume.value * fadeLevel.value * duckLevel.value
-        val ringGain = if (sink.setDeviceGain(if (target < 1f) target else 1f)) {
+        val deviceGain = if (target < 1f) target else 1f
+        val takesGain = sink.setDeviceGain(deviceGain)
+        val ringGain = if (takesGain) {
             if (target > 1f) target else 1f
         } else {
             target
         }
         ring?.setGain(ringGain)
+        // A sound turned down after the ring has room above full scale here, as far as the device
+        // takes it and as far as its gain brings it back within full scale (#612).
+        val ceiling = if (takesGain) {
+            val room = sink.deviceGainHeadroom.takeIf { it.isFinite() }?.coerceIn(1f, CEILING_MAX) ?: 1f
+            if (deviceGain > 0f) minOf(room, 1f / deviceGain).coerceAtLeast(1f) else room
+        } else {
+            1f
+        }
+        ring?.setCeiling(ceiling)
     }
 
     /**

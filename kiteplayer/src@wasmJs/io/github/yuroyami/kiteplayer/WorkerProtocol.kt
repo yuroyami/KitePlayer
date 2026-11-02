@@ -526,6 +526,17 @@ private fun encodeDemux(demux: DemuxPolicy): JsAny = record {
     put("program", demux.program)
     put("edition", demux.edition)
     if (!demux.orderedEditions) put("orderedEditions", false)
+    // The page's own choice of variant, which went missing here and left the worker on its canvas's fit (#599).
+    put(
+        "fit",
+        demux.fit?.let { fit ->
+            record {
+                put("drawnWidth", fit.drawnWidth)
+                put("drawnHeight", fit.drawnHeight)
+                if (fit.showsHdr) put("showsHdr", true)
+            }
+        },
+    )
 }
 
 private fun encodeSnapshot(snapshot: PlayerSnapshot): JsAny = record {
@@ -675,6 +686,7 @@ private fun encodeVariant(variant: StreamVariant): JsAny = record {
     put("height", variant.height)
     put("frameRate", variant.frameRate)
     put("codecs", variant.codecs)
+    if (variant.hdr) put("hdr", true)
 }
 
 private fun encodeProgram(program: MediaProgram): JsAny = record {
@@ -938,6 +950,11 @@ private fun encodeError(error: PlaybackError): JsAny = record {
             put("uri", error.uri)
             put("detail", error.detail)
         }
+        is PlaybackError.DrmUnsupported -> {
+            kind("DrmUnsupported")
+            put("uri", error.uri)
+            put("system", error.system)
+        }
         is PlaybackError.NoPlayableStream -> {
             kind("NoPlayableStream")
             put("streams", error.streams.encodeEach(::encodeTrack))
@@ -1113,6 +1130,10 @@ private fun encodeWarning(warning: PlaybackWarning): JsAny = record {
             put("segmentUid", warning.segmentUid)
             put("chapter", warning.chapter)
             put("detail", warning.detail)
+        }
+        is PlaybackWarning.PictureControlsUnavailable -> {
+            kind("PictureControlsUnavailable")
+            put("renderer", warning.renderer)
         }
         is PlaybackWarning.ProjectionUnavailable -> {
             kind("ProjectionUnavailable")
@@ -1418,6 +1439,9 @@ private fun decodeDemux(o: JsAny): DemuxPolicy = DemuxPolicy(
     program = o.int("program"),
     edition = o.int("edition"),
     orderedEditions = o.bool("orderedEditions") ?: true,
+    fit = o.child("fit")?.let { fit ->
+        VariantFit(drawnWidth = fit.int("drawnWidth"), drawnHeight = fit.int("drawnHeight"), showsHdr = fit.flag("showsHdr"))
+    },
 )
 
 private fun decodeProbe(o: JsAny): ProbeDepth = when (o.str("t")) {
@@ -1564,6 +1588,7 @@ private fun decodeVariant(o: JsAny): StreamVariant = StreamVariant(
     height = o.int("height"),
     frameRate = o.num("frameRate"),
     codecs = o.str("codecs"),
+    hdr = o.flag("hdr"),
 )
 
 private fun decodeProgram(o: JsAny): MediaProgram = MediaProgram(
@@ -1756,6 +1781,7 @@ private fun decodeError(o: JsAny): PlaybackError? = when (o.str("t")) {
     )
     "SourceStalled" -> PlaybackError.SourceStalled(o.str("uri") ?: missing("uri"), o.micros("stalledFor") ?: missing("stalledFor"))
     "NotMedia" -> PlaybackError.NotMedia(o.str("uri") ?: missing("uri"), o.str("detail"))
+    "DrmUnsupported" -> PlaybackError.DrmUnsupported(o.str("uri") ?: missing("uri"), o.str("system"))
     "NoPlayableStream" -> PlaybackError.NoPlayableStream(o.list("streams", ::decodeTrack).orEmpty())
     "DecoderFailed" -> PlaybackError.DecoderFailed(o.str("codec") ?: missing("codec"), o.str("detail").orEmpty())
     "RuntimeCompromised" -> PlaybackError.RuntimeCompromised(o.str("detail").orEmpty())
@@ -1824,6 +1850,7 @@ private fun decodeWarning(o: JsAny): PlaybackWarning? {
         "ThumbnailsUnreadable" -> PlaybackWarning.ThumbnailsUnreadable(o.str("uri").orEmpty(), o.str("reason").orEmpty())
         "AudioSourceUnreadable" -> PlaybackWarning.AudioSourceUnreadable(o.str("uri").orEmpty(), o.str("reason").orEmpty())
         "EditionPartLeftOut" -> PlaybackWarning.EditionPartLeftOut(o.str("segmentUid").orEmpty(), o.str("chapter"), o.str("detail").orEmpty())
+        "PictureControlsUnavailable" -> PlaybackWarning.PictureControlsUnavailable(o.str("renderer") ?: missing("renderer"))
         "ProjectionUnavailable" -> PlaybackWarning.ProjectionUnavailable(
             o.child("kind")?.let(::decodeProjectionKind) ?: missing("kind"),
             detail,

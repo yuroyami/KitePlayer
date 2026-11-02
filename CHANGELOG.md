@@ -6,12 +6,63 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 **Versioning policy:** KitePlayer is pre-1.0. During 0.x, minor versions may contain breaking API changes; they are called out here when they happen. From 1.0 on, breaking changes only land in major versions.
 
-The entries under a version are drafted by `scripts/release-notes.sh`, which groups the commits since the previous tag by their prefix. `publish.yml` refuses a version that has no section here.
+The entries under a version are written by hand. `scripts/release-notes.sh` gives a starting point: the commits since the previous tag, grouped by a subject prefix where one exists, and every commit that changed a public API dump, each of which is a change an entry must name, and a break when a member went away. `publish.yml` refuses a version that has no section here.
 
 ## [Unreleased]
 
 ### Added
 
+- The desktop's native video view draws a view into a 360 degree video (#587), so a desktop app no
+  longer has to switch `KitePlayerVideo` to `KiteRenderPath.ComposeCanvas` to look around in one.
+  `AwtCanvasVideoRenderer` has no shader, so it remaps each picture on the processor through a map
+  of the view built at each turn, with a bilinear blend, at the picture's own detail when that is
+  less than the canvas's; `docs/spherical-video.md` has what it costs. A turn while paused redraws
+  at once, and flat video draws exactly as before.
+- The CEA-708 caption services inside broadcast video, read in Kotlin on every platform (#678).
+  Each service that carries data is a subtitle track of its own, Service 1, Service 2 and so on,
+  beside CC1, so a second language that a broadcast sends only in 708 shows. Each visible window is
+  a cue at its anchor, with its pen's colours, background, italics, underline, size and edge. The
+  FFmpeg backend lists the new `Cea708DecoderFactory` from `kiteplayer-subtitles`, and a custom
+  backend can list it too; its tracks have the codec `CEA708_CAPTIONS_CODEC`. Pictures whose bytes
+  carry CEA-708 and no CEA-608 no longer make a CC1 that never shows anything.
+- `systemSubtitleStyle`, `systemSubtitleScale` and `KitePlayer.followSystemCaptionStyle` read the
+  caption look the viewer set for every app, under Accessibility on Android and Apple (#679): the
+  text, background and window colours, the edge, the typeface on Android and the text size. The
+  follow handle applies them through `setSubtitleStyle` and `setSubtitleScale` and again at every
+  change, from `CaptioningManager` on Android and MediaAccessibility on iOS and macOS, until it is
+  closed. Nothing is followed unless the app asks, so `SubtitleConfig` is unchanged.
+- A signed build provenance attestation for every file a release run of `publish.yml` hands out
+  (#684): each jar, klib, AAR, POM and module metadata file on Maven Central, the web zips and the
+  bill of materials on the release page. It names the workflow file, the commit and the run, so
+  `gh attestation verify <file> --repo yuroyami/KitePlayer --signer-workflow
+  yuroyami/KitePlayer/.github/workflows/publish.yml` checks who built a file as well as what it
+  holds. Signatures are not attested, as each is made again for Central. The checksums and the bill
+  of materials stay. A version published from the maintainer's machine carries no attestation, and
+  0.3.0 and earlier carry none.
+- `PlaybackWarning.PictureControlsUnavailable` and `VideoRenderer.appliesAdjustments` (#610). The
+  picture controls of `setVideoAdjustments` were stored, published and silently dropped on the
+  desktop canvas view, the web canvas and Apple's picture in picture layer. The player now warns
+  once for such a renderer while controls other than the neutral ones are set. A renderer answers
+  true by default; the three named answer false. Android's direct MediaCodec path does not
+  answer yet.
+- `PlaybackError.DrmUnsupported(uri, system)` refuses media protected by digital rights management
+  before any of it decodes (#624). An HLS stream that names a Widevine, PlayReady or FairPlay key,
+  in a master's `EXT-X-SESSION-KEY` or a media playlist's `EXT-X-KEY`, or uses `SAMPLE-AES-CTR`,
+  used to play as noise or end with `SourceUnavailable`, because FFmpeg took the first bytes of a
+  PSSH box as an AES key and read `SAMPLE-AES-CTR` as no encryption. A DASH manifest whose every
+  picture and sound set is encrypted now fails with the same error in place of
+  `DashUnsupportedException`, so code that caught that exception for encryption must catch
+  `PlaybackException` instead. The error names the system, so an app can say that protected
+  content is not supported, or hand the item to a platform player.
+- `KitePlayerJava` has a future for every call that suspends again (#650): `setItemDetailsAsync`,
+  `readPlaylistAsync`, `openPlaylistAsync`, `thumbnailAtAsync`, `seekToSubtitleLineAsync` and
+  `stepSubtitleDelayAsync`, the last two in milliseconds. `KitePlayerJava.marker(positionMillis,
+  id)` builds the `Marker` that `setMarkers` takes, which Java could not build. A test now fails
+  when a suspending call of `KitePlayer` has no future.
+- `TrackInfo.isLanguage(tag)` tells whether a track is in a language, in any spelling of it (#633).
+  A container writes French as `fr`, `fra` or `fre`, so the README's old sample, which compared
+  `language` with `==`, found no track in most MP4, MPEG-TS and Matroska files and threw. The
+  sample now uses `isLanguage` and `firstOrNull`.
 - 360 degree video (#460). A video track whose file states a projection lists it as
   `TrackInfo.projection`, and `KiteVideo` draws an equirectangular picture, or a tile of one, as a
   view into its sphere on the desktop JVM, iOS, Android 13 and later and the web.
@@ -35,7 +86,8 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   `linkedFiles`, and a part whose file is missing is left out with the new warning
   `PlaybackWarning.EditionPartLeftOut`. `DemuxPolicy.orderedEditions = false` plays every edition
   plainly, as FFmpeg does. A backend reports editions through three new defaulted members of
-  `PlayerMediaSource`: `segmentUid`, `editions` and `fromSegmentTime`.
+  `PlayerMediaSource`: `segmentUid`, `editions` and `fromSegmentTime`. `MediaItem` and
+  `DemuxPolicy` each gain a field, which changes their generated data-class methods, so recompile.
 - Compose video on the web: `kiteplayer-compose-video`, `kiteplayer-compose-ui` and
   `kiteplayer-compose` publish a `wasmJs` variant, so a Compose Multiplatform app can keep them in
   `commonMain` (#125). `KiteVideo` draws the picture inside Compose's own WebGL2 context through
@@ -46,6 +98,20 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ### Changed
 
+- `readPlaylist` and `openPlaylist` now fail with `PlaybackException`, as every other call does
+  (#654). A list that cannot be read gives `PlaybackError.SourceUnavailable`, and one that is no
+  playlist, names nothing or names itself gives `PlaybackError.NotMedia`, with the reason in its
+  detail. They threw `PlaylistException` before, a plain exception that a `catch` of
+  `PlaybackException` let through, so an app that followed the documented rule crashed on a 404.
+  `PlaylistException` is deprecated and no call throws it, so code that catches it must catch
+  `PlaybackException` instead.
+- On Android the volume now applies after the AudioTrack's own buffer, so a change, mute and the
+  sleep timer's fade are heard almost at once rather than about 170 ms late (#14). The sink passes
+  the volume up to 1 to `AudioTrack.setVolume`, and the ring keeps only a boost above 1, so at a
+  volume below 1 a sample past full scale is now limited before the track turns it down, as at
+  full volume. A sink takes the volume after its own buffer through the new defaulted
+  `AudioSink.setDeviceGain`; every sink but Android's answers false and keeps the whole volume in
+  the ring, as before.
 - The build moved from Gradle to the Kotlin Toolchain (`./kotlin`). The group, the artifact IDs and
   the klib names stay the same. A Gradle consumer still finds each platform through the published
   module metadata. These changes are visible to a consumer:
@@ -148,6 +214,275 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ### Fixed
 
+- A signed address that expires while a stream plays in `KitePlayerWorker` is renewed as on the
+  other targets (#546, #453). The worker's reader threw a 401 or 403 as a plain failure and kept
+  no refusal, so the player never opened the item again for a fresh address and warned nothing.
+  It now hands the refusal over, and the player warns `AddressRenewed` and opens the item again.
+- A seek whose reads a server refused for an expired address opens the item again and lands where
+  it was going, on every target (#546). It failed the player instead, as `SourceUnavailable` when
+  the container seek threw and as `Internal` when a later step did, because only a read during
+  playback looked for a refusal.
+- A picture the Apple sample buffer renderer composes, for subtitles, a turn, a crop or the flash
+  guard, says what it holds (#489). The composed BGRA buffer carried no colour tags, so the layer
+  guessed, and HDR rolled down to standard range was shown without its BT.709 and gamma 2.2 tags.
+  Each composed buffer now carries the tags the Metal layer would get for the same picture, a
+  pooled buffer drops those of its last use, and text drawn on black is tagged sRGB. The frame's
+  HDR title and scene peaks now reach the composer, so it rolls off from the scene's peak as the
+  plain Metal path does instead of from the assumed 1000 nits.
+- A live AV1, VP9 or VP8 stream on Android decodes on the phone's hardware decoder (#643). The
+  FFmpeg route, which a live stream takes, named MediaCodec only for H.264 and HEVC, so the others
+  decoded on the CPU although KiteFFmpeg builds their MediaCodec decoders and the view's own path
+  used them for files. A phone without such a decoder falls back to software as before. VP9 on
+  macOS and AV1 on Windows wait for a measurement on a Mac and for KiteFFmpeg's hardware builds.
+- A Metal renderer gives its layer back in standard range when it closes (#689). A view keeps one
+  Metal layer across a detach or a change of player, and a renderer that closed while showing HDR
+  left it half-float with its extended-range flag, so the next renderer inherited HDR state it
+  never asked for, kept the half-float format as its standard one, and tone mapped to the
+  display's headroom under `HdrPolicy.ToneMap`. Close now restores the format, colour space and
+  flag the layer had, the saved colour space holds its own reference, and the composer gets a
+  headroom only while the renderer asked for extended range.
+- The sample buffer renderer, which picture in picture uses on iOS and macOS, recovers a failed
+  layer (#597). A layer that failed after an interruption or a media services reset showed
+  nothing more, while the sound played on and every frame counted as shown. Each frame now reads
+  the layer's status first, flushes a failed layer, and on iOS 17 and macOS 14 one whose renderer
+  asks for a flush, before it enqueues. The renderer says `SurfaceLost` once with the layer's
+  error and `SurfaceAvailable` when a frame finds it rendering, and the frame that met the failure
+  is not counted as shown.
+- A native player view shows the picture of a player built on an FFmpeg backend the app made
+  itself (#601). `KitePlayer(config)` gave the views their default renderer only when the config
+  named no media backend, so `KiteFFmpegMediaBackend(decoderOptions = ...)`, as the
+  `PlaybackProfile` example builds it, played sound only, and whether a view worked hung on what
+  else the app had built first. It now gives it for any `KiteFFmpegMediaBackend`. `KitePlayer.create`
+  still gives nothing, as its KDoc and the views' now say, and a view with a player and no renderer
+  logs that once through `KiteLog`. The `PlaybackProfile` example builds with `KitePlayer(config)`.
+- Broadcast H.264 and HEVC show their CC1 captions on Android's hardware video path (#611).
+  MediaCodec, on the view's own route and on FFmpeg's, gives its pictures no caption data, so the
+  track never existed there. A lane whose hardware decoder gives none now reads the A/53 captions
+  from the SEI of each packet, framed with start codes or with lengths, and hands each picture the
+  captions up to its time, so they keep the order they were written in. A software decoder, and a
+  hardware one whose pictures carry their own, reads no packet.
+- A `MediaItem.videoFilter` and the deinterlacer apply on the Android views too (#609). The engine
+  asked the renderer's own decoders first, and they apply neither, so on Android the view's
+  MediaCodec decoder played a cropped item uncropped and an interlaced one undeinterlaced, with no
+  warning, and a filtered item under `HwdecPolicy.Require` played in hardware. A stream that needs
+  a filter now decodes on the backend's decoder with a `HardwareDecodeUnavailable` warning that
+  names the renderer's decoder, and under `Require` its video track is refused, as the KDoc of
+  `videoFilter` and `deinterlace` say.
+- A media session attached while the app is off screen applies its background policy at once
+  (#690). The background handling assumed the app was on screen when it attached, so a player
+  started from the resume card decoded video nobody saw until the app came to the screen and left
+  it once. Android reads the activities and iOS the application state at attach, and
+  `ContinueAudio` parks the video then. `PauseAll` leaves a player that already plays alone and
+  pauses from the next time the app leaves, as the KDoc of `attachMediaSession` and of the policy
+  now say.
+- The Android video Surface's frame rate request follows a new item and a new speed (#598). It was
+  measured once per Surface, from media time, so a 50 fps clip after a 23.976 fps film of the same
+  aspect, or the film at 2x, kept the film's request, and a TV box that matches its mode to the
+  request dropped about half the frames. A new stream is measured again, the speed counts, a steady
+  run that disagrees asks again, and taking the picture off withdraws the request.
+- The Metal renderer reads left-sited chroma half a luma pixel to the right, not the left (#604).
+  The siting correction of #118 moved the read the wrong way, so the colour of almost every H.264,
+  HEVC and AV1 frame sat a whole luma column right of its edge instead of half a column, and the
+  top and bottom sitings were inverted the same way. The offset now follows libplacebo and mpv, and
+  its test moved to the common tests, so every platform runs it.
+- `InterruptionPolicy.duckOnTransient = false` and `duckVolume` work on Android 8 and later
+  (#647). The focus request told Android the player would not pause when ducked, so the system
+  ducked music and film itself, to a level of its own, and never told the player. The request now
+  asks to hear the duckable loss, and the policy decides between its own duck and a pause. The
+  default policy still ducks, now to its `duckVolume` of a fifth. Apple platforms duck in the
+  system and ignore both options, which their KDoc now says.
+- Dither on Android's GPU video path no longer draws a dot grid over smooth gradients (#605). Its
+  Bayer formula left out the XOR of the two positions and put the coarse bits on top, so 56 of the
+  64 thresholds differed from the Metal matrix and a value just above a level raised one block of
+  pixels in the same corner of every 8 by 8 tile. The shader now computes the Metal matrix, and the
+  device test checks it against that literal table rather than against the shader's own formula.
+- A D-pad can reach the mute button of the default Compose controls on a screen 480 dp or wider
+  (#666). The volume slider took every left and right press, even at silence or at full, so
+  focus never left it sideways and a television remote could not reach mute. The slider and the
+  seek bar now take a key only when it moves them, and leave it to focus at either end.
+- One `AudioVizState` can be shown by several `KiteAudioViz` views (#674). Both views stepped the
+  state's own drawings, so each drawing stepped twice a frame and restarted. The first view now
+  draws the state's drawings, which the director and the controls act on, and each further view
+  draws copies of its own that follow it, with the same settings. The warning a second view logged
+  is gone.
+- An adaptive stream opened before its view described an HDR display moves to its HDR rung once
+  the display does, and back to SDR when it stops showing HDR (#600). The open took the SDR rung,
+  and every later step kept the range that played. The step down to a view's size landed earlier.
+- A finished HLS media playlist that names a start point with `EXT-X-START` starts there (#627).
+  FFmpeg applies the tag only to a live playlist, so such a stream started at zero. A negative
+  offset counts back from the end, and an item's own `startPosition` still wins.
+  `PlayerMediaSource.suggestedStart` is new and answers null by default. A master playlist's media
+  playlists are not read for the tag yet.
+- The default controls of the native views stay up as long as the accessibility settings ask
+  (#653). On Android they hid three seconds after the last touch whatever time to take action the
+  user set, and now wait the time the accessibility manager recommends for controls; on iOS they
+  stay while VoiceOver runs. The Compose controls already did this.
+- A byte range segment of an HLS or DASH stream costs one HTTP request instead of two (#619). The
+  Ktor reader probed every address from byte 0 and asked again from the segment's offset at the
+  first read, so each segment of a byte range ladder, of a `SegmentBase` DASH item and of a ranged
+  TTML subtitle segment cost a probe and, on HTTP/1.1, a new connection. `MediaIo` has a new
+  `openRelated(uri, offset, length)`, behind `KitePlayerInternalApi`, whose default opens and
+  seeks, and the Ktor reader answers it with one ranged request. `DashTransport.openRange` and the
+  `openRange` parameter of `DashDoor.readerIfManifest` carry it for DASH. An address the segment
+  store keeps still opens whole, because the store holds whole responses.
+- On Android the peak limiter no longer squeezes loud passages at a lowered volume (#612). The
+  track applies the volume after its buffer there, so the ring played at unity and limited every
+  volume as full volume: a downmix peak of 1.6 at half volume was pulled down by about 4 dB,
+  though the track would have halved it to 0.8. `AudioSink.deviceGainHeadroom` is new, and the
+  ring now limits at the lower of what the device's volume brings back within full scale and what
+  the device takes above it, about 3 dB for Android's float track and nothing for its 16-bit
+  fallback, which clips on the way in. Both rings carry the same rule.
+- The README now says that an Android app must compile against SDK 37.2 or later (#613). Every
+  Android artifact of 0.3.0 carries that floor in its AAR metadata, and the install section named
+  only `minSdk` 26, so an app on `compileSdk` 36 failed its first build with no warning.
+- The libass adapter libraries leave the chain's debug info out (#615). It was about a third of
+  each published library, 1.1 MB for each Android ABI, and an app built without the NDK shipped
+  it as it was. The symbol tables stay, so a native crash still names its functions.
+- An untagged picture 1280 or more pixels wide is guessed to be BT.709 whatever its height (#606),
+  as mpv and libplacebo guess. A 720p film in a scope ratio, 1280x536 with no colour tags, played
+  with the BT.601 matrix, so reds lost about 9 percent and its ASS subtitle colours were matched to
+  the same wrong matrix. `ColorSpaceInfo.guessFor(width, height)` is new, and `guessFor(height)` is
+  deprecated. On Android a guessed matrix no longer reaches the hardware decoder as a declared
+  colour standard, so the decoder keeps Android's own default for an untagged stream. Frames from
+  the FFmpeg backend still arrive with KiteFFmpeg's own guess, which changes in that repository.
+- The byte cache no longer allocates a whole chunk for every upstream read (#649). A network
+  reader answers about 8 KiB a read, and the cache made a 256 KiB array for each one and walked
+  thousands of small chunks on every read, so a 20 Mbit/s stream over https made about 82 MB of
+  garbage a second. The window now fills whole chunks from one reused buffer and finds the
+  cursor's chunk by arithmetic: reading 64 MiB in 8 KiB answers allocated 2,113 MiB before and
+  64 MiB after. The Ktor reader also takes every byte its response has already buffered in one
+  read, so the bridge to FFmpeg runs one round per buffer instead of one per 8 KiB.
+- The default controls no longer save their subtitle lift into a memento (#648). They kept text
+  above the control bar by moving the user's own subtitle position, so a memento taken while
+  they showed, which is every pause, saved the lifted value, and after a restore the subtitles
+  never came back down. The controls in Compose and in the native views now tell the engine how
+  much of the output they cover, an inset kept apart from the application's own safe area and
+  from the snapshot.
+- An HLS or DASH stream with its picture off now moves to its cheapest variant, and back to the
+  one before when the picture is on again (#595). With `setVideoEnabled(false)` or the media
+  session's background policy the video lane only dropped what arrived, so the stream kept
+  downloading its top rung and stepped up further. Where the sound is a download of its own, as
+  in DASH and in HLS with audio renditions, the picture is now not read at all while it is off,
+  and is read again as it comes back.
+- A live fMP4 HLS stream with two or more variants no longer stops at its first advertisement
+  (#621). A reload that gained a second `EXT-X-MAP`, as server-side ad insertion writes, threw in
+  the variant switch, and FFmpeg dropped the playlist for good. The reload is now served up to
+  that map, so the stream plays on the segments before it, holds its variant while the map stays
+  in the window, and goes on once a reload reads whole again. The advertisement itself is not
+  played; a switch that serves one map per discontinuity is the fuller fix.
+- A clipped item no longer shows a picture from before its clip's start (#456). A keyframe seek
+  to an unaligned start showed the keyframe before it, and a backward step at the clip's first
+  picture showed the picture before the clip and reported success. Both now keep to the item: the
+  keyframe seek shows the first picture inside it, and the backward step is refused.
+- A cue sheet track with a pregap no longer leaves that pregap out of every item (#456). The
+  track before ended at the pregap's start and the track ended at its own start, so the seconds
+  between played in neither, and the two tracks no longer met for the gapless join of one file.
+  The track before now ends where the next one starts, as the documented policy says.
+- `captureFrame(withSubtitles = true)` now returns one moment: the frame's pixels with the
+  subtitles, the subtitle look and the viewer's turn that went with that frame (#73). The pixels
+  were copied as the frame was shown, but the rest was read when the caller resumed, so a caller
+  that resumed late could get an earlier picture with a later moment's text and rotation. The
+  engine now samples all of it as it copies the pixels.
+- TTML subtitles keep their timing and their spaces (#492). A span with times of its own showed
+  for its whole paragraph, a sequence of containers with no times of their own stopped after the
+  first, and `xml:space="preserve"` was collapsed anyway and not inherited from the elements
+  around a paragraph. A paragraph is now a cue for each stretch in which the same spans show, a
+  container ends where its children end, and preserved spaces and line feeds stay as written. The
+  same reader serves TTML in HLS and DASH.
+- An external MicroDVD file in UTF-16 now loads (#492). FFmpeg's probe of its raw bytes threw,
+  and the throw ended the read before the text the player had already decoded was tried.
+- The XSPF playlist reader now reads the list as XML (#490). It searched the text with patterns,
+  so a list whose elements carry a namespace prefix read as no list, a `</track>` inside CDATA or
+  a comment cut its track short, `xml:base` was ignored, and a location beside a list on disk
+  kept its `%20` escapes, though XSPF makes a location a URI reference. An M3U path is still
+  read as the path it is.
+- The segment store no longer renews a stored segment as fresh when the server's `304` says
+  `no-store`, says `Vary: *`, or starts to vary by a request header (#547). The `304` renewed the
+  old record whatever its headers said, so a server could not take caching back, and an entry
+  stored before a `Vary` appeared was read by requests of every value. Such a `304` now serves the
+  reader that asked and removes the entry, and a changed `Vary` moves the resource's list of
+  varied headers.
+- Cancelling the first seek bar preview of an HLS or DASH stream while its image playlist loads
+  no longer leaves the stream with no previews (#433). The cancelled read marked the playlist as
+  read, so every later request answered nothing. A playlist is now marked read only once its read
+  returns.
+- The start seek of an open, as a resume uses, and the seek of a rebuilt session now give up
+  after 10 seconds with `SourceUnavailable`, as a user's seek does, and give way to a stop or a
+  close at once (#591). They had no deadline, so a long scan, such as a Matroska file with no
+  Cues read over the network, kept the player deaf to `stop()` and `close()` until it ended. The
+  seek of the software recovery after a hardware decoder failure is bounded the same way.
+- A device or decoder release that never returns during a stop, a failed worker or a rebuild no
+  longer makes a later `closeAndAwait()` wait for ever (#590). Only the release that close starts
+  had a deadline; every other release ran on the player's own loop with none, so the loop never
+  read its next command. Each now runs on the release lane under the close deadline. Past it the
+  player warns `ResourcesNotReleased`, goes on, and a close reports `RuntimeCompromised` at once.
+- A `CancellationException` thrown by an app's own subtitle reader, or by a decoder factory, no
+  longer closes the whole player (#589). An app's `withTimeout` around its HTTP call is an
+  ordinary way to throw one, and the player read it as its own end, published
+  `RuntimeCompromised` and refused every later call. The subtitle now fails as any unreadable
+  file does, and a decoder factory's track is left out. A decoder that throws one while it plays has failed,
+  and is recovered in software as any decoder failure is, where its lane used to end with
+  nothing said and the picture stood still. A media source call of an open that throws one
+  fails that open with a typed error, and anywhere else the player's loop takes it for a failure
+  of what it called and stays open.
+- A live HLS stream now starts where its `EXT-X-START` tag says, and a live DASH stream as far
+  behind the live edge as its `suggestedPresentationDelay` asks (#627). FFmpeg obeys the tag only
+  with its `prefer_x_start` option on, which the player never set, so every live stream started
+  three segments from the end of its playlist. The HLS open now sets it, unless the item's own
+  open options set it first, and the DASH stand-in writes the manifest's delay as the tag. A
+  playlist that has ended still starts at its beginning, because FFmpeg applies the tag only to
+  a live one.
+- An HLS stream now opens on a variant whose codecs this build can decode (#625). The choice
+  took the highest bitrate whatever its `CODECS` said, so on the web, which has no E-AC-3 or AV1
+  decoder, a master that offered each quality with AAC and with E-AC-3 played the picture in
+  silence. The open now asks FFmpeg for a decoder of each codec a variant names first, and the
+  player's own steps up and down during playback pass over a variant that does not decode,
+  through the new defaulted `PlayerMediaSource.decodesVariant`.
+- The desktop JVM no longer leaves a 5 MB copy of the libass adapter in the temporary folder at
+  every launch on Windows (#651). The loader copied the library into a new folder each time and
+  left it to `deleteOnExit`, which cannot delete a loaded library on Windows. It now writes one
+  folder per build, named for the library's contents, reuses it at every launch, and deletes the
+  older folders once they are an hour old and no longer in use. KiteFFmpeg's own loader does the
+  same as the old one, which yuroyami/KiteFFmpeg#208 tracks.
+- `PlayerMemento.fromProperties` and `KitePlayer.thumbnailAt` now declare what they throw, so a
+  Swift app catches the error instead of ending (#652). A memento written by a newer build, as
+  after going back from a test build, ended the app at every launch. The Apple
+  `KitePlayerMediaSession` constructor and `attachMediaSession` declare theirs too, so a skip
+  interval of zero from an app's settings no longer ends a Swift app.
+- `kiteplayer-compose-ui` now exports Compose Foundation (#614). The documented controls call,
+  `KitePlayerVideo(player) { KitePlayerControls(player) }`, takes a `BoxScope` lambda, and the
+  published POM gave Foundation the runtime scope only, so an app with no Foundation of its own
+  could not compile it.
+- The Web Worker player's canvas no longer draws the soft edges of subtitles too dark (#607). The
+  overlay is premultiplied, and the canvas renderer handed those bytes to `putImageData`, which
+  multiplies by the alpha again, so white text got a grey halo, a half-transparent box showed at
+  a quarter of its light and a fade darkened as it went. The colours are now divided by their
+  alpha as the overlay is packed.
+- Thumbnails and encoded snapshots are now the picture as it is shown (#608). `Thumbnails.at` and
+  `encode` wrote the stored picture, so a portrait phone recording came out on its side, an
+  anamorphic DVD picture came out squeezed, and a snapshot kept the bars its container crops
+  away. Both now apply the crop, square the pixels by their aspect, and mirror and turn the
+  picture as its display matrix says, and a `Thumbnail` reports the size its image has.
+- An HLS stream opened from a PLS or plain M3U station list changes quality in place again (#669).
+  The copy that gave the stream the list's title left out the variant switch, so every quality
+  change opened the station list again, with a gap and a jump to the live edge.
+- A working hardware video decoder is no longer moved to software when a keyframe interval holds
+  more than 16 MiB (#645). The decoder keeps a copy of the packets since the last keyframe so that
+  software can take over if the hardware fails, and when that copy would pass its cap the player
+  demoted the hardware decoder instead, so a 4K HEVC file stalled at its first long static scene
+  and played in software from then on. The player now gives up the copy and keeps the hardware. A
+  hardware failure before the next keyframe reopens the item in software at the current position.
+- A file named with a `file:` URI now opens when its name holds a space or a non-ASCII letter, and
+  on Windows when the URI names a drive (#655). Android's `Uri.fromFile`, Apple's `NSURL` and
+  Java's `File.toURI` all write such a name percent-encoded, and only the playlist reader decoded
+  it, so FFmpeg looked for `%20` in the name and the item failed with `SourceUnavailable`. The
+  item, its external subtitle files, its linked Matroska files and a file still being written now
+  share one decoder, which also keeps an emoji beside an escape whole.
+- A stream opened before its view had a size no longer plays its top variant for good (#600). With
+  no size the open took the highest rung, and the network steps only ever looked for more, so a
+  phone could play 2160p into a small view. Once the view reports a size, a variant the player
+  chose that is past it steps down to the largest one inside it. A stream opened on an SDR display
+  that later moves to an HDR one still keeps its SDR rung.
 - A Kotlin/Native executable for `androidNativeArm64` that uses `kiteplayer-core` now links. The C
   audio ring of `kiteplayer-rt` called an atomics helper, `__aarch64_ldadd8_relax`, that no
   Kotlin/Native link for Android provides. The ring now compiles its atomics inline on that target.

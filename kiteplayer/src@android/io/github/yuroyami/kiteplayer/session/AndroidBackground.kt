@@ -62,6 +62,8 @@ private class AndroidBackgroundHandle(
     }
 
     init {
+        // Away at attach is the first trip away; the first start is then the return (#690).
+        if (!activities.startsOnScreen) applier.attachedAway()
         application.registerActivityLifecycleCallbacks(callbacks)
     }
 

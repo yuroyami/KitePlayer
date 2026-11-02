@@ -297,8 +297,8 @@ separate evidence; none stands in for another.
 
 ## Android media requests and playback resumption
 
-Planned API contract for #431. The implementation and ABI update follow in separate changes. All of
-it is Android-only, in `kiteplayer`'s `session` package, and with none of it set nothing changes.
+The API contract of #431, which the tree implements and the Android ABI dump records. All of it is
+Android-only, in `kiteplayer`'s `session` package, and with none of it set nothing changes.
 
 **Requests for specific media.** `KitePlayerMediaSession.setMediaRequestHandler(kinds:
 Set<MediaRequestKind>, handler: ((MediaRequest) -> Unit)?)` takes the requests the application
@@ -349,10 +349,12 @@ position.
 ## Default player controls
 
 The contract for #469. Everything lives in `kiteplayer-compose-ui`, in the
-`io.github.yuroyami.kiteplayer.compose` package, beside `KitePlayerVideo`. The module gains
-`implementation(compose.foundation)`, which an application already receives through
-`kiteplayer-compose-video`, and no Material artifact: the owner decided on 2026-10-07 against
-both a Material dependency and a new module.
+`io.github.yuroyami.kiteplayer.compose` package, beside `KitePlayerVideo`. The module exports
+Compose Foundation, because the controls overload of `KitePlayerVideo` takes a `BoxScope` lambda,
+so an application that writes `KitePlayerVideo(player) { KitePlayerControls(player) }` needs it on
+its own compile classpath (#614); it was a runtime dependency only, and an application with no
+Foundation of its own could not compile that call. No Material artifact: the owner decided on
+2026-10-07 against both a Material dependency and a new module.
 
 **State holders.** Each is created with a `remember...State(player)` composable, reads the
 player's `state` and `progress`, and calls the player's own commands. An application that wants
@@ -409,9 +411,11 @@ only from the state holders above, from Compose Foundation and `compose.ui`.
 - Every control has a role and a label. The seek bar and the volume, which Compose has no slider
   role for, carry `progressBarRangeInfo` and a `setProgress` action, as the visualiser's panel
   does (#326), and state the position and duration in words.
-- While the controls show, subtitles move up through `KitePlayer.setSubtitlePosition`, and settle
-  back when they hide, unless the application changed the position itself in between. It is the
-  same rule the session guards use for a pause they did not make.
+- While the controls show, subtitles stay above them through the engine's controls inset, how much
+  of the output the bar covers, and use the output again when they hide (#648). The engine raises
+  the bottom of the application's own safe area to that inset, so neither replaces the other, and
+  the user's subtitle position, the snapshot and a memento never see the lift. It used to move the
+  subtitle position, which a memento taken during a pause then saved for good.
 - On a touch screen, a horizontal drag over the picture scrubs, showing the target time, and
   seeks where the finger lifts. The width of the picture stands for the whole item, or for ten
   minutes of a longer one. A mouse drag does not scrub.
@@ -463,7 +467,7 @@ application that draws its own controls in a native toolkit builds them from thi
 The model follows the rules of the Compose controls: the play button shows play unless the player
 was asked to play, the controls hide after the timeout only while the player plays, a drag of the
 seek bar asks for `SeekMode.KeyframeThenRefine` seeks, the volume slider follows the cube of its
-position, and subtitles move up through `KitePlayer.setSubtitlePosition` while the controls show.
+position, and subtitles stay above the controls through the engine's controls inset while they show.
 It mirrors those rules; it does not share code with `kiteplayer-compose-ui`, which keeps its own
 state holders. `PlayerControlsStrings` has the same keys and the same English words as
 `KitePlayerControlsLabels`.

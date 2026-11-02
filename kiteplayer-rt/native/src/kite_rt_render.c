@@ -265,6 +265,13 @@ static void kprt_limit(kprt_ring *ring, float *destination, int64_t start, int32
     int32_t in_pos;
     int32_t frame;
     int32_t base = 0;
+    /* The loudest a sample may leave at (#612): full scale, or above it when the device turns the
+     * sound down after the ring. Levels are measured against it, so at 1 nothing moves by a bit. */
+    uint32_t ceiling_bits = atomic_load_explicit(&ring->ceiling_bits, memory_order_relaxed);
+    float ceiling;
+    float inverse;
+    memcpy(&ceiling, &ceiling_bits, sizeof(ceiling));
+    inverse = 1.0f / ceiling;
 
     /* Acquire, paired with the release in `kprt_ring_flush`. */
     if (atomic_load_explicit(&ring->lim_reset, memory_order_acquire) != 0) {
@@ -299,6 +306,7 @@ static void kprt_limit(kprt_ring *ring, float *destination, int64_t start, int32
                     level = a;
             }
             level = level * scale;
+            level = level * inverse;
             while (ring->lim_queue_count > 0
                     && ring->lim_queue_frame[ring->lim_queue_head] <= entering - lookahead) {
                 ring->lim_queue_head = ring->lim_queue_head + 1 == lookahead ? 0 : ring->lim_queue_head + 1;
@@ -351,15 +359,16 @@ static void kprt_limit(kprt_ring *ring, float *destination, int64_t start, int32
             if (a > peak)
                 peak = a;
         }
+        peak = peak * inverse;
         if (peak * gain > 1.0f)
             gain = 1.0f / peak;
         if (gain < 1.0f) {
             for (i = 0; i < channels; i++) {
                 float y = destination[base + i] * gain;
-                if (y > 1.0f)
-                    y = 1.0f;
-                else if (y < -1.0f)
-                    y = -1.0f;
+                if (y > ceiling)
+                    y = ceiling;
+                else if (y < -ceiling)
+                    y = -ceiling;
                 destination[base + i] = y;
             }
             limited++;

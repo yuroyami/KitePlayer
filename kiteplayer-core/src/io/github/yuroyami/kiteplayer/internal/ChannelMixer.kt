@@ -28,6 +28,9 @@ internal enum class MixLayout(val mask: Long, val channels: Int, val label: Stri
     /** `FL FR LFE` */
     Surround21(0xBL, 3, "2.1"),
 
+    /** `FL FR FC BC`: FFmpeg's guess for four channels with no mask. */
+    Surround40(0x107L, 4, "4.0"),
+
     /** `FL FR BL BR` */
     Quad(0x33L, 4, "quad"),
 
@@ -51,13 +54,9 @@ internal enum class MixLayout(val mask: Long, val channels: Int, val label: Stri
         fun forMask(mask: Long): MixLayout? = entries.firstOrNull { it.mask == mask }
 
         /**
-         * The conventional layout for a channel count, for a stream that declared no mask.
-         *
-         * Every use of this is reported as a guess, because a count cannot answer the question. The
-         * choice for each count is the layout containers and decoders declare by default, and where
-         * that default is a layout not named here (three channels are usually `FL FR FC`, five are
-         * usually the side variant of 5.0) the layout named here carries the same coefficients in
-         * the same channel positions, so the stereo result is the same either way.
+         * The conventional speakers of a DEVICE with this many channels, for a device that named no
+         * mask. Android reports its layouts by count, and a four channel device is four corner
+         * speakers, so four is quad here. A stream is guessed by [forUnmaskedSource] instead.
          */
         fun forChannelCount(channels: Int): MixLayout? = when (channels) {
             1 -> Mono
@@ -69,6 +68,24 @@ internal enum class MixLayout(val mask: Long, val channels: Int, val label: Stri
             7 -> Surround61
             8 -> Surround71
             else -> null
+        }
+
+        /**
+         * The layout of a STREAM that declared no mask, guessed from its count as FFmpeg's
+         * `av_channel_layout_default` guesses it, because FFmpeg is the one media truth (#664).
+         *
+         * Every use of this is reported as a guess, because a count cannot answer the question, and
+         * the guess can be wrong. Three channels are 2.1, `FL FR LFE`, as in FFmpeg, so a plain WAV
+         * whose third channel is really a centre loses it from a stereo mix unless the LFE is
+         * included. Four are 4.0, `FL FR FC BC`, as in FFmpeg, so the third channel reaches both
+         * speakers at -3 dB and the fourth both at -6 dB. From five channels up the guess is the one
+         * [forChannelCount] makes for a device: five are 5.0 with back surrounds, as in FFmpeg, and
+         * six are 5.1 with side surrounds where FFmpeg says back ones, which mix into stereo with the
+         * same coefficients.
+         */
+        fun forUnmaskedSource(channels: Int): MixLayout? = when (channels) {
+            4 -> Surround40
+            else -> forChannelCount(channels)
         }
     }
 }
@@ -85,7 +102,7 @@ internal enum class MixLayout(val mask: Long, val channels: Int, val label: Stri
  *
  * Every downmix is derived speaker by speaker with the rules of FFmpeg's `build_matrix` in
  * `libswresample/rematrix.c`, at its defaults. Any layout made of the eleven speakers below mixes,
- * not only the nine named in [MixLayout]: 5.0 with side surrounds, 3.0, 4.0 and side quad included.
+ * not only the ten named in [MixLayout]: 5.0 with side surrounds, 3.0 and side quad included.
  * `M` is -3 dB, which is `1 / sqrt(2)`, which is 0.70710678. A speaker the target also has passes at
  * unity. A speaker the target lacks is routed like this:
  *
@@ -174,7 +191,7 @@ internal class ChannelMixer(
      * that disagrees with its count is trusted neither way.
      */
     private val sourceMask: Long? = when (val declared = source.channelLayoutMask) {
-        null -> MixLayout.forChannelCount(sourceChannels)?.mask
+        null -> MixLayout.forUnmaskedSource(sourceChannels)?.mask
         else -> declared.takeIf { it.countOneBits() == sourceChannels }
     }
 
@@ -390,7 +407,7 @@ internal class ChannelMixer(
             return if (kept) -1 else center
         }
 
-        /** A layout's name when it is one of the nine, and its mask otherwise. */
+        /** A layout's name when it is one of the ten, and its mask otherwise. */
         private fun describe(mask: Long?): String =
             mask?.let { MixLayout.forMask(it)?.label ?: "mask 0x${it.toString(16)}" } ?: "an unknown layout"
 

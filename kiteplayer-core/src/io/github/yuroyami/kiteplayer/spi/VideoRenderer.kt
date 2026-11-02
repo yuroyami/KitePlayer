@@ -89,6 +89,14 @@ public interface VideoRenderer : AutoCloseable {
     public fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {}
 
     /**
+     * True when this renderer draws [setAdjustments]'s picture controls (#610). The engine warns
+     * `PlaybackWarning.PictureControlsUnavailable` when controls other than the neutral ones are
+     * set while a renderer that answers false is attached, so an application learns why its slider
+     * changes nothing. Defaulted to true, for a renderer that overrides [setAdjustments].
+     */
+    public val appliesAdjustments: Boolean get() = true
+
+    /**
      * Whether to dim the picture while it flashes (#500), told on attach and on every change like
      * [setAdjustments]. A renderer with a guard runs [VideoFlashGuard] on what it draws; only an
      * Apple renderer reads the system setting for [io.github.yuroyami.kiteplayer.FlashGuard.FollowSystem].
@@ -173,6 +181,12 @@ public interface VideoRenderer : AutoCloseable {
      * Emitting is optional. A renderer that cannot draw refuses the frame instead, which the
      * schedule counts as a drop and carries on from, so a silent feed costs only the chance to
      * report why.
+     *
+     * A feed that replays to a new collector may replay surface state, such as
+     * [RendererEvent.SurfaceLost], but a replayed [RendererEvent.Failed] is an earlier attach's: the
+     * engine ignores one that reaches it from the replay before it has handed this renderer a frame
+     * (#596). A renderer that wants both keeps its surface state in a `StateFlow` and sends failures
+     * on a feed with no replay.
      */
     public val events: Flow<RendererEvent>
 

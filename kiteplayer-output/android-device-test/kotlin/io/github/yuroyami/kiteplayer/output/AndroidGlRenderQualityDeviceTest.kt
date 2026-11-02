@@ -233,13 +233,12 @@ class AndroidGlRenderQualityDeviceTest {
 
     private fun red(pixel: Int): Int = (pixel ushr 24) and 0xFF
 
-    /** [GlState]'s Bayer value, recomputed here so the shader is checked against arithmetic. */
-    private fun bayer8(x: Int, y: Int): Int {
-        val px = x % 8
-        val py = y % 8
-        return 32 * (px / 4) + 16 * (py / 4) + 8 * (px / 2 % 2) + 4 * (py / 2 % 2) +
-            2 * (px % 2) + (py % 2)
-    }
+    /**
+     * The Bayer value, from the literal table of the Metal body. A source independent of the
+     * shader's own formula: recomputing that formula checked the shader against its own mistake,
+     * and the test stayed green over a matrix that differed in 56 of 64 cells (#605).
+     */
+    private fun bayer8(x: Int, y: Int): Int = METAL_BAYER8[(y % 8) * 8 + x % 8]
 
     /** The shader's own centring: one output step of Bayer, centred on zero. */
     private fun pattern(bayer: Int): Float = (bayer + 0.5f) / 64f - 0.5f
@@ -323,6 +322,21 @@ class AndroidGlRenderQualityDeviceTest {
             "the ordered pattern must carry 120.36 across $boundary at exactly the Bayer value " +
                 "the arithmetic says, and nowhere else",
         )
+    }
+
+    /**
+     * A value just above a level raises pixels spread over the tile, never a clump of neighbours.
+     * The old formula raised one block of 2 by 4 pixels in the same corner of every tile, which a
+     * viewer sees as a dot grid at an 8 pixel pitch over a dark sky (#605).
+     */
+    @Test
+    fun ditherRaisesNoTwoNeighboursForAValueJustAboveALevel() = harness { gl ->
+        val source = IntArray(8 * 8) { grey(0) }
+        val dithered = gl.render(source, 8, 8, ditherStep = 1f / 255f, colourOffset = 120.125f / 255f)
+        val raised = (0 until 64).filter { red(dithered[it]) == 121 }.map { it % 8 to it / 8 }.toSet()
+        assertTrue(raised.isNotEmpty(), "120.125 with one step of dither raised no pixel")
+        val clumped = raised.filter { (x, y) -> ((x + 1) % 8 to y) in raised || (x to (y + 1) % 8) in raised }
+        assertEquals(emptyList(), clumped, "raised pixels touch a raised neighbour: $raised")
     }
 
     /** A flat field has nothing to smooth, so the pass must leave every pixel alone. */
@@ -578,3 +592,15 @@ class AndroidGlRenderQualityDeviceTest {
         )
     }
 }
+
+/** The 8x8 Bayer matrix exactly as `MetalVideoSupport.kt` spells it out, row by row. */
+private val METAL_BAYER8 = intArrayOf(
+    0, 32, 8, 40, 2, 34, 10, 42,
+    48, 16, 56, 24, 50, 18, 58, 26,
+    12, 44, 4, 36, 14, 46, 6, 38,
+    60, 28, 52, 20, 62, 30, 54, 22,
+    3, 35, 11, 43, 1, 33, 9, 41,
+    51, 19, 59, 27, 49, 17, 57, 25,
+    15, 47, 7, 39, 13, 45, 5, 37,
+    63, 31, 55, 23, 61, 29, 53, 21,
+)

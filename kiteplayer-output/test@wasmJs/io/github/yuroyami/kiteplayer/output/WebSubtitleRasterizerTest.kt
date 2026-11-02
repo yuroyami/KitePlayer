@@ -236,7 +236,9 @@ class WebSubtitleRasterizerTest {
             if (image.channel(x, y, 0) > 200 && image.channel(x, y, 2) < 50) { redSum += x; redCount++ }
             if (image.channel(x, y, 2) > 200 && image.channel(x, y, 0) < 50) { blueSum += x; blueCount++ }
         }
-        if (redCount == 0 || blueCount == 0) return println("skipped: this browser has no Hebrew font")
+        // A browser with no Hebrew font draws nothing here, and returning then reported a pass for an
+        // assertion nobody made (#641). CI's Chromium has one; a machine without one fails with why.
+        assertTrue(redCount > 0 && blueCount > 0, "the Hebrew spans drew nothing: this browser has no Hebrew font")
         assertTrue(redSum / redCount > blueSum / blueCount, "the first span is at the right")
     }
 

@@ -353,9 +353,10 @@ Each line is something that bit someone. Delete a line when it stops being true.
   and the C sink adds it to every anchor. The buffer and the safety offset are already in the
   timestamp, so adding them, as mpv does, counts them twice. A MacBook Air's own speakers report
   28 ms, so the figure is not only for Bluetooth (#495).
-- Pause consumes the final device anchor before freezing clocks, so a late callback cannot
-  re-anchor a frozen clock, and resume re-arms a timestamp floor so a pre-pause device timestamp
-  can never anchor the clock afterwards.
+- A paused clock takes a device anchor only as it stands now, its time less what is still to
+  play before it, and only when that moves the clock back, so an anchor dated a buffer ahead
+  cannot push a frozen clock past the sound heard (#646), and resume re-arms a timestamp floor so
+  a pre-pause device timestamp can never anchor the clock afterwards.
 - The C real-time island stays C. The device callback has no allocator, lock, log or framework
   call, proven by disassembly through the render check script, and nothing managed ever runs on the
   device thread. The Kotlin ring is the C ring's differential oracle; never delete the portable
@@ -568,9 +569,11 @@ Do not reopen these without new evidence.
   a video view, https, and the whole conformance matrix passing. The targets stay declared and
   empty so the real-media tests resolve on Linux and so a native consumer has the common types to
   implement the output SPI against.
-- Every Android ABI stays supported, and the minimum SDK stays where it is. "The minimum SDK
-  excludes 32-bit" is true for phones and false for television: the common streaming sticks are
-  32-bit only and budget boxes ship a 32-bit userspace.
+- Every Android ABI the media library builds stays supported, which is `arm64-v8a`, `armeabi-v7a`
+  and `x86_64`, and the minimum SDK stays where it is. `x86` has no cross-build in the sibling, so
+  no artifact ships it, and `KitePlayer()` throws in an `x86` process. "The minimum SDK excludes
+  32-bit" is true for phones and false for television: the common streaming sticks are 32-bit only
+  and budget boxes ship a 32-bit userspace.
 - Both Compose video paths are permanent by design. The interop platform view is the sustained
   playback default, because the system compositor presents and the GPU idles. The Compose-native
   primitive is what allows clipping, alpha and shared-element transitions. Neither replaces the

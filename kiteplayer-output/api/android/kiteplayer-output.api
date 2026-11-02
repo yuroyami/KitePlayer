@@ -11,6 +11,7 @@ public final class io/github/yuroyami/kiteplayer/output/AndroidGpuImageVideoRend
 	public fun accepts (Lio/github/yuroyami/kiteplayer/spi/FrameShape;)Z
 	public fun clearPicture ()V
 	public fun close ()V
+	public fun getAppliesAdjustments ()Z
 	public fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public final fun getFailedFrames ()J
 	public fun getOutputSize ()Lio/github/yuroyami/kiteplayer/VideoSize;
@@ -56,6 +57,7 @@ public final class io/github/yuroyami/kiteplayer/output/AndroidSurfaceVideoRende
 	public fun accepts (Lio/github/yuroyami/kiteplayer/spi/FrameShape;)Z
 	public fun clearPicture ()V
 	public fun close ()V
+	public fun getAppliesAdjustments ()Z
 	public fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public final fun getFailedFrames ()J
 	public fun getOutputSize ()Lio/github/yuroyami/kiteplayer/VideoSize;
@@ -96,6 +98,7 @@ public final class io/github/yuroyami/kiteplayer/output/AudioTrackSink : io/gith
 	public fun drain (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun getCutsSoundOnStop ()Z
 	public fun getDeviceBufferFrames ()I
+	public fun getDeviceGainHeadroom ()F
 	public fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public fun getLatencyQuality ()Lio/github/yuroyami/kiteplayer/LatencyQuality;
 	public fun getPlatformSessionId ()Ljava/lang/Integer;

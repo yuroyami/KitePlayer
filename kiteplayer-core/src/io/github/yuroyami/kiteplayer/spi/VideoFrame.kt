@@ -102,8 +102,9 @@ public interface VideoFrame : AutoCloseable {
      * The engine makes them a subtitle track of its own, CC1, from the first picture that carries
      * any: a stream whose codec is [CLOSED_CAPTIONS_CODEC], each of whose packets holds one
      * picture's bytes at the picture's time, decoded by whichever [SubtitleDecoderFactory] takes
-     * that codec. A frame decoded where these bytes cannot be read, such as one a platform decoder
-     * writes straight to a surface, answers null.
+     * that codec. The CEA-708 services in the same bytes are tracks of their own, one per service,
+     * whose codec is [CEA708_CAPTIONS_CODEC] (#678). A frame decoded where these bytes cannot be
+     * read, such as one a platform decoder writes straight to a surface, answers null.
      */
     public val closedCaptions: ByteArray? get() = null
 
@@ -125,6 +126,15 @@ public val VideoFrame.visibleSize: VideoSize get() = size.cropped(crop)
  * (#236): see [VideoFrame.closedCaptions]. Named after FFmpeg's `A53_CC` frame data.
  */
 public const val CLOSED_CAPTIONS_CODEC: String = "a53_cc"
+
+/**
+ * The codec of a subtitle track the engine makes of one CEA-708 caption service inside a video
+ * stream (#678), Service 1, Service 2 and so on, beside [CLOSED_CAPTIONS_CODEC]'s CC1, from the same
+ * bytes: see [VideoFrame.closedCaptions]. The engine reads the DTVCC packets those bytes carry and
+ * splits them by service, so each packet of such a track holds one service's commands and text,
+ * the service blocks that a picture completed, at that picture's time.
+ */
+public const val CEA708_CAPTIONS_CODEC: String = "cea_708"
 
 /**
  * A frame whose pixels can be read, for the cases that genuinely need them: a screenshot, a
@@ -252,31 +262,43 @@ public data class ColorSpaceInfo(
         /**
          * The conventional guess when a container declares nothing, which is common.
          *
-         * Standard definition content is BT.601 and high definition is BT.709, split at 576 lines.
-         * Every player uses this rule, and using a single default instead visibly wrongs one half
-         * of the world's video.
+         * Standard definition content is BT.601 and high definition is BT.709. A picture is high
+         * definition when it is 1280 or more pixels wide or more than 576 lines high, which is the
+         * rule of mpv's `csputils.c` and libplacebo's `colorspace.c` (#606). The width matters for
+         * a film in a scope ratio: a 720p rip at 1280x536 is high definition, and a guess from the
+         * height alone played it with the BT.601 matrix. A single default instead visibly wrongs
+         * one half of the world's video.
          */
-        public fun guessFor(height: Int): ColorSpaceInfo = if (height <= 576) {
-            ColorSpaceInfo(
-                ColorMatrix.Bt601,
-                ColorPrimaries.Bt601,
-                ColorTransfer.Bt601,
-                rangeSpecified = false,
-                matrixSpecified = false,
-                primariesSpecified = false,
-                transferSpecified = false,
-            )
-        } else {
-            ColorSpaceInfo(
-                ColorMatrix.Bt709,
-                ColorPrimaries.Bt709,
-                ColorTransfer.Bt709,
-                rangeSpecified = false,
-                matrixSpecified = false,
-                primariesSpecified = false,
-                transferSpecified = false,
-            )
-        }
+        public fun guessFor(width: Int, height: Int): ColorSpaceInfo =
+            if (width >= 1280 || height > 576) highDefinitionGuess else standardDefinitionGuess
+
+        /** [guessFor] from the height alone, which calls a picture of 576 lines or less standard definition. */
+        @Deprecated(
+            "A picture 1280 or more pixels wide is high definition whatever its height; pass the width too",
+            ReplaceWith("guessFor(width, height)"),
+        )
+        public fun guessFor(height: Int): ColorSpaceInfo =
+            if (height <= 576) standardDefinitionGuess else highDefinitionGuess
+
+        private val standardDefinitionGuess = ColorSpaceInfo(
+            ColorMatrix.Bt601,
+            ColorPrimaries.Bt601,
+            ColorTransfer.Bt601,
+            rangeSpecified = false,
+            matrixSpecified = false,
+            primariesSpecified = false,
+            transferSpecified = false,
+        )
+
+        private val highDefinitionGuess = ColorSpaceInfo(
+            ColorMatrix.Bt709,
+            ColorPrimaries.Bt709,
+            ColorTransfer.Bt709,
+            rangeSpecified = false,
+            matrixSpecified = false,
+            primariesSpecified = false,
+            transferSpecified = false,
+        )
     }
 }
 

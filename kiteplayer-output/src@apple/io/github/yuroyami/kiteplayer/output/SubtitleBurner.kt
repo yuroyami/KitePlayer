@@ -8,6 +8,7 @@ import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
+import io.github.yuroyami.kiteplayer.spi.HdrStaticMetadata
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
@@ -107,6 +108,8 @@ internal class SubtitleBurner private constructor(private val device: MTLDeviceP
             CVPixelBufferRelease(target)
             return null
         }
+        // The layer reads the colour from the buffer, so it says what the composer wrote (#489).
+        retagComposedBuffer(target, composedColorTags(facts.colorSpace, facts.size.width, facts.size.height))
         return target
     }
 
@@ -129,6 +132,7 @@ internal class SubtitleBurner private constructor(private val device: MTLDeviceP
             CVPixelBufferRelease(target)
             return null
         }
+        retagComposedBuffer(target, OVERLAY_COLOR_TAGS)
         return target
     }
 
@@ -237,6 +241,16 @@ internal class SubtitleBurner private constructor(private val device: MTLDeviceP
     }
 
     companion object {
+        /**
+         * The tags of text drawn on black, which has no picture to take an encoding from: the
+         * subtitle rasterizers draw sRGB, on BT.709 primaries.
+         */
+        private val OVERLAY_COLOR_TAGS = ColorTags(
+            primaries = platform.CoreVideo.kCVImageBufferColorPrimaries_ITU_R_709_2,
+            transfer = platform.CoreVideo.kCVImageBufferTransferFunction_sRGB,
+            matrix = null,
+        )
+
         /** Null on a machine with no Metal device, where subtitles are left out of the picture. */
         fun createOrNull(): SubtitleBurner? {
             val device = MTLCreateSystemDefaultDevice() ?: return null
@@ -257,6 +271,9 @@ internal class PictureFacts(
     override val rotationDegrees: Int = 0,
     override val mirrored: Boolean = false,
     override val crop: PictureCrop? = null,
+    /** The title's and the scene's peaks, so a composed picture is tone mapped as a plain one is (#489). */
+    override val hdr: HdrStaticMetadata? = null,
+    override val sceneMaxNits: Float? = null,
 ) : VideoFrame {
     /**
      * True when the stored picture is not the way it is meant to be seen: it is turned, mirrored,
@@ -277,12 +294,13 @@ internal class PictureFacts(
     fun orientedBy(transform: io.github.yuroyami.kiteplayer.VideoTransform): PictureFacts {
         if (!transform.turnsOrMirrors) return this
         val shown = transform.orient(rotationDegrees, mirrored)
-        return PictureFacts(size, colorSpace, shown.rotationDegrees, shown.mirrored, crop)
+        return PictureFacts(size, colorSpace, shown.rotationDegrees, shown.mirrored, crop, hdr, sceneMaxNits)
     }
 
     companion object {
-        fun of(frame: VideoFrame): PictureFacts =
-            PictureFacts(frame.size, frame.colorSpace, frame.rotationDegrees, frame.mirrored, frame.crop)
+        fun of(frame: VideoFrame): PictureFacts = PictureFacts(
+            frame.size, frame.colorSpace, frame.rotationDegrees, frame.mirrored, frame.crop, frame.hdr, frame.sceneMaxNits,
+        )
     }
 }
 

@@ -53,6 +53,9 @@ private object DesktopKitePlayerPlatformDefaults : KitePlayerPlatformDefaults {
         }
     }
 
+    override fun viewsShowFramesOf(backend: io.github.yuroyami.kiteplayer.spi.MediaBackend): Boolean =
+        backend is KiteFFmpegMediaBackend
+
     override fun backendsOrNull(): Backends? = if (availability.isAvailable) {
         Backends(backend = KiteFFmpegMediaBackend(), output = DesktopOutputBackend)
     } else {

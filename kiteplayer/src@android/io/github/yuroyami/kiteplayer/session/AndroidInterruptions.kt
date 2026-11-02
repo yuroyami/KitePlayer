@@ -78,21 +78,20 @@ private class AndroidInterruptionHandle(
     @Volatile
     private var focusRequest = focusRequestFor(AudioContent.Movie)
 
-    // setWillPauseWhenDucked is left off deliberately: with it on the system converts a duckable
-    // loss into a plain one, and the policy is the thing that decides between ducking and pausing here.
-    private fun focusRequestFor(content: AudioContent) = AudioFocusRequest.Builder(focusGainFor(policy.focus))
-        // Only a permanent request waits through a call: a short sound refused now has no reason
-        // to play once the call is over (#451).
-        .setAcceptsDelayedFocusGain(policy.focus == AudioFocusKind.Permanent)
-        .setAudioAttributes(
-            AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(focusContentType(content))
-                .build(),
-        )
-        .setWillPauseWhenDucked(false)
-        .setOnAudioFocusChangeListener(focusListener)
-        .build()
+    private fun focusRequestFor(content: AudioContent): AudioFocusRequest {
+        val shape = focusRequestShape(policy, content)
+        return AudioFocusRequest.Builder(shape.gain)
+            .setAcceptsDelayedFocusGain(shape.acceptsDelayedGain)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(shape.contentType)
+                    .build(),
+            )
+            .setWillPauseWhenDucked(shape.willPauseWhenDucked)
+            .setOnAudioFocusChangeListener(focusListener)
+            .build()
+    }
 
     private val noisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(receivedFrom: Context?, intent: Intent?) {
@@ -176,6 +175,28 @@ internal fun waitsForForeground(sdk: Int, notificationAttached: Boolean, inForeg
  * at most this much sound before the player pauses.
  */
 private val FOREGROUND_WAIT = 1.seconds
+
+/** What a focus request asks Android for, apart from the listener it reports to. */
+internal data class FocusRequestShape(
+    val gain: Int,
+    val acceptsDelayedGain: Boolean,
+    val contentType: Int,
+    val willPauseWhenDucked: Boolean,
+)
+
+/** The focus request for [policy] while [content] plays. */
+internal fun focusRequestShape(policy: InterruptionPolicy, content: AudioContent): FocusRequestShape = FocusRequestShape(
+    gain = focusGainFor(policy.focus),
+    // Only a permanent request waits through a call: a short sound refused now has no reason
+    // to play once the call is over (#451).
+    acceptsDelayedGain = policy.focus == AudioFocusKind.Permanent,
+    contentType = focusContentType(content),
+    // On: the player then hears a duckable loss and the policy decides between ducking by its own
+    // level and pausing. Off, Android 8 and later duck music and film inside the framework and
+    // never call the listener, so duckOnTransient and duckVolume did nothing (#647). The flag does
+    // not turn a duckable loss into a plain one: the listener still gets the duckable code.
+    willPauseWhenDucked = true,
+)
 
 /** The `AudioAttributes` content type a focus request declares for [content], as the audio track does. */
 internal fun focusContentType(content: AudioContent): Int = when (content) {

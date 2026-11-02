@@ -110,6 +110,43 @@ class DashBaseUrlsTest {
         assertEquals(listOf("https://elsewhere.test/x"), asked)
     }
 
+    /**
+     * A refresh that drops or reorders locations keeps the reader on the one that worked while it
+     * is still listed (#440). Kept as a place in the list, it sent the reader to another server,
+     * and then read past the end of the shorter list after a segment had opened, losing its reader.
+     */
+    @Test
+    fun aRefreshKeepsTheWorkingLocationWhereverItMoved() = runTest {
+        fun base(vararg hosts: String) = DashBaseUrls("https://a.test/v/", hosts.map { DashBaseUrl("https://$it.test/v/") })
+        val failover = DashFailover(listOf(base("a", "b", "c")), Random(1))
+        val asked = ArrayList<String>()
+        var up = setOf("c")
+        suspend fun read(name: String) = failover.open("https://a.test/v/$name") { target ->
+            asked += target
+            if (up.none { target.startsWith("https://$it.test/") }) throw IllegalStateException("503 from $target")
+            target
+        }
+        assertEquals("https://c.test/v/1.m4s", read("1.m4s"))
+
+        // A refresh drops b, so c moves from the third place to the second, and a answers again.
+        failover.update(listOf(base("a", "c")))
+        up = setOf("a", "c")
+        asked.clear()
+        assertEquals("https://c.test/v/2.m4s", read("2.m4s"), "the reader left the location that worked")
+        assertEquals(listOf("https://c.test/v/2.m4s"), asked)
+
+        // Reordered, it stays on c too.
+        failover.update(listOf(base("c", "a")))
+        asked.clear()
+        assertEquals("https://c.test/v/3.m4s", read("3.m4s"))
+
+        // Once c is gone, the reader starts again by the manifest's rules, from the first location.
+        failover.update(listOf(base("a", "b")))
+        asked.clear()
+        assertEquals("https://a.test/v/4.m4s", read("4.m4s"))
+        assertEquals(listOf("https://a.test/v/4.m4s"), asked)
+    }
+
     @Test
     fun whenEveryLocationFailsTheFirstFailureIsThrown() = runTest {
         val failover = DashFailover(listOf(set), Random(1))

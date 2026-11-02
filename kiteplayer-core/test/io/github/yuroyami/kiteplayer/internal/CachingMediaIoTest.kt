@@ -17,7 +17,8 @@ class CachingMediaIoTest {
     /** Deterministic content: byte at position p is (p * 31 + 7) mod 256. */
     private fun contentByte(position: Long): Byte = ((position * 31 + 7) and 0xFF).toByte()
 
-    private class MemorySource(val sizeBytes: Long) : MediaIo {
+    /** Answers at most [answerAtMost] bytes a read, as a network reader answers what it has. */
+    private class MemorySource(val sizeBytes: Long, val answerAtMost: Int = Int.MAX_VALUE) : MediaIo {
         var position = 0L
         var reads = 0
         var seeks = 0
@@ -27,7 +28,7 @@ class CachingMediaIoTest {
         override suspend fun read(into: ByteArray, offset: Int, length: Int): Int {
             reads++
             if (position >= sizeBytes) return -1
-            val count = length.coerceAtMost((sizeBytes - position).toInt())
+            val count = length.coerceAtMost(answerAtMost).coerceAtMost((sizeBytes - position).toInt())
             for (i in 0 until count) into[offset + i] = ((position + i) * 31 + 7 and 0xFF).toByte()
             position += count
             return count
@@ -121,5 +122,35 @@ class CachingMediaIoTest {
         assertEquals(-1, cache.read(out, 0, 16), "and stay -1")
         cache.close()
         assertTrue(source.closed, "close must close the upstream reader")
+    }
+
+    /**
+     * A source that answers less than a chunk a read fills each chunk over several reads (#649), so
+     * a chunk boundary falls inside one upstream answer. The bytes, the replay from the window, the
+     * budgets and a far seek all hold across those boundaries.
+     */
+    @Test
+    fun smallUpstreamAnswersFillWholeChunks() = runTest {
+        val source = MemorySource(1_000_000, answerAtMost = 300)
+        val cache = CachingMediaIo(source, policy(chunk = 1024, back = 4096, total = 16384))
+        val bytes = readFully(cache, 100_000)
+        for (i in 0 until 100_000) {
+            assertEquals(contentByte(i.toLong()), bytes[i], "byte $i corrupted through the cache")
+        }
+        val (start, end) = cache.window.value
+        assertTrue(end - start <= 16384 + 1024, "window ${end - start} bytes exceeds its budget")
+        assertTrue(100_000L - start >= 4096, "the back window behind the cursor was evicted")
+
+        val readsBefore = source.reads
+        cache.seek(100_000L - 4096 + 7)
+        val replay = readFully(cache, 4096 - 7)
+        for (i in replay.indices) {
+            assertEquals(contentByte(100_000L - 4096 + 7 + i), replay[i], "replayed byte $i wrong")
+        }
+        assertEquals(readsBefore, source.reads, "the back window must serve from RAM")
+
+        cache.seek(500_003)
+        val far = readFully(cache, 5_000)
+        for (i in far.indices) assertEquals(contentByte(500_003L + i), far[i], "post-seek byte $i wrong")
     }
 }

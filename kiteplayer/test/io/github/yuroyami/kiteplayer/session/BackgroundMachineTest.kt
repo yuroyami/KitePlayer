@@ -199,13 +199,55 @@ class BackgroundMachineTest {
         assertEquals(true, activities.onStarted(first))
     }
 
+    // Attached with no activity on screen, as the resume card's flow does (#690): the attach is
+    // the trip away, and the first start the return.
     @Test
     fun aHandleAttachedBeforeAnyStartSeesEveryTransition() {
         val activities = StartedActivities(startedBeforeAttach = false)
+        assertEquals(false, activities.startsOnScreen)
         val first = Any()
-        assertNull(activities.onStarted(first), "the application is assumed on screen from the start")
+        assertEquals(true, activities.onStarted(first), "the first start after an attach away is the return")
         assertEquals(false, activities.onStopped(first, changingConfiguration = false))
         assertEquals(true, activities.onStarted(first))
+    }
+
+    @Test
+    fun aHandleAttachedOnScreenStartsOnScreen() {
+        assertEquals(true, StartedActivities(startedBeforeAttach = true).startsOnScreen)
+    }
+
+    @Test
+    fun aPlayerAttachedAwayParksItsVideoUntilTheFirstStart() {
+        val target = FakeTarget()
+        val applier = BackgroundApplier(target, BackgroundPolicy.ContinueAudio)
+        val activities = StartedActivities(startedBeforeAttach = false)
+        if (!activities.startsOnScreen) applier.attachedAway()
+        assertEquals(listOf("video false"), target.calls, "video decoded for a screen nobody sees")
+        activities.onStarted(Any())?.let { applier.handle(foreground = it) }
+        assertEquals(listOf("video false", "video true"), target.calls)
+    }
+
+    @Test
+    fun anAttachAwayKeepsVideoTheApplicationTurnedOff() {
+        val target = FakeTarget(videoEnabled = false)
+        val applier = BackgroundApplier(target, BackgroundPolicy.ContinueAudio)
+        applier.attachedAway()
+        applier.handle(foreground = true)
+        assertEquals(emptyList(), target.calls)
+    }
+
+    // A player already playing when it attaches away was started there on purpose, for example
+    // from the resume card, so PauseAll leaves it playing and acts from the next trip away.
+    @Test
+    fun pauseAllLeavesAPlayerThatPlaysWhenItAttachesAway() {
+        val target = FakeTarget(playing = true)
+        val applier = BackgroundApplier(target, BackgroundPolicy.PauseAll)
+        applier.attachedAway()
+        applier.handle(foreground = true)
+        assertEquals(emptyList(), target.calls, "an attach away paused or played")
+        applier.handle(foreground = false)
+        applier.handle(foreground = true)
+        assertEquals(listOf("pause", "play"), target.calls)
     }
 
     @Test

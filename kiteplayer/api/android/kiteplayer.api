@@ -48,10 +48,15 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerJava : java/lang/Auto
 	public final fun getPlayer ()Lio/github/yuroyami/kiteplayer/KitePlayer;
 	public final fun inspectAsync (Lio/github/yuroyami/kiteplayer/MediaItem;)Ljava/util/concurrent/CompletableFuture;
 	public static final fun isAvailable ()Z
+	public static final fun marker (JLjava/lang/String;)Lio/github/yuroyami/kiteplayer/Marker;
 	public final fun moveInQueueAsync (II)Ljava/util/concurrent/CompletableFuture;
 	public final fun nextAsync ()Ljava/util/concurrent/CompletableFuture;
 	public final fun nextChapterAsync ()Ljava/util/concurrent/CompletableFuture;
 	public final fun openAsync (Lio/github/yuroyami/kiteplayer/MediaItem;)Ljava/util/concurrent/CompletableFuture;
+	public final fun openPlaylistAsync (Ljava/lang/String;)Ljava/util/concurrent/CompletableFuture;
+	public final fun openPlaylistAsync (Ljava/lang/String;I)Ljava/util/concurrent/CompletableFuture;
+	public final fun openPlaylistAsync (Ljava/lang/String;ILjava/util/Map;)Ljava/util/concurrent/CompletableFuture;
+	public static synthetic fun openPlaylistAsync$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;Ljava/lang/String;ILjava/util/Map;ILjava/lang/Object;)Ljava/util/concurrent/CompletableFuture;
 	public final fun openQueueAsync (Ljava/util/List;)Ljava/util/concurrent/CompletableFuture;
 	public final fun openQueueAsync (Ljava/util/List;I)Ljava/util/concurrent/CompletableFuture;
 	public static synthetic fun openQueueAsync$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;Ljava/util/List;IILjava/lang/Object;)Ljava/util/concurrent/CompletableFuture;
@@ -59,6 +64,9 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerJava : java/lang/Auto
 	public final fun positionMillis ()J
 	public final fun previousAsync ()Ljava/util/concurrent/CompletableFuture;
 	public final fun previousChapterAsync ()Ljava/util/concurrent/CompletableFuture;
+	public final fun readPlaylistAsync (Ljava/lang/String;)Ljava/util/concurrent/CompletableFuture;
+	public final fun readPlaylistAsync (Ljava/lang/String;Ljava/util/Map;)Ljava/util/concurrent/CompletableFuture;
+	public static synthetic fun readPlaylistAsync$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;Ljava/lang/String;Ljava/util/Map;ILjava/lang/Object;)Ljava/util/concurrent/CompletableFuture;
 	public final fun reloadExternalSubtitleAsync (Lio/github/yuroyami/kiteplayer/TrackInfo;)Ljava/util/concurrent/CompletableFuture;
 	public final fun reloadExternalSubtitleAsync (Lio/github/yuroyami/kiteplayer/TrackInfo;Ljava/lang/String;)Ljava/util/concurrent/CompletableFuture;
 	public static synthetic fun reloadExternalSubtitleAsync$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;Lio/github/yuroyami/kiteplayer/TrackInfo;Ljava/lang/String;ILjava/lang/Object;)Ljava/util/concurrent/CompletableFuture;
@@ -76,6 +84,9 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerJava : java/lang/Auto
 	public final fun seekAsync (JLio/github/yuroyami/kiteplayer/SeekMode;)Ljava/util/concurrent/CompletableFuture;
 	public static synthetic fun seekAsync$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;JLio/github/yuroyami/kiteplayer/SeekMode;ILjava/lang/Object;)Ljava/util/concurrent/CompletableFuture;
 	public final fun seekToChapterAsync (I)Ljava/util/concurrent/CompletableFuture;
+	public final fun seekToSubtitleLineAsync ()Ljava/util/concurrent/CompletableFuture;
+	public final fun seekToSubtitleLineAsync (I)Ljava/util/concurrent/CompletableFuture;
+	public static synthetic fun seekToSubtitleLineAsync$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;IILjava/lang/Object;)Ljava/util/concurrent/CompletableFuture;
 	public final fun seekToTimeOfDayAsync (J)Ljava/util/concurrent/CompletableFuture;
 	public final fun seekToTimeOfDayAsync (JLio/github/yuroyami/kiteplayer/SeekMode;)Ljava/util/concurrent/CompletableFuture;
 	public static synthetic fun seekToTimeOfDayAsync$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;JLio/github/yuroyami/kiteplayer/SeekMode;ILjava/lang/Object;)Ljava/util/concurrent/CompletableFuture;
@@ -88,6 +99,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerJava : java/lang/Auto
 	public final fun setAbLoop (Ljava/lang/Long;Ljava/lang/Long;)V
 	public static synthetic fun setAbLoop$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;Ljava/lang/Long;Ljava/lang/Long;ILjava/lang/Object;)V
 	public final fun setAudioDelay (J)V
+	public final fun setItemDetailsAsync (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/util/concurrent/CompletableFuture;
 	public final fun setSleepTimer (Lio/github/yuroyami/kiteplayer/SleepTimer;)V
 	public final fun setSleepTimer (Lio/github/yuroyami/kiteplayer/SleepTimer;J)V
 	public static synthetic fun setSleepTimer$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;Lio/github/yuroyami/kiteplayer/SleepTimer;JILjava/lang/Object;)V
@@ -98,8 +110,10 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerJava : java/lang/Auto
 	public final fun stepFrameAsync ()Ljava/util/concurrent/CompletableFuture;
 	public final fun stepFrameAsync (Lio/github/yuroyami/kiteplayer/StepDirection;)Ljava/util/concurrent/CompletableFuture;
 	public static synthetic fun stepFrameAsync$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;Lio/github/yuroyami/kiteplayer/StepDirection;ILjava/lang/Object;)Ljava/util/concurrent/CompletableFuture;
+	public final fun stepSubtitleDelayAsync (I)Ljava/util/concurrent/CompletableFuture;
 	public final fun stopAsync ()Ljava/util/concurrent/CompletableFuture;
 	public final fun stopRecordingAsync ()Ljava/util/concurrent/CompletableFuture;
+	public final fun thumbnailAtAsync (J)Ljava/util/concurrent/CompletableFuture;
 	public final fun timeOfDayAtMillis (J)Ljava/lang/Long;
 }
 
@@ -113,6 +127,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerJava$Companion {
 	public final fun create (Lio/github/yuroyami/kiteplayer/PlayerConfig;)Lio/github/yuroyami/kiteplayer/KitePlayerJava;
 	public static synthetic fun create$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava$Companion;Lio/github/yuroyami/kiteplayer/PlayerConfig;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/KitePlayerJava;
 	public final fun isAvailable ()Z
+	public final fun marker (JLjava/lang/String;)Lio/github/yuroyami/kiteplayer/Marker;
 	public final fun sleepAfter (J)Lio/github/yuroyami/kiteplayer/SleepTimer;
 	public final fun sleepAt (J)Lio/github/yuroyami/kiteplayer/SleepTimer;
 }
@@ -152,6 +167,12 @@ public final class io/github/yuroyami/kiteplayer/KitePlayers {
 	public static final fun getAvailability (Lio/github/yuroyami/kiteplayer/KitePlayer$Companion;)Lio/github/yuroyami/kiteplayer/KitePlayerAvailability;
 	public static final fun getSupportsPictureInPicture (Lio/github/yuroyami/kiteplayer/KitePlayer$Companion;)Z
 	public static final fun isAvailable (Lio/github/yuroyami/kiteplayer/KitePlayer$Companion;)Z
+}
+
+public final class io/github/yuroyami/kiteplayer/SystemCaptionStyle_androidKt {
+	public static final fun followSystemCaptionStyle (Lio/github/yuroyami/kiteplayer/KitePlayer;Landroid/content/Context;)Ljava/lang/AutoCloseable;
+	public static final fun systemSubtitleScale (Landroid/content/Context;)F
+	public static final fun systemSubtitleStyle (Landroid/content/Context;)Lio/github/yuroyami/kiteplayer/subtitle/SubtitleStyleOverride;
 }
 
 public final class io/github/yuroyami/kiteplayer/mobile/MobileBackendsKt {

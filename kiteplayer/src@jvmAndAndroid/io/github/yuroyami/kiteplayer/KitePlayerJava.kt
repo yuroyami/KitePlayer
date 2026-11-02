@@ -237,6 +237,42 @@ public class KitePlayerJava(
     public fun inspectAsync(media: MediaItem): CompletableFuture<MediaInspection> =
         calls.future { player.inspect(media) }
 
+    /** `KitePlayer.setItemDetails`: the title, artist and album the media session shows (#650). */
+    public fun setItemDetailsAsync(title: String?, artist: String?, album: String?): CompletableFuture<Void?> =
+        launchCall { player.setItemDetails(title, artist, album) }
+
+    /** `KitePlayer.readPlaylist`: the items of the playlist file at [uri] (#650). */
+    @JvmOverloads
+    public fun readPlaylistAsync(uri: String, headers: Map<String, String> = emptyMap()): CompletableFuture<List<MediaItem>> =
+        calls.future { player.readPlaylist(uri, headers) }
+
+    /** `KitePlayer.openPlaylist`: the playlist file at [uri] as the queue, from [startIndex] (#650). */
+    @JvmOverloads
+    public fun openPlaylistAsync(
+        uri: String,
+        startIndex: Int = 0,
+        headers: Map<String, String> = emptyMap(),
+    ): CompletableFuture<Void?> = launchCall { player.openPlaylist(uri, startIndex, headers) }
+
+    /** `KitePlayer.thumbnailAt` the position [positionMillis]: the seek bar picture there, or null (#650). */
+    public fun thumbnailAtAsync(positionMillis: Long): CompletableFuture<StreamThumbnail?> =
+        calls.future { player.thumbnailAt(positionMillis.milliseconds) }
+
+    /**
+     * `KitePlayer.seekToSubtitleLine`: seeks to the subtitle line [offset] lines from the current
+     * one, and completes with where that line starts, in milliseconds (#650).
+     */
+    @JvmOverloads
+    public fun seekToSubtitleLineAsync(offset: Int = 0): CompletableFuture<Long> =
+        calls.future { player.seekToSubtitleLine(offset).inWholeMilliseconds }
+
+    /**
+     * `KitePlayer.stepSubtitleDelay`: shifts the subtitle delay so the line [offset] lines away
+     * starts now, and completes with the new delay, in milliseconds (#650).
+     */
+    public fun stepSubtitleDelayAsync(offset: Int): CompletableFuture<Long> =
+        calls.future { player.stepSubtitleDelay(offset).inWholeMilliseconds }
+
     /** `KitePlayer.attachRendererAndAwait`. */
     public fun attachRendererAsync(renderer: VideoRenderer): CompletableFuture<Void?> =
         launchCall { player.attachRendererAndAwait(renderer) }
@@ -347,5 +383,12 @@ public class KitePlayerJava(
         /** A sleep timer that stops playback when it reaches [positionMillis]. */
         @JvmStatic
         public fun sleepAt(positionMillis: Long): SleepTimer = SleepTimer.At(positionMillis.milliseconds)
+
+        /**
+         * A marker at [positionMillis] named [id], for `KitePlayer.setMarkers` (#650). Java cannot
+         * call `Marker`'s own constructor, which takes a `kotlin.time.Duration`.
+         */
+        @JvmStatic
+        public fun marker(positionMillis: Long, id: String): Marker = Marker(positionMillis.milliseconds, id)
     }
 }

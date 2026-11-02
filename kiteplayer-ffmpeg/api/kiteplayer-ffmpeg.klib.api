@@ -76,6 +76,8 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource : io.github.yu
         final fun <get-streamDivergences>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/StreamDivergence> // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.streamDivergences.<get-streamDivergences>|<get-streamDivergences>(){}[0]
     final val streams // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.streams|{}streams[0]
         final fun <get-streams>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo> // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.streams.<get-streams>|<get-streams>(){}[0]
+    final val suggestedStart // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.suggestedStart|{}suggestedStart[0]
+        final fun <get-suggestedStart>(): kotlin.time/Duration? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.suggestedStart.<get-suggestedStart>|<get-suggestedStart>(){}[0]
     final val thumbnails // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.thumbnails|{}thumbnails[0]
         final fun <get-thumbnails>(): io.github.yuroyami.kiteplayer.spi/PlayerThumbnails? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.thumbnails.<get-thumbnails>|<get-thumbnails>(){}[0]
     final val timeOfDaySpan // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.timeOfDaySpan|{}timeOfDaySpan[0]
@@ -91,6 +93,7 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource : io.github.yu
 
     final fun audioDecoderFactories(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/AudioDecoderFactory> // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.audioDecoderFactories|audioDecoderFactories(){}[0]
     final fun close() // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.close|close(){}[0]
+    final fun decodesVariant(kotlin/Int): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.decodesVariant|decodesVariant(kotlin.Int){}[0]
     final fun fromSegmentTime(io.github.yuroyami.kiteplayer/Pts): io.github.yuroyami.kiteplayer/Pts // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.fromSegmentTime|fromSegmentTime(io.github.yuroyami.kiteplayer.Pts){}[0]
     final fun interrupt(): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.interrupt|interrupt(){}[0]
     final fun pauseReading(): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.pauseReading|pauseReading(){}[0]

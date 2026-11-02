@@ -83,6 +83,8 @@ private class HeldGainRing(override val format: AudioFormat) : AudioRingHandle {
 
     override fun anchor(): AudioAnchor? = null
 
+    override fun setCeiling(ceiling: Float) = Unit
+
     override fun setGain(target: Float) {
         gainCalls++
         if (holdNextGain) {

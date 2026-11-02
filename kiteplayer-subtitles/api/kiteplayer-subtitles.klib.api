@@ -49,6 +49,15 @@ final class io.github.yuroyami.kiteplayer.subtitle/AssTrackParser { // io.github
     final fun parseEvent(kotlin/String, kotlin/Long, kotlin/Long): io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text? // io.github.yuroyami.kiteplayer.subtitle/AssTrackParser.parseEvent|parseEvent(kotlin.String;kotlin.Long;kotlin.Long){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.subtitle/Cea708DecoderFactory : io.github.yuroyami.kiteplayer.spi/SubtitleDecoderFactory { // io.github.yuroyami.kiteplayer.subtitle/Cea708DecoderFactory|null[0]
+    constructor <init>() // io.github.yuroyami.kiteplayer.subtitle/Cea708DecoderFactory.<init>|<init>(){}[0]
+
+    final val name // io.github.yuroyami.kiteplayer.subtitle/Cea708DecoderFactory.name|{}name[0]
+        final fun <get-name>(): kotlin/String // io.github.yuroyami.kiteplayer.subtitle/Cea708DecoderFactory.name.<get-name>|<get-name>(){}[0]
+
+    final suspend fun create(io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo): io.github.yuroyami.kiteplayer.spi/SubtitleDecoder? // io.github.yuroyami.kiteplayer.subtitle/Cea708DecoderFactory.create|create(io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer.subtitle/TeletextPageReader { // io.github.yuroyami.kiteplayer.subtitle/TeletextPageReader|null[0]
     constructor <init>(kotlin/Int? = ..., kotlin/String? = ...) // io.github.yuroyami.kiteplayer.subtitle/TeletextPageReader.<init>|<init>(kotlin.Int?;kotlin.String?){}[0]
 

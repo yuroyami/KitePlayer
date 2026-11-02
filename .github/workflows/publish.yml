@@ -26,6 +26,19 @@
 # scripts/web-zips.sh and keeps them as the web-zips-<version> artifact. Attach them to the GitHub
 # release page, where the README's web setup points.
 #
+# BUILD ATTESTATION. The attest job signs a build provenance attestation (#684) of every file the
+# run hands out: each jar, klib, AAR, POM and module metadata file uploaded to Maven Central, the
+# web zips and the bill of materials. It names this workflow file, the commit and the run. An app
+# author checks a file with
+#   gh attestation verify <file> --repo yuroyami/KitePlayer --signer-workflow yuroyami/KitePlayer/.github/workflows/publish.yml
+# and adds --source-ref refs/tags/v<version> or --source-digest <commit> to pin what was built.
+# Signatures are not subjects, because each one is made again for Central. The publish job lists
+# the files as checksums from its Maven Local publication, publishes to Central, then publishes to
+# Maven Local again and fails when any listed byte moved, so the list is the bytes that went up.
+# Only the attest job holds the id-token and attestations permissions, and it reads only the list.
+# A publish from the maintainer's machine carries no attestation; the release notes say which
+# version's files carry one.
+#
 # PREREQUISITES
 #   Repository secrets:
 #     MAVEN_CENTRAL_USERNAME / MAVEN_CENTRAL_PASSWORD   Central Portal user token
@@ -116,6 +129,14 @@ jobs:
       - name: Install emscripten
         run: brew install emscripten
 
+      # Before anything builds, so that every publication of this run reads the same settings.
+      # Only in this runner's checkout: the committed default stays manual.
+      - name: Release the deployment on the portal
+        if: inputs.release
+        run: |
+          sed -i '' 's/publishingMode: manual/publishingMode: auto/' \
+            library.module-template.yaml kiteplayer-libass-android-natives/module.yaml
+
       - name: Bill of materials for bundled native code
         run: |
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
@@ -148,6 +169,14 @@ jobs:
           path: build/web-zips/*.zip
           if-no-files-found: error
 
+      # The subjects of the attestation, read from the publication above before the upload.
+      - name: List the files to attest
+        run: |
+          mkdir -p build/attest
+          ./scripts/attestation-subjects.sh maven > build/attest/maven.sha256
+          ./scripts/attestation-subjects.sh release > build/attest/release.sha256
+          wc -l build/attest/maven.sha256 build/attest/release.sha256
+
       - name: Publish to Maven Central
         env:
           KITEPLAYER_LIBASS_REQUIRE_ALL_HOST_JNI: "true"
@@ -157,9 +186,69 @@ jobs:
           KOTLIN_TOOLCHAIN_SIGNING_KEY_PASSPHRASE: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
         run: |
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
-          if [ "${{ inputs.release }}" = "true" ]; then
-            # Only in this runner's checkout: the committed default stays manual.
-            sed -i '' 's/publishingMode: manual/publishingMode: auto/' \
-              library.module-template.yaml kiteplayer-libass-android-natives/module.yaml
-          fi
           ./kotlin publish mavenCentral
+
+      # The listed bytes must be the ones Central took. Publishing again to an emptied Maven Local
+      # writes what the build gives now; a file that differs from the list fails the run before
+      # any attestation names it. With the release input off, drop the deployment on the portal.
+      - name: The uploaded files are the listed ones
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          . scripts/test-signing-key.sh
+          mv "$HOME/.m2/repository/io/github/yuroyami" "$RUNNER_TEMP/listed-maven"
+          flags=()
+          for module in $(scripts/published-modules.sh); do flags+=(-m "$module"); done
+          ./kotlin publish mavenLocal --non-transitive "${flags[@]}"
+          ./scripts/attestation-subjects.sh maven > "$RUNNER_TEMP/maven-again.sha256"
+          if ! diff -u build/attest/maven.sha256 "$RUNNER_TEMP/maven-again.sha256"; then
+            echo "::error::the build gave other bytes after the upload than the ones listed for the attestation" >&2
+            exit 1
+          fi
+          # At most 1024 subjects go into one attestation, so the list is cut into parts of 1000.
+          cat build/attest/maven.sha256 build/attest/release.sha256 \
+            | awk '{ part = int((NR - 1) / 1000); print > ("build/attest/subjects-" part ".sha256") }'
+          parts="$(ls build/attest/subjects-*.sha256 | wc -l | tr -d ' ')"
+          if [ "$parts" -gt 4 ]; then
+            echo "::error::$parts parts of subjects; the attest job signs four, add a step there" >&2
+            exit 1
+          fi
+      - name: Keep the list of files to attest
+        uses: actions/upload-artifact@v4
+        with:
+          name: attestation-subjects-${{ inputs.version }}
+          path: build/attest/subjects-*.sha256
+          if-no-files-found: error
+
+  attest:
+    name: signed build attestation of the published files
+    needs: [check-version, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: attestation-subjects-${{ inputs.version }}
+          path: subjects
+      - name: Attest the first thousand files
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: subjects/subjects-0.sha256
+      - name: Attest the second thousand files
+        if: hashFiles('subjects/subjects-1.sha256') != ''
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: subjects/subjects-1.sha256
+      - name: Attest the third thousand files
+        if: hashFiles('subjects/subjects-2.sha256') != ''
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: subjects/subjects-2.sha256
+      - name: Attest the fourth thousand files
+        if: hashFiles('subjects/subjects-3.sha256') != ''
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: subjects/subjects-3.sha256

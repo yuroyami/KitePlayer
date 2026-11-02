@@ -288,6 +288,52 @@ class WebAudioSinkTest {
         sink.close()
     }
 
+    /**
+     * Silence the device played while the sink was not feeding, during a seek's stop or before the
+     * first block, is no underrun (#668). It was reported as one at the first refill after it.
+     */
+    @Test
+    fun silenceWhileTheSinkIsNotFeedingIsNoUnderrun() = runTest {
+        val device = FakeDevice()
+        device.silence = 1_440_000 // a shared device that played silence before this sink began
+        val sink = newSink(device)
+        val seen = mutableListOf<String>()
+        val collector = backgroundScope.launch { sink.events.collect { seen += it.toString() } }
+        sink.open(request, PatternCallback())
+        sink.start()
+        runCurrent()
+        advanceTimeBy(50)
+        assertEquals(emptyList(), seen, "silence from before the sink fed was reported")
+
+        // A seek stops the feeder for 200 ms, and the device plays silence meanwhile.
+        sink.stop()
+        device.silence += 9_600
+        sink.start()
+        runCurrent()
+        advanceTimeBy(50)
+        assertEquals(emptyList(), seen, "the silence of a seek was reported as an underrun")
+
+        // Silence while it feeds still is one.
+        device.silence += 256
+        device.play(blockFrames)
+        advanceTimeBy(50)
+        assertTrue(seen.isNotEmpty(), "a dry device while feeding must be reported")
+        collector.cancel()
+        sink.stop()
+        sink.close()
+    }
+
+    /** A closed sink does not open again, as the Android and desktop sinks refuse it (#693). */
+    @Test
+    fun aClosedSinkRefusesToOpenAgain() = runTest {
+        val device = FakeDevice()
+        val sink = newSink(device)
+        sink.open(request, PatternCallback())
+        sink.close()
+        val refusal = runCatching { sink.open(request, PatternCallback()) }.exceptionOrNull()
+        assertTrue(refusal is IllegalStateException, "a closed sink opened again: $refusal")
+    }
+
     /** No platform figure means nothing to filter, and saying Estimated would invent confidence. */
     @Test
     fun latencyQualityIsHonestAboutWhatThePlatformOffers() = runTest {

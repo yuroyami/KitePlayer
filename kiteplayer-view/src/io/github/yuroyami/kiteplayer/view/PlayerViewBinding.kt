@@ -1,5 +1,7 @@
 package io.github.yuroyami.kiteplayer.view
 
+import io.github.yuroyami.kiteplayer.KiteLog
+
 /**
  * The one attach state machine both platform views drive.
  *
@@ -33,6 +35,10 @@ package io.github.yuroyami.kiteplayer.view
  * callbacks must still be forwarded to the platform renderer by the view; this binding only
  * decides whether losing the surface also ends the renderer generation.
  *
+ * [refusesAttach] says which failures of [attach] mean that the player takes no more commands, as a
+ * closed one does. The view then shows nothing, as a detach from a closed player already does,
+ * instead of throwing from inside a platform callback the app cannot wrap (#603).
+ *
  * Not thread-safe. Every call must come from the platform's main thread, which is where both
  * platforms deliver the lifecycle callbacks this is driven by.
  */
@@ -42,6 +48,7 @@ internal class PlayerViewBinding<P : Any, R : Any>(
     private val detach: (P, R) -> Unit,
     private val close: (R) -> Unit,
     private val rendererNeedsSurface: Boolean = true,
+    private val refusesAttach: (Throwable) -> Boolean = { false },
 ) {
     private var player: P? = null
     private var surfaceIsReady = false
@@ -102,6 +109,10 @@ internal class PlayerViewBinding<P : Any, R : Any>(
             } catch (closeFailure: Throwable) {
                 if (closeFailure !== attachFailure) attachFailure.addSuppressed(closeFailure)
             }
+            if (refusesAttach(attachFailure)) {
+                KiteLog.log(LOG_TAG, "the view shows nothing, because its player refused the renderer: ${attachFailure.message}")
+                return
+            }
             throw attachFailure
         }
     }
@@ -131,3 +142,5 @@ internal class PlayerViewBinding<P : Any, R : Any>(
         failure?.let { throw it }
     }
 }
+
+private const val LOG_TAG: String = "KitePlayerView"

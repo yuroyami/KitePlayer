@@ -283,6 +283,22 @@ public interface PlayerMediaSource : AutoCloseable {
     public val selectedVariant: Int? get() = null
 
     /**
+     * True when this build decodes every codec the variant at [index] names (#625), so the engine's
+     * quality steps never move the stream onto a variant that would play with no sound or no
+     * picture. The default answers true, for a source that cannot tell.
+     */
+    public fun decodesVariant(index: Int): Boolean = true
+
+    /**
+     * Where the media itself asks playback to start, or null, the default, when it names no place
+     * (#627): a finished HLS playlist's `EXT-X-START`, which FFmpeg applies only to a live one.
+     * The engine starts there when the item names no [io.github.yuroyami.kiteplayer.MediaItem.startPosition]
+     * of its own, and from the media's start, with nothing said, when the source cannot seek or
+     * the place is past the end.
+     */
+    public val suggestedStart: kotlin.time.Duration? get() = null
+
+    /**
      * Moves this source to the variant at [index], or to the one it would open by itself for null,
      * while it plays (#464). True means that the packets change to that variant at the next point
      * where the media allows it, on the same streams and the same timestamps, and that a decoder

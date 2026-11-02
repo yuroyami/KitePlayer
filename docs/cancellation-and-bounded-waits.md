@@ -119,6 +119,21 @@ This is the recovery scope that #96 records.
 The stall timeout limits all of this. When no bytes arrive for that long, the engine ends the
 session. Adaptive bitrate is not part of this scope.
 
+### A signed address that expires
+
+A server that answers 401 or 403 after the item opened refused an address that may have expired,
+as a CDN's signed address does (#453). The item's reader keeps the newest such refusal, its own or
+that of a reader it opened for a segment or a key, until `MediaIo.takeRefusal` hands it over. The
+Ktor reader and the worker player's reader both keep it (#546).
+
+- During playback, the engine opens the item again through the same rebuild a live rejoin runs,
+  which resolves it again through its resolver or its `io` factory, goes back to the position it
+  reached, and warns `PlaybackWarning.AddressRenewed` with the address's file and the status.
+- A seek whose reads were refused renews the same way, and the seek runs again in the reopened
+  item, so it lands where it was going (#546).
+- A refusal less than 2 seconds of playback after a renewal is not renewed again: the resolver
+  handed out the refused address once more, and the read fails as before.
+
 ## Waiting for the network to come back
 
 The contract for #461.

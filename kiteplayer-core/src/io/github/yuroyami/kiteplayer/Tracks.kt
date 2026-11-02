@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer
 
+import io.github.yuroyami.kiteplayer.internal.sameLanguage
 import kotlin.jvm.JvmInline
 
 /**
@@ -30,7 +31,12 @@ public data class TrackInfo(
     val id: TrackId,
     val kind: TrackKind,
     val codec: String,
-    /** BCP 47 where the container gives one, otherwise the raw three-letter code, otherwise null. */
+    /**
+     * BCP 47 where the container gives one, otherwise the raw three-letter code, otherwise null.
+     *
+     * One language arrives in several spellings, so French can read `fr`, `fra` or `fre`. Compare
+     * with [isLanguage] rather than with `==`.
+     */
     val language: String? = null,
     val title: String? = null,
     val isDefault: Boolean = false,
@@ -82,6 +88,17 @@ public data class TrackInfo(
             if (isEmpty()) append(codec)
             if (isForced) append(" [forced]")
         }
+
+    /**
+     * Whether this track is in the language [tag] names, in any spelling of it (#633).
+     *
+     * `fr`, `fra`, `fre` and `fr-CA` are one language here, and `ja` matches a Matroska `jpn` as
+     * well as an HLS `ja-JP`, so `tracks.audio.firstOrNull { it.isLanguage("fr") }` finds French
+     * whatever the container wrote. A region or script in [tag] does not narrow the match. A track
+     * with no language matches no tag, and one marked with a code that names no language, such as
+     * `und`, matches only that same code, never a language.
+     */
+    public fun isLanguage(tag: String): Boolean = sameLanguage(language, tag)
 }
 
 /** The tracks of the current media item, and which of them are selected. */

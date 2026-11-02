@@ -71,6 +71,8 @@ internal class DashHlsMediaIo(
      * (#547), or null for a transport with no store. Only a presentation that has ended uses it.
      */
     private val openSegment: (suspend (String) -> MediaIo)? = null,
+    /** A reader at a byte offset whose first request carries the range (#619), or null to open and seek. */
+    private val openRange: (suspend (String, Long, Long?) -> MediaIo)? = null,
 ) : MediaIo {
 
     private val master = presentation.master.encodeToByteArray()
@@ -227,7 +229,9 @@ internal class DashHlsMediaIo(
 
     /** The media playlist of [track] as it stands now. */
     private suspend fun playlist(track: DashHlsTrack): String = lock.withLock {
-        if (!manifest.isDynamic) {
+        // A live track keeps its live numbering after its manifest turns static, so FFmpeg finds
+        // its place in the last playlist it reloads.
+        if (!manifest.isDynamic && track.address !in sequences) {
             return@withLock written.getOrPut(track.address) {
                 val plan = servedPlan(track, manifest, null)
                 if (openSegment != null) {
@@ -251,7 +255,18 @@ internal class DashHlsMediaIo(
         val plan = servedPlan(track, manifest, now)
         retainListed(track, plan)
         val sequence = sequences.getOrPut(track.address) { LiveSequence() }.first(plan)
-        DashHls.mediaPlaylist(plan, live = true, sequence = sequence, dateOriginMicros = dateOrigin(manifest))
+        // An event that ended, by an update that made the manifest static or by a stated length the
+        // clock has passed, ends its playlist, so FFmpeg ends there instead of reloading a playlist
+        // that never grows again for minutes (#616).
+        val ended = !manifest.isDynamic || DashManifestParser.liveEnded(manifest, now)
+        DashHls.mediaPlaylist(
+            plan,
+            live = true,
+            sequence = sequence,
+            dateOriginMicros = dateOrigin(manifest),
+            ended = ended,
+            startBehindLiveMicros = manifest.suggestedPresentationDelayMicros,
+        )
     }
 
     /**
@@ -640,7 +655,8 @@ internal class DashHlsMediaIo(
             KiteLog.log("KiteDash", "the live manifest could not be fetched again: ${failure.message}")
             return
         }
-        if (fresh.isDynamic && fresh.periods.isNotEmpty()) {
+        // A static update is the end of the event (ISO/IEC 23009-1, 5.4), and it is taken as well.
+        if (fresh.periods.isNotEmpty()) {
             manifest = fresh
             allowedLocation(fresh)?.let { manifestAddress = it }
             onManifest(fresh)
@@ -688,6 +704,10 @@ internal class DashHlsMediaIo(
     private suspend fun webmPlan(representation: DashRepresentation, base: DashSegmentBase, totalMicros: Long?): DashTimedPlan {
         val file = representation.baseUrl
         val headEnd = base.initializationRange?.let { it.last + 1 } ?: WEBM_HEAD_BYTES
+        // The range comes from the manifest, and a head of 1 GiB was allocated before a byte came (#626).
+        if (headEnd > MAX_INDEX_BYTES) {
+            throw DashUnsupportedException("the initialization of ${representation.id} is larger than $MAX_INDEX_BYTES bytes")
+        }
         val layout = WebmIndex.layout(readRange(file, 0L until headEnd, allowShort = true))
         val cuesRange = base.indexRange ?: run {
             val start = layout.cuesStart ?: throw DashUnsupportedException("$file names no Cues, so its clusters cannot be found")
@@ -752,12 +772,28 @@ internal class DashHlsMediaIo(
         throw DashUnsupportedException("$file has no segment index among its first $MAX_BOXES_BEFORE_INDEX boxes")
     }
 
-    /** The bytes of [range] of [file]; fewer only at the end of the file, when [allowShort]. */
+    /**
+     * The bytes of [range] of [file]; fewer only at the end of the file, when [allowShort]. A range
+     * of more than [MAX_INDEX_BYTES] is refused before anything is allocated, whoever asks.
+     */
     private suspend fun readRange(file: String, range: LongRange, allowShort: Boolean = false): ByteArray {
-        val wanted = (range.last - range.first + 1).toInt()
-        val io = openOriginal(DashManifestParser.requireAllowed(manifestUrl, file, policy))
+        val length = range.last - range.first + 1
+        if (length > MAX_INDEX_BYTES) {
+            throw DashUnsupportedException("${shownUri(file)} asks for $length bytes at once, and the limit is $MAX_INDEX_BYTES")
+        }
+        val wanted = length.coerceAtLeast(0L).toInt()
+        val allowed = DashManifestParser.requireAllowed(manifestUrl, file, policy)
+        // A store keeps whole responses, so a presentation that reads through one opens whole (#547).
+        val ranged = openRange?.takeIf { openSegment == null || manifest.isDynamic }
+        val io = ranged?.invoke(allowed, range.first, wanted.toLong()) ?: openOriginal(allowed).also { opened ->
+            try {
+                if (range.first > 0) opened.seek(range.first)
+            } catch (failure: Throwable) {
+                opened.close()
+                throw failure
+            }
+        }
         try {
-            if (range.first > 0) io.seek(range.first)
             val out = ByteArray(wanted)
             var filled = 0
             while (filled < wanted) {

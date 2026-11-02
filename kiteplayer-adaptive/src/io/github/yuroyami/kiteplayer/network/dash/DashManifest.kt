@@ -358,7 +358,13 @@ public object DashManifestParser {
             DashPeriod(
                 baseUrl = periodBase.url,
                 durationMicros = period.attr("duration")?.let(::parseIsoDurationMicros),
-                adaptationSets = period.children("AdaptationSet").map { set ->
+                // An element whose EssentialProperty this reader does not understand is left out,
+                // as ISO/IEC 23009-1 asks (5.8.4.8). A trick play set says so through one, and played
+                // as a quality it was the lowest variant that a step down could pick (#622).
+                adaptationSets = period.children("AdaptationSet").filter(::essentialUnderstood).mapNotNull { set ->
+                    val representations = set.children("Representation")
+                    val understood = representations.filter(::essentialUnderstood)
+                    if (understood.isEmpty() && representations.isNotEmpty()) return@mapNotNull null
                     // Each level's BaseURL resolves against the level above it: MPD, Period,
                     // AdaptationSet, Representation (ISO/IEC 23009-1, 5.6.4).
                     val setBase = resolveBaseUrl(periodBase, set, policy, budget, alternatives)
@@ -371,7 +377,7 @@ public object DashManifestParser {
                         contentType = set.attr("contentType"),
                         mimeType = set.attr("mimeType"),
                         segmentTemplate = setTemplate?.template,
-                        representations = set.children("Representation").map { rep ->
+                        representations = understood.map { rep ->
                             parseRepresentation(
                                 rep, setBase, set, setSegmentList, setSegmentBase, setTemplate, policy, budget, urlLimits,
                                 alternatives,
@@ -444,8 +450,10 @@ public object DashManifestParser {
             bandwidth = rep.attr("bandwidth")?.toLongOrNull() ?: 0L,
             codecs = rep.attr("codecs") ?: set.attr("codecs"),
             mimeType = rep.attr("mimeType") ?: set.attr("mimeType"),
-            width = rep.attr("width")?.toIntOrNull(),
-            height = rep.attr("height")?.toIntOrNull(),
+            // Common attributes, as codecs is: a size the set states holds for each of its
+            // representations, and a set with one size states it only there (#623).
+            width = (rep.attr("width") ?: set.attr("width"))?.toIntOrNull(),
+            height = (rep.attr("height") ?: set.attr("height"))?.toIntOrNull(),
             baseUrl = repBase.url,
             segmentTemplate = TemplateLevel.under(setTemplate, rep)?.template,
             segmentUrls = listed.mapNotNull { it.first },
@@ -527,6 +535,18 @@ public object DashManifestParser {
     }
 
     /** The two addresses DASH-IF has given the thumbnail grid property. */
+    /** Whether every `EssentialProperty` of [element] names a scheme this reader understands (#622). */
+    private fun essentialUnderstood(element: XmlElement): Boolean =
+        element.children("EssentialProperty").all { property ->
+            val scheme = property.attr("schemeIdUri")?.trim()?.lowercase() ?: return@all true
+            // The colour description is read from the bitstream as well, the tiles are read here,
+            // and a font to download only styles subtitles the player draws with its own fonts.
+            scheme in TILE_SCHEMES || scheme.startsWith(CICP_SCHEME_PREFIX) || scheme == DVB_FONT_DOWNLOAD_SCHEME
+        }
+
+    private const val CICP_SCHEME_PREFIX: String = "urn:mpeg:mpegb:cicp:"
+    private const val DVB_FONT_DOWNLOAD_SCHEME: String = "urn:dvb:dash:fontdownload:2014"
+
     private val TILE_SCHEMES = setOf("http://dashif.org/thumbnail_tile", "http://dashif.org/guidelines/thumbnail_tile")
 
     /** The transfer characteristics value [element] states, or null when it states none. */
@@ -787,6 +807,18 @@ public object DashManifestParser {
     /** The span of Period time, in microseconds, whose segments a live presentation has available. */
     private class LiveWindow(val fromMicros: Long, val edgeMicros: Long)
 
+    /**
+     * Whether a live [manifest] states an end that the clock has passed: a packager ends a live
+     * event by stating `mediaPresentationDuration` in an update (DASH-IF IOP), and the presentation
+     * then ends that long after its availability start (#616).
+     */
+    internal fun liveEnded(manifest: DashManifest, nowMicros: Long): Boolean {
+        if (!manifest.isDynamic) return false
+        val duration = manifest.durationMicros ?: return false
+        val start = manifest.availabilityStartTimeMicros ?: return false
+        return nowMicros - start >= duration
+    }
+
     private fun liveWindow(manifest: DashManifest, periodStartMicros: Long, nowMicros: Long?): LiveWindow? {
         if (!manifest.isDynamic) return null
         val start = requireNotNull(manifest.availabilityStartTimeMicros) {
@@ -880,13 +912,16 @@ public object DashManifestParser {
                 // Segment k ends at (k + 1) segment lengths, and is available once that has passed.
                 end = if (window.edgeMicros < segmentMicros) 0 else window.edgeMicros / segmentMicros
                 first = if (window.fromMicros < 0) 0 else window.fromMicros / segmentMicros
+                // A live presentation that states its length has no segment past it, so the clock
+                // alone listed segments that do not exist after the event ended (#616).
+                totalMicros?.let { total -> end = minOf(end, total / segmentMicros + if (total % segmentMicros != 0L) 1 else 0) }
             }
             if (count != null) end = minOf(end, count)
             budget.reserve((end - first).coerceAtLeast(0))
             for (k in first until end) {
                 val startMicros = times(k, segmentMicros, "a segment start")
                 // The last segment of a finished presentation ends with it, not a whole length later.
-                val durationMicros = if (window == null && totalMicros != null) {
+                val durationMicros = if (totalMicros != null) {
                     minOf(segmentMicros, totalMicros - startMicros)
                 } else {
                     segmentMicros

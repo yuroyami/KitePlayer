@@ -16,8 +16,10 @@ longer side; this avoids a full-resolution CPU shader frame during the handoff.
 
 Feedback uses an adaptive pixel budget by default, including when an author uses
 VisualizerSurface without supplying RenderQuality. A severe stall reduces the
-next frame's area immediately, aiming for 8 ms of CPU feedback work. Moderate
-overruns still require five consecutive slow frames. Dynamic feedback can drop
+next frame's area immediately, aiming for 8 ms of CPU feedback work on a 60 Hz
+display. Moderate overruns still require five consecutive slow frames. Every limit
+is set for a 60 Hz frame and scales with a shorter one, so on a 120 Hz display the
+aim is 4 ms and a frame over 7 ms is slow (#658). Dynamic feedback can drop
 below quarter scale on a large or slow device. The scene's foreground and ground
 stay at full resolution. To require a fixed feedback resolution, explicitly pass
 `RenderQuality(scale = 1f, dynamic = false)`.

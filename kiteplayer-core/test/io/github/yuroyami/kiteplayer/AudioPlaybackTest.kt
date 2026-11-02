@@ -286,4 +286,44 @@ class AudioPlaybackTest {
         audio.close()
     }
 
+    /**
+     * The array a caller submits is never written to (#662). A sound board that submitted one
+     * decoded clip at every tap heard the replay gain applied again each time, because the stages
+     * after the tempo stage scaled the caller's array in place when the formats already matched.
+     */
+    @Test
+    fun aSubmittedArrayIsNeverWrittenTo() = runTest {
+        val audio = AudioPlayback(FakeAudioSink(), TestClock())
+        audio.open(format(2))
+        audio.replayGain = 0.5f
+        audio.balance = 0.5f
+        val clip = FloatArray(FRAMES_PER_TAP * 2) { 0.5f }
+        repeat(2) { tap ->
+            audio.submitDecoded(null, clip, FRAMES_PER_TAP, format(2))
+            assertTrue(clip.all { it == 0.5f }, "tap ${tap + 1} changed the caller's array to ${clip.distinct()}")
+        }
+        audio.close()
+    }
+
+    /** A closed audio path does not open its sink again (#693). On Apple that open succeeded and nothing released it. */
+    @Test
+    fun aClosedAudioPathDoesNotOpenItsSinkAgain() = runTest {
+        var opens = 0
+        val sink = object : AudioSink by FakeAudioSink() {
+            override suspend fun open(request: AudioFormat, render: AudioRenderCallback): AudioFormat {
+                opens++
+                return request
+            }
+        }
+        val audio = AudioPlayback(sink, TestClock())
+        audio.open(format(2))
+        audio.close()
+        assertFailsWith<IllegalStateException> { audio.open(format(2)) }
+        assertEquals(1, opens, "the closed path opened its sink again")
+    }
+
+    private companion object {
+        /** 50 ms at 48 kHz: two of them fit in a ring that is never read. */
+        const val FRAMES_PER_TAP = 2_400
+    }
 }

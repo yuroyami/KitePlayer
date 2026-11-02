@@ -11,6 +11,7 @@ import io.github.yuroyami.kiteplayer.subtitle.AssParser
 import io.github.yuroyami.kiteplayer.subtitle.BitmapRegion
 import io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
+import io.github.yuroyami.kiteplayer.uri.FileUri
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -47,8 +48,16 @@ internal object SubtitleFiles {
             val index = path.dropLast(".sub".length) + ".idx"
             runCatching { open(MediaSource.open(index), text) }.getOrNull()?.let { return it }
         }
-        // An image track's bytes are no text, and a text track's encoding is the engine's call.
-        val asBytes = open(MediaSource.open(BytesSource(bytes)), text, imagesOnly = true)
+        // An image track's bytes are no text, and a text track's encoding is the engine's call. A
+        // probe of the raw bytes that FFmpeg refuses is one candidate that failed, not the file: a
+        // UTF-16 MicroDVD file is refused as bytes and reads as its decoded text (#492).
+        val asBytes = try {
+            open(MediaSource.open(BytesSource(bytes)), text, imagesOnly = true)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            null
+        }
         if (asBytes != null) return asBytes
         val utf8 = text.encodeToByteArray()
         return open(MediaSource.open(BytesSource(utf8)), text)
@@ -160,12 +169,15 @@ internal object SubtitleFiles {
         bytes.size >= 4 && bytes[0] == 0.toByte() && bytes[1] == 0.toByte() && bytes[2] == 1.toByte() &&
             bytes[3] == 0xBA.toByte()
 
-    /** A local file's path for [uri], or null for an address FFmpeg must not be handed. */
-    private fun localPath(uri: String): String? = when {
-        uri.startsWith("file://") -> uri.removePrefix("file://")
-        uri.startsWith("/") -> uri
-        uri.length > 2 && uri[1] == ':' && (uri[2] == '\\' || uri[2] == '/') -> uri
-        else -> null
+    /**
+     * A local file's path for [uri], a `file:` address with its escapes decoded (#655), or null for
+     * an address FFmpeg must not be handed.
+     */
+    private fun localPath(uri: String): String? {
+        val path = FileUri.localPath(uri) ?: return null
+        val whole = uri.startsWith("file:", ignoreCase = true) || path.startsWith("/") ||
+            path.length > 2 && path[1] == ':' && (path[2] == '\\' || path[2] == '/')
+        return path.takeIf { whole }
     }
 
     /** A file the engine already read, handed to FFmpeg whole. */

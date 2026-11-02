@@ -3,6 +3,8 @@ package io.github.yuroyami.kiteplayer.network.dash
 import io.github.yuroyami.kiteplayer.KitePlayerInternalApi
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.PlaybackError
+import io.github.yuroyami.kiteplayer.PlaybackException
 import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.github.yuroyami.kiteplayer.SourceRefusal
 import io.github.yuroyami.kiteplayer.network.xml.XmlLimits
@@ -36,6 +38,11 @@ public class DashTransport(
      * may keep in a segment store (#547), or null, the default, for a transport with no store.
      */
     public val openSegment: (suspend (url: String) -> MediaIo)? = null,
+    /**
+     * [open] at a byte offset, `length` bytes of it when known, whose first request carries that
+     * range (#619), or null, the default, for a transport that opens and then seeks.
+     */
+    public val openRange: (suspend (url: String, offset: Long, length: Long?) -> MediaIo)? = null,
 )
 
 /**
@@ -58,6 +65,9 @@ internal fun DashTransport.failingOver(failover: DashFailover, mpdUrl: String, p
         openSegment = inner.openSegment?.let { segment ->
             { url -> failover.open(url) { target -> segment(checked(url, target)) } }
         },
+        openRange = inner.openRange?.let { ranged ->
+            { url, offset, length -> failover.open(url) { target -> ranged(checked(url, target), offset, length) } }
+        },
     )
 }
 
@@ -72,6 +82,7 @@ private class ReleasingMediaIo(private val inner: MediaIo, private val release: 
     override suspend fun seek(position: Long) = inner.seek(position)
     override fun setWarningSink(sink: (PlaybackWarning) -> Unit) = inner.setWarningSink(sink)
     override suspend fun openRelated(uri: String): MediaIo? = inner.openRelated(uri)
+    override suspend fun openRelated(uri: String, offset: Long, length: Long?): MediaIo? = inner.openRelated(uri, offset, length)
     override fun takeRefusal(): SourceRefusal? = inner.takeRefusal()
     override fun networkBitsPerSecond(): Long? = inner.networkBitsPerSecond()
 
@@ -142,7 +153,8 @@ public object DashDoor {
      * [open], which answers null for an address it does not take and judges every redirect itself.
      * [dateOf] reads the `Date` header of a reader that [open] made. The returned reader closes
      * [io] with it. [openSegment] is [open] for a segment the manifest named, when the transport
-     * keeps segments in a store (#547).
+     * keeps segments in a store (#547). [openRange] is [open] at a byte offset whose first request
+     * carries the range (#619), or null to open and seek.
      */
     public suspend fun readerIfManifest(
         io: MediaIo,
@@ -153,6 +165,7 @@ public object DashDoor {
         maxManifestBytes: Long = MAX_MANIFEST_BYTES,
         maxSegmentBytes: Long = MAX_SEGMENT_BYTES,
         openSegment: (suspend (url: String) -> MediaIo?)? = null,
+        openRange: (suspend (url: String, offset: Long, length: Long?) -> MediaIo?)? = null,
     ): MediaIo? {
         val location = io.location
         if (!DashDetection.declared(io.contentType, location)) {
@@ -183,6 +196,11 @@ public object DashDoor {
                 openSegment = openSegment?.let { segment ->
                     { url -> segment(url) ?: throw DashUrlRefusedException("${shownUri(url)} is not an http or https address") }
                 },
+                openRange = openRange?.let { ranged ->
+                    { url, offset, length ->
+                        ranged(url, offset, length) ?: throw DashUrlRefusedException("${shownUri(url)} is not an http or https address")
+                    }
+                },
             ),
         )
     }
@@ -199,10 +217,14 @@ public object DashDoor {
         for ((index, each) in manifest.periods.withIndex()) {
             val media = each.adaptationSets.filter { it.isVideo() || it.isAudio() }
             if (media.isNotEmpty() && media.all { it.isProtected }) {
-                val schemes = media.flatMap { it.contentProtectionSchemes }.distinct().joinToString(", ")
-                throw DashUnsupportedException(
-                    "${shownUri(mpdUrl)} is encrypted" + (if (manifest.periods.size > 1) " in Period ${index + 1}" else "") +
-                        " ($schemes), and digital rights management is not supported",
+                // The typed refusal the HLS path gives too, so an app tells protection apart (#624).
+                val schemes = media.flatMap { it.contentProtectionSchemes }.distinct()
+                val system = schemes.firstNotNullOfOrNull(::drmSystemOfScheme) ?: schemes.joinToString(", ")
+                throw PlaybackException(
+                    PlaybackError.DrmUnsupported(
+                        mpdUrl,
+                        system + (if (manifest.periods.size > 1) " in Period ${index + 1}" else ""),
+                    ),
                 )
             }
         }
@@ -329,6 +351,7 @@ public object DashDoor {
             release = transport.release,
             refusal = transport.refusal,
             openSegment = transport.openSegment,
+            openRange = transport.openRange,
         )
     }
 
@@ -374,3 +397,12 @@ public object DashDoor {
 
 /** [uri] as a message may show it: with no credentials and no query. */
 internal fun shownUri(uri: String): String = MediaItem(uri).label
+
+/** The DRM system a `ContentProtection` scheme names, by its common name, or null for a scheme that names none. */
+private fun drmSystemOfScheme(scheme: String): String? = when (scheme.lowercase()) {
+    "urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed" -> "Widevine"
+    "urn:uuid:9a04f079-9840-4286-ab92-e65be0885f95", "urn:uuid:79f0049a-4098-8642-ab92-e65be0885f95" -> "PlayReady"
+    "urn:uuid:94ce86fb-07ff-4f43-adb8-93d2fa968ca2" -> "FairPlay"
+    "urn:uuid:e2719d58-a985-b3c9-781a-b030af78d30e" -> "ClearKey"
+    else -> null
+}

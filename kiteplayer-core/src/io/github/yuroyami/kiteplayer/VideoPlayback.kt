@@ -422,6 +422,10 @@ public class VideoPlayback(
         startAtNanos.value = NO_START
         frameTimerNanos = clock.nanos()
         started = true
+        // Nothing plays while this frame is shown, so the clock holds it: running, it counted the
+        // time the renderer took to draw the frame, and a paused player then read 400 ms ahead of
+        // its picture after a slow draw (#588). The schedule's resume starts the clock from here.
+        videoClock.pause()
         return present(frameTimerNanos, masterClock)
     }
 
@@ -463,13 +467,20 @@ public class VideoPlayback(
     internal val captureRequest: kotlinx.atomicfu.AtomicRef<kotlinx.coroutines.CompletableDeferred<CapturedFrame>?> =
         kotlinx.atomicfu.atomic(null)
 
+    /**
+     * What else a capture keeps of the moment its frame is copied, sampled at that same instant
+     * (#73): the engine reads the subtitles and the viewer's turn there, so a caller that resumes
+     * late cannot pair this picture with a later moment's text or rotation.
+     */
+    internal var sampleCaptureMoment: (() -> Any?)? = null
+
     private suspend fun present(targetNanos: Long, masterClock: Pts?): Duration {
         val frame = queue.advance() ?: return IDLE_WAIT
         videoClock.set(frame.pts, generation)
         // The capture copies BEFORE ownership moves: from the renderer's first instruction the
         // frame may be recycled into a decoder pool, and a headless present closes it outright.
         captureRequest.getAndSet(null)?.let { request ->
-            runCatching { CapturedFrame.of(frame) }
+            runCatching { CapturedFrame.of(frame).also { it.moment = sampleCaptureMoment?.invoke() } }
                 .onSuccess(request::complete)
                 .onFailure(request::completeExceptionally)
         }

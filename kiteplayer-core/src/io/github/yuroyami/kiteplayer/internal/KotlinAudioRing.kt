@@ -173,6 +173,9 @@ internal class KotlinAudioRing(
      * sized here because the device's thread may not allocate.
      */
     private val limitReset = atomic(true)
+
+    /** How loud a sample may leave, set by [setCeiling] and read once by each render's [limit] (#612). */
+    private val limitCeiling = atomic(1f)
     private val limitedCount = atomic(0L)
     private val limitLookahead: Int = limitLookaheadFrames(format.sampleRate)
     private val limitRelease: Float = 1f / limitReleaseFrames(format.sampleRate)
@@ -443,6 +446,13 @@ internal class KotlinAudioRing(
         gainTarget.value = target
     }
 
+    override fun setCeiling(ceiling: Float) {
+        require(ceiling.isFinite() && ceiling >= 1f && ceiling <= CEILING_MAX) {
+            "a ceiling must be between 1 and $CEILING_MAX, was $ceiling"
+        }
+        limitCeiling.value = ceiling
+    }
+
     override fun hold(held: Boolean) {
         // Not silent first, then the hold, in the order `kprt_ring_set_hold` takes. A render in
         // flight may still store a true it worked out under the old hold; it does that only with
@@ -623,6 +633,9 @@ internal class KotlinAudioRing(
         var gain = limitGain
         var limited = 0L
         var base = 0
+        // Levels are measured against the ceiling, so at 1 nothing moves by a bit.
+        val ceiling = limitCeiling.value
+        val inverse = 1f / ceiling
 
         if (limitReset.value) {
             limitReset.value = false
@@ -650,6 +663,7 @@ internal class KotlinAudioRing(
                     if (a > level) level = a
                 }
                 level = level * scale
+                level = level * inverse
                 while (limitQueueCount > 0 && limitQueueFrame[limitQueueHead] <= entering - lookahead) {
                     limitQueueHead = if (limitQueueHead + 1 == lookahead) 0 else limitQueueHead + 1
                     limitQueueCount--
@@ -695,11 +709,12 @@ internal class KotlinAudioRing(
                 val a = if (y < 0f) -y else y
                 if (a > peak) peak = a
             }
+            peak = peak * inverse
             if (peak * gain > 1f) gain = 1f / peak
             if (gain < 1f) {
                 for (i in 0 until channels) {
                     var y = samples[base + i] * gain
-                    if (y > 1f) y = 1f else if (y < -1f) y = -1f
+                    if (y > ceiling) y = ceiling else if (y < -ceiling) y = -ceiling
                     samples[base + i] = y
                 }
                 limited++

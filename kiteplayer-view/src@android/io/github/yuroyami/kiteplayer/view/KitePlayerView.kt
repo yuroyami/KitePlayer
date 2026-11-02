@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.view
 
 import kotlin.time.Duration
 import android.app.PictureInPictureParams
+import kotlin.time.Duration.Companion.milliseconds
 import android.content.Context
 import android.graphics.Rect
 import android.os.Build
@@ -33,8 +34,9 @@ import kotlin.math.roundToInt
  * A reusable Android player view for layouts, programmatic UI, and Compose `AndroidView` interop.
  *
  * This artifact owns only Android view lifecycle and layout. A view with no [rendererFactory] of its
- * own uses [PlayerViewDefaults.rendererFactory], which the `kiteplayer` module sets when it builds a
- * player, so `view.player = player` is the whole setup. The renderer is attached as soon as both the
+ * own uses [PlayerViewDefaults.rendererFactory], which `KitePlayer(config)` sets when it builds a
+ * player on the FFmpeg backend, so `view.player = player` is the whole setup; see that object for
+ * the rule. The renderer is attached as soon as both the
  * player and a factory exist, even before the Surface does, so renderer-coupled hardware decoders
  * can take part in decoder selection. Media may open before or after that: a player that decoded
  * without a renderer moves to the renderer's own decoder when the renderer arrives. Surface creation and destruction are forwarded into
@@ -74,9 +76,11 @@ public open class KitePlayerView @JvmOverloads constructor(
     private var supersededBefore = 0L
     private var failedBefore = 0L
 
+    private val missingRenderer = MissingRendererNotice("KitePlayerView")
+
     private val binding = PlayerViewBinding<KitePlayer, AndroidPlayerViewRenderer>(
         createRenderer = {
-            (rendererFactory ?: PlayerViewDefaults.rendererFactory)?.let { factory ->
+            (rendererFactory ?: PlayerViewDefaults.rendererFactory ?: run { missingRenderer.note(); null })?.let { factory ->
                 val generation = ++rendererGeneration
                 val renderer = factory.create(
                     onOverlay = { overlay ->
@@ -115,6 +119,9 @@ public open class KitePlayerView @JvmOverloads constructor(
             }
         },
         attach = { player, renderer -> player.attachRenderer(renderer) },
+        // A closed player refuses every command with IllegalStateException, and the view then shows
+        // nothing, as its detach already treats a closed player (#603).
+        refusesAttach = { it is IllegalStateException },
         detach = { player, renderer ->
             try {
                 player.detachRenderer(expected = renderer)
@@ -230,6 +237,7 @@ public open class KitePlayerView @JvmOverloads constructor(
         if (!showsControls || paired == null) return
         val scope = CoroutineScope(SupervisorJob() + MainLooper)
         val model = PlayerControlsModel(paired, scope, controlsStrings)
+        model.recommendedHideAfter = { asked -> recommendedControlsTimeout(asked) }
         model.onFullScreen = onFullScreen
         model.onPictureInPicture = onPictureInPicture
         controlsScope = scope
@@ -726,4 +734,20 @@ internal object MainLooper : CoroutineDispatcher() {
     override fun dispatch(context: CoroutineContext, block: Runnable) {
         handler.post(block)
     }
+}
+
+/**
+ * How long the accessibility settings ask controls with icons to stay, given [asked] (#653): a user
+ * who set a longer time to take action gets that time, and a screen reader keeps them while it
+ * reads. Android 10 and later answer it; before that the controls keep [asked].
+ */
+private fun android.view.View.recommendedControlsTimeout(asked: kotlin.time.Duration): kotlin.time.Duration {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return asked
+    val manager = context.getSystemService(android.view.accessibility.AccessibilityManager::class.java) ?: return asked
+    val millis = manager.getRecommendedTimeoutMillis(
+        asked.inWholeMilliseconds.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(),
+        android.view.accessibility.AccessibilityManager.FLAG_CONTENT_ICONS or
+            android.view.accessibility.AccessibilityManager.FLAG_CONTENT_CONTROLS,
+    )
+    return if (millis == Int.MAX_VALUE) kotlin.time.Duration.INFINITE else millis.milliseconds
 }

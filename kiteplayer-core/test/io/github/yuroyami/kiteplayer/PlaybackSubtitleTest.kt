@@ -311,6 +311,46 @@ class PlaybackSubtitleTest {
         harness.close()
     }
 
+    /**
+     * The default controls keep text above themselves through an inset of their own, which the
+     * engine combines with the application's safe area and keeps out of the snapshot and any
+     * memento (#648). They moved the user's subtitle position, which a memento then saved.
+     */
+    @Test
+    fun theControlsInsetLiftsTextWithoutTouchingTheUsersSettings() = runTest {
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(durationUs = 6_000_000, subtitleCues = listOf(cue(500, 5_500, "hello"))),
+            config = subtitleConfig(),
+        )
+        harness.renderer!!.outputSizeOverride = io.github.yuroyami.kiteplayer.VideoSize(1000, 500)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1.seconds)
+        fun bottomRow() = harness.renderer.overlays.filterNotNull().last { it.images.isNotEmpty() }.images.single().y
+
+        harness.core.post(io.github.yuroyami.kiteplayer.internal.CoreCommand.SetControlsInset(0.2f, kotlinx.coroutines.CompletableDeferred()))
+        harness.run(300.milliseconds)
+        assertEquals(399, bottomRow(), "the text did not move above the controls")
+        val player = KitePlayer(harness.core)
+        assertEquals(1f, harness.core.snapshots.value.subtitlePosition, "the lift reached the user's position")
+        assertEquals(1f, player.memento().subtitlePosition, "a memento saved the lift")
+
+        // The application's own safe area, larger than the controls', wins, and is not replaced.
+        harness.core.post(
+            io.github.yuroyami.kiteplayer.internal.CoreCommand.SetSubtitleSafeArea(
+                io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea(bottom = 0.4f),
+                kotlinx.coroutines.CompletableDeferred(),
+            ),
+        )
+        harness.run(300.milliseconds)
+        assertEquals(299, bottomRow())
+        harness.core.post(io.github.yuroyami.kiteplayer.internal.CoreCommand.SetControlsInset(0f, kotlinx.coroutines.CompletableDeferred()))
+        harness.run(300.milliseconds)
+        assertEquals(299, bottomRow(), "the controls hiding undid the application's safe area")
+        harness.close()
+    }
+
     @Test
     fun anUnchangedActiveSetPublishesNothingNew() = runTest {
         val harness = CoreHarness(

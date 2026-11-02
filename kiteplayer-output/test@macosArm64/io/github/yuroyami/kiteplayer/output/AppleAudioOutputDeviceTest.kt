@@ -32,6 +32,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.fail
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
@@ -42,7 +43,7 @@ class AppleAudioOutputDeviceTest {
 
     @Test
     fun theListHoldsTheSystemDefaultOnce() {
-        if (MacOutputDevices.defaultOutputDevice() == 0u) return println("skipped: this Mac has no default output")
+        if (MacOutputDevices.defaultOutputDevice() == 0u) fail("this Mac reports no default output, so the device under test is missing")
         val devices = AppleOutputBackend.audioOutputDevices()
         assertEquals(1, devices.count { it.isDefault }, "the default among $devices")
     }
@@ -50,7 +51,7 @@ class AppleAudioOutputDeviceTest {
     @Test
     fun theDefaultDeviceOpensThroughItsUid() = runBlocking {
         val default = AppleOutputBackend.audioOutputDevices().firstOrNull { it.isDefault }
-            ?: return@runBlocking println("skipped: this Mac has no default output")
+            ?: fail("this Mac reports no default output, so the device under test is missing")
         val sink = CoreAudioSink(AppleAudioSessionPolicy.ManagedPlayback, AppleHostClock, default.id)
         try {
             val handoff = sink.openWithRing(format) { 4_800 }
@@ -79,9 +80,9 @@ class AppleAudioOutputDeviceTest {
     @Test
     fun aBoundDeviceThatDisappearsWhileItPlaysFailsTheSinkTyped() = runBlocking {
         val default = AppleOutputBackend.audioOutputDevices().firstOrNull { it.isDefault }
-            ?: return@runBlocking println("skipped: this Mac has no default output")
+            ?: fail("this Mac reports no default output, so the device under test is missing")
         val aggregate = PrivateAggregateDevice.create(default.id)
-            ?: return@runBlocking println("skipped: CoreAudio refused a private aggregate device")
+            ?: fail("CoreAudio refused a private aggregate device, so no device could be taken away")
         try {
             // A new device can take a moment to join the device list.
             withTimeout(5.seconds) { while (MacOutputDevices.deviceFor(aggregate.uid) == null) delay(20) }

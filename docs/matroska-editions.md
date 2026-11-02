@@ -1,5 +1,8 @@
 # Matroska editions and linked files
 
+> [!NOTE]
+> Not released yet: this is on `main` after 0.3.0 and comes with the next release.
+
 This document is the design for issue #501, and the player now does what it says. It states the
 public API, what the player does with an ordered edition, and how the engine plays one. Where
 building it changed a detail, the detail here is the one that was built. The user's account is in

@@ -52,4 +52,30 @@ class RenderQualityTest {
         quality.afterFrame(millis = 500f, deltaSeconds = 0.1f)
         assertEquals(1f, quality.stepped)
     }
+
+    /** On a 120 Hz screen 11 ms of trail work is more than a frame, so the buffer shrinks (#658). */
+    @Test
+    fun aFasterDisplayHasAShorterBudget() {
+        val slow = RenderQuality()
+        repeat(600) { slow.afterFrame(millis = 11f, deltaSeconds = 1f / 120f) }
+        assertTrue(slow.current < 1f, "11 ms frames at 120 Hz kept the buffer at ${slow.current}")
+
+        // 9 ms at 120 Hz is past its quick limit, so the buffer does not grow back.
+        val held = RenderQuality()
+        repeat(600) { held.afterFrame(millis = 30f, deltaSeconds = 1f / 120f) }
+        val after = held.current
+        repeat(600) { held.afterFrame(millis = 9f, deltaSeconds = 1f / 120f) }
+        assertTrue(held.current <= after, "9 ms frames at 120 Hz grew the buffer from $after to ${held.current}")
+    }
+
+    /** The 60 Hz limits are the ones they always were, and a stall's long step does not raise them. */
+    @Test
+    fun theSixtyHertzLimitsAndAStallAreAsBefore() {
+        val steady = RenderQuality()
+        repeat(600) { steady.afterFrame(millis = 11f, deltaSeconds = 1f / 60f) }
+        assertEquals(1f, steady.current, "11 ms at 60 Hz is inside its frame")
+        val stalled = RenderQuality()
+        repeat(10) { stalled.afterFrame(millis = 15f, deltaSeconds = 0.1f) }
+        assertTrue(stalled.current < 1f, "a run of slow frames with stalled steps did not shrink the buffer")
+    }
 }

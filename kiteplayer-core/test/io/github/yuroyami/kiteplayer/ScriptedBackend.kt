@@ -151,6 +151,18 @@ internal class MediaScript(
      * [SCRIPTED_CAPTION_CLEAR] an empty one that clears the screen.
      */
     val videoCaptions: ((ptsUs: Long) -> String?)? = null,
+    /**
+     * True puts [videoCaptions] in the packets, as the A/53 SEI of an H.264 access unit with start
+     * codes, and none in the pictures, as Android's MediaCodec gives none (#611).
+     */
+    val videoCaptionsInPackets: Boolean = false,
+    /**
+     * The raw `cc_data` each decoded picture carries, by its time, which wins over [videoCaptions]
+     * (#678). The scripted service decoder reads each CEA-708 service's bytes as text.
+     */
+    val videoCaptionBytes: ((ptsUs: Long) -> ByteArray?)? = null,
+    /** The video stream's codec name, as FFmpeg names one. */
+    val videoCodec: String = "scripted-video",
     val hasVideo: Boolean = true,
     val hasAudio: Boolean = true,
     /** The chapter table the scripted container declares. */
@@ -178,6 +190,8 @@ internal class MediaScript(
     val videoColor: io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo? = null,
     /** How the video stream's pictures cover the sphere, for a 360 degree video, or null for a flat one (#460). */
     val videoProjection: io.github.yuroyami.kiteplayer.VideoProjection? = null,
+    /** Whether the video stream is interlaced, as its container states it (#609). */
+    val videoFieldOrder: io.github.yuroyami.kiteplayer.spi.FieldOrder = io.github.yuroyami.kiteplayer.spi.FieldOrder.Unknown,
     val seekable: Boolean = true,
     /** Extra container tags, for the suites that read them. Merged over the harness's own three. */
     val containerTags: Map<String, String> = emptyMap(),
@@ -237,6 +251,10 @@ internal class MediaScript(
     val audioSilentUs: List<LongRange> = emptyList(),
     /** The variants the source offers, as an HLS master playlist would. The item's choice picks one. */
     val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> = emptyList(),
+    /** The variants whose codecs this build does not decode (#625). */
+    val undecodableVariants: Set<Int> = emptySet(),
+    /** Where the media asks to start, as a finished HLS playlist's EXT-X-START does (#627), or null. */
+    val suggestedStartUs: Long? = null,
     /** The seek bar pictures the scripted stream carries, or null (#433). */
     val thumbnails: io.github.yuroyami.kiteplayer.spi.PlayerThumbnails? = null,
     /**
@@ -563,6 +581,9 @@ internal class FaultPlan(
      * AFTER the audio path has gone live. */
     var failSelectStreams: Boolean = false
 
+    /** What a failing [failSelectStreams] throws, or null for a plain error. */
+    var selectStreamsFailure: Throwable? = null
+
     /** True parks every audio decoder's receive until cancellation, a worker that refuses to reach
      * a quiescent boundary. */
     var stallAudioDecodeReceive: Boolean = false
@@ -592,11 +613,20 @@ internal class FaultPlan(
      */
     var videoDecodeFailsAfterFrames: Int? = null
 
+    /** What the failure of [videoDecodeFailsAfterFrames] throws, or null for a plain error. */
+    var videoDecodeFailure: Throwable? = null
+
     /** True makes opening the sink fail. */
     var sinkOpenFails: Boolean = false
 
     /** True wedges the next container seek like an uncancellable native scan. */
     var seekWedges: Boolean = false
+
+    /**
+     * Runs at the next seek of the source and makes that seek throw, once, as a seek whose reads a
+     * server refused does (#546). Null seeks as the script says.
+     */
+    var seekFailsOnce: (() -> Unit)? = null
 
     /** Reads beyond this count wedge like an uncancellable native read. Null wedges nothing. */
     var readWedgesAfter: Int? = null
@@ -768,6 +798,38 @@ internal object ScriptedCaptionDecoderFactory : SubtitleDecoderFactory {
                 drained = false
                 flushes++
             }
+
+            override fun close() = Unit
+        }
+    }
+}
+
+/**
+ * The decoder of a CEA-708 service the engine found inside a scripted picture (#678): each packet's
+ * bytes, the service's own, read as text that holds until the next.
+ */
+internal object ScriptedServiceDecoderFactory : SubtitleDecoderFactory {
+    override val name: String = "scripted-708"
+
+    override suspend fun create(stream: PlayerStreamInfo): SubtitleDecoder? {
+        if (stream.codec != io.github.yuroyami.kiteplayer.spi.CEA708_CAPTIONS_CODEC) return null
+        return object : SubtitleDecoder {
+            private val pending = ArrayDeque<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>()
+
+            override suspend fun send(packet: PlayerPacket?): Boolean {
+                val pts = packet?.pts?.micros ?: return true
+                val spans = listOf(io.github.yuroyami.kiteplayer.subtitle.StyledSpan(packet.copyBytes().decodeToString()))
+                pending.addLast(io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text(pts, io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.OPEN_END, spans))
+                return true
+            }
+
+            override suspend fun receive(): List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue> {
+                val out = pending.toList()
+                pending.clear()
+                return out
+            }
+
+            override suspend fun flush(newGeneration: Generation) = pending.clear()
 
             override fun close() = Unit
         }
@@ -980,6 +1042,7 @@ internal class ScriptedSession(
         listOfNotNull(
             ScriptedSubtitleDecoderFactory(script, faults).takeIf { script.hasSubtitles },
             ScriptedCaptionDecoderFactory.takeIf { script.videoCaptions != null },
+            ScriptedServiceDecoderFactory.takeIf { script.videoCaptionBytes != null },
         )
 
     var closeCount: Int = 0
@@ -1054,6 +1117,11 @@ internal class ScriptedSource(
     }
 
     override val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> get() = script.variants
+
+    override fun decodesVariant(index: Int): Boolean = index !in script.undecodableVariants
+
+    override val suggestedStart: kotlin.time.Duration?
+        get() = script.suggestedStartUs?.let { with(kotlin.time.Duration) { it.microseconds } }
 
     override val thumbnails: io.github.yuroyami.kiteplayer.spi.PlayerThumbnails? get() = script.thumbnails
 
@@ -1172,7 +1240,7 @@ internal class ScriptedSource(
                 PlayerStreamInfo(
                     index = script.videoIndex,
                     kind = TrackKind.Video,
-                    codec = "scripted-video",
+                    codec = script.videoCodec,
                     isDefault = true,
                     startTime = Pts.Zero,
                     videoSize = VideoSize(1920, 1080),
@@ -1181,6 +1249,7 @@ internal class ScriptedSource(
                     rotationDegrees = script.videoRotationDegrees,
                     colorSpace = script.videoColor,
                     projection = script.videoProjection,
+                    fieldOrder = script.videoFieldOrder,
                     // A key with no TrackInfo field of its own, so a test can prove the raw tags
                     // travel and not just the two the type happens to parse.
                     metadata = mapOf("handler_name" to "scripted video handler"),
@@ -1319,7 +1388,7 @@ internal class ScriptedSource(
 
     /** Selects before the first read, and again between reads to add a stream that appeared (#509). */
     override fun selectStreams(indices: Set<Int>) {
-        if (faults.failSelectStreams) error("scripted selectStreams failure")
+        if (faults.failSelectStreams) throw faults.selectStreamsFailure ?: IllegalStateException("scripted selectStreams failure")
         require(indices.isNotEmpty()) { "no selectable stream among $indices" }
         require(indices.all { wanted -> streams.any { it.index == wanted } }) {
             "unknown scripted stream in $indices"
@@ -1479,6 +1548,11 @@ internal class ScriptedSource(
                         duration = Pts(next - pts),
                         isKeyframe = script.isVideoKeyframe(pts),
                         ledger = ledger,
+                        packetBytes = if (script.videoCaptionsInPackets && video == script.videoIndex) {
+                            script.videoCaptions?.invoke(pts)?.let(::a53CaptionAccessUnit)
+                        } else {
+                            null
+                        },
                     ),
                 )
             }
@@ -1509,6 +1583,11 @@ internal class ScriptedSource(
         check(choice != KeyframeChoice.InSeekDirection) { "the engine resolves the seek's direction itself" }
         seeks++
         if (faults.seekWedges && !wedgeReleased.isCompleted) wedge("seek")
+        faults.seekFailsOnce?.let { before ->
+            faults.seekFailsOnce = null
+            before()
+            throw PlaybackException(PlaybackError.SourceUnavailable("https://cdn.test/seg-7.ts", null, "HTTP 403"))
+        }
         seekTargets += target.micros
         seekChoices += choice
         trace.record("source.seek")
@@ -1627,7 +1706,11 @@ internal class ScriptedVideoDecoder(
                 duration = packet.duration ?: Pts(script.videoFrameDurationUs),
                 size = script.videoFrameSize?.invoke(pts.micros) ?: VideoSize(1920, 1080),
                 ledger = ledger,
-                closedCaptions = script.videoCaptions?.invoke(pts.micros)?.encodeToByteArray(),
+                closedCaptions = when {
+                    script.videoCaptionsInPackets -> null
+                    script.videoCaptionBytes != null -> script.videoCaptionBytes.invoke(pts.micros)
+                    else -> script.videoCaptions?.invoke(pts.micros)?.encodeToByteArray()
+                },
             ),
         )
         return true
@@ -1636,7 +1719,7 @@ internal class ScriptedVideoDecoder(
     override suspend fun receive(): VideoFrame? {
         val failAfter = faults.videoDecodeFailsAfterFrames
         if (failAfter != null && hardware != HwdecStatus.Software && delivered >= failAfter) {
-            error("scripted hardware video decode failed after $delivered frames")
+            throw faults.videoDecodeFailure ?: IllegalStateException("scripted hardware video decode failed after $delivered frames")
         }
         val frame = pending.removeFirstOrNull()
         if (frame == null && ending) drained = true
@@ -2201,4 +2284,20 @@ internal class SampleRecord {
     operator fun get(index: Int): Float = data[index]
 
     fun toFloatArray(): FloatArray = data.copyOf(size)
+}
+
+/**
+ * An H.264 access unit with start codes whose SEI carries [text] as its A/53 caption data, a
+ * triplet per three bytes, so the scripted caption decoder reads the text back (#611). [text] is a
+ * multiple of three bytes long.
+ */
+internal fun a53CaptionAccessUnit(text: String): ByteArray {
+    val triplets = text.encodeToByteArray()
+    require(triplets.size % 3 == 0 && triplets.isNotEmpty()) { "caption text is whole triplets: $text" }
+    val t35 = byteArrayOf(0xB5.toByte(), 0x00, 0x31, 'G'.code.toByte(), 'A'.code.toByte(), '9'.code.toByte(), '4'.code.toByte(), 0x03,
+        (0x40 or triplets.size / 3).toByte(), 0xFF.toByte()) + triplets + byteArrayOf(0xFF.toByte())
+    val sei = byteArrayOf(0x06, 0x04, t35.size.toByte()) + t35 + byteArrayOf(0x80.toByte())
+    val slice = byteArrayOf(0x65, 0x88.toByte(), 0x84.toByte(), 0x10)
+    val start = byteArrayOf(0, 0, 0, 1)
+    return start + sei + start + slice
 }

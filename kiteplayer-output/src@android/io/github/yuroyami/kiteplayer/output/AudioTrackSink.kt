@@ -145,6 +145,16 @@ public class AudioTrackSink internal constructor(
         return true
     }
 
+    /**
+     * The room a float track is promised above full scale, about 3 dB, before its volume applies
+     * (#612). Android's `AudioTrack.write` for floats permits samples up to 3 dB past the nominal
+     * range. A track opened in 16 bits clips at full scale on the way in, so it answers 1.
+     */
+    override val deviceGainHeadroom: Float
+        get() = synchronized(lifecycle) {
+            if (driver?.encoding == DriverEncoding.Pcm16) 1f else FLOAT_TRACK_HEADROOM
+        }
+
     override suspend fun open(request: AudioFormat, render: AudioRenderCallback): AudioFormat {
         synchronized(lifecycle) {
             check(!closed) { "AudioTrackSink is closed" }
@@ -231,7 +241,18 @@ public class AudioTrackSink internal constructor(
             if (!writerFailed) return
             val format = accepted ?: return
             dead?.release()
-            driver = driverFactory.open(format, content).also { it.setVolume(deviceGain) }
+            // Null before the open, as the desktop sink does it: a reopen that throws left `driver`
+            // on the track released just above, so the next pause, stop or close called it and
+            // threw (#665). Null and still failed is the honest state, and the next start retries.
+            driver = null
+            val fresh = driverFactory.open(format, content)
+            try {
+                fresh.setVolume(deviceGain)
+            } catch (failure: Throwable) {
+                fresh.release()
+                throw failure
+            }
+            driver = fresh
             submittedFrames = 0L
             resetTimestampState()
             writerFailed = false
@@ -657,3 +678,6 @@ public class AudioTrackSinkFactory(context: Context?) : AudioSinkFactory {
     override fun outputChannelCount(): Int? =
         audioManager?.let { runCatching { mediaRouteChannelCount(it) }.getOrNull() }
 }
+
+/** 3 dB above full scale, the room `AudioTrack.write` promises a float track (#612). */
+private const val FLOAT_TRACK_HEADROOM: Float = 1.4125376f

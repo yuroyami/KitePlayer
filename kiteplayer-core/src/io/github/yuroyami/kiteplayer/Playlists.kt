@@ -11,8 +11,8 @@ package io.github.yuroyami.kiteplayer
  * - PLS: the `FileN` entries in their number order, with their `TitleN`.
  * - XSPF: each `<track>`'s first `<location>`, with its `<title>`, `<creator>` and `<album>`.
  * - A cue sheet (#456): each audio track as an item of its file with a [MediaClip], from its
- *   `INDEX 01` to where the next track of the file begins, its pregap played at the end of the
- *   track before it, with its `TITLE` and `PERFORMER` and the sheet's `TITLE` as its album. So an
+ *   `INDEX 01` to the next track's `INDEX 01`, so a pregap plays once, at the end of the track
+ *   before it, and the tracks of one file meet with no gap, with its `TITLE` and `PERFORMER` and the sheet's `TITLE` as its album. So an
  *   album ripped to one file with its `.cue` plays as its tracks.
  *
  * A relative address is resolved against the list's own: a path beside a list on disk, with the
@@ -44,5 +44,13 @@ public object Playlists {
 /**
  * A playlist that cannot become a queue: one that cannot be read, that is no playlist, that names
  * nothing, or that names itself, directly or through a list it names. [uri] is the list's address.
+ *
+ * No call throws this any more (#654). [KitePlayer.readPlaylist] and [KitePlayer.openPlaylist]
+ * throw [PlaybackException], as every other call that fails does, with
+ * [PlaybackError.SourceUnavailable] or [PlaybackError.NotMedia].
  */
+@Deprecated(
+    "readPlaylist and openPlaylist throw PlaybackException, with SourceUnavailable or NotMedia. Catch that instead.",
+    ReplaceWith("PlaybackException", "io.github.yuroyami.kiteplayer.PlaybackException"),
+)
 public class PlaylistException(message: String, public val uri: String) : Exception(message)

@@ -54,6 +54,8 @@ class WorkerProtocolTest {
             program = 202,
             edition = 1,
             orderedEditions = false,
+            // The page's own fit, which the protocol lost (#599).
+            fit = VariantFit(1280, 720, showsHdr = true),
         ),
         title = "Title",
         artist = "Artist",
@@ -99,7 +101,7 @@ class WorkerProtocolTest {
         selectedAudio = TrackId(1),
         selectedSubtitle = TrackId(2),
         selectedSecondarySubtitle = TrackId(-1),
-        variants = listOf(StreamVariant(0, 800_000L, 640, 360, 30.0, "avc1.4d401e"), StreamVariant(1, 3_000_000L)),
+        variants = listOf(StreamVariant(0, 800_000L, 640, 360, 30.0, "avc1.4d401e"), StreamVariant(1, 3_000_000L, hdr = true)),
         selectedVariant = 1,
         programs = listOf(
             MediaProgram(101, listOf(TrackId(0), TrackId(1)), "ChannelA", "Kite", mapOf("service_name" to "ChannelA")),
@@ -228,6 +230,7 @@ class WorkerProtocolTest {
         PlaybackWarning.EditionPartLeftOut("ed0ed000000000000000000000000003", null, "loop"),
         PlaybackWarning.ProjectionUnavailable(ProjectionKind.Cubemap(16), "the renderer draws a view into an equirectangular picture"),
         PlaybackWarning.ProjectionUnavailable(ProjectionKind.Equirectangular, "the renderer draws only flat pictures"),
+        PlaybackWarning.PictureControlsUnavailable("WebCanvasVideoRenderer"),
         PlaybackWarning.SubtitleCharsetGuessed("https://example.com/a.srt", "windows-1252", "Shift_JIS"),
         PlaybackWarning.SubtitleCharsetGuessed("https://example.com/b.srt", "windows-1252"),
         PlaybackWarning.TypesetterUnavailable("libass", "no module"),
@@ -256,6 +259,8 @@ class WorkerProtocolTest {
         PlaybackError.SchemeUnsupported("srt://example.com:9000", "srt", "SRT needs libsrt"),
         PlaybackError.SchemeUnsupported("rtsp://camera/stream", "rtsp"),
         PlaybackError.NotMedia("https://example.com/x", "no stream"),
+        PlaybackError.DrmUnsupported("https://example.com/drm.m3u8", "Widevine"),
+        PlaybackError.DrmUnsupported("https://example.com/drm.m3u8"),
         PlaybackError.NoPlayableStream(tracks.all),
         PlaybackError.DecoderFailed("hevc", "no decoder"),
         PlaybackError.RuntimeCompromised("teardown"),
@@ -436,7 +441,7 @@ class WorkerProtocolTest {
             val message = WorkerMessage.Event(PlayerEvent.Warning(warning))
             assertEquals(message, message.roundTrip(), "the warning $warning changed on the way")
         }
-        assertEquals(46, warnings.map { it::class }.distinct().size, "every kind of warning is here")
+        assertEquals(47, warnings.map { it::class }.distinct().size, "every kind of warning is here")
     }
 
     @Test
@@ -445,7 +450,7 @@ class WorkerProtocolTest {
             val message = WorkerMessage.Event(PlayerEvent.Failed(error))
             assertEquals(message, message.roundTrip(), "the error $error changed on the way")
         }
-        assertEquals(11, errors.map { it::class }.distinct().size, "every kind of error is here")
+        assertEquals(12, errors.map { it::class }.distinct().size, "every kind of error is here")
     }
 
     @Test

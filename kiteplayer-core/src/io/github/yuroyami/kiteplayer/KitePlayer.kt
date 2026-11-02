@@ -19,7 +19,7 @@ import kotlin.time.Duration.Companion.seconds
  * The player.
  *
  * One media item at a time, played through a backend that is passed in rather than discovered. Everything
- * about what is happening is read from the four flows below; everything a caller can ask for is one of
+ * about what is happening is read from the flows below; everything a caller can ask for is one of
  * the calls below. There is nothing else, and that is the point: a member here means the engine implements
  * it, and a feature that is not implemented is absent rather than present and ignored.
  *
@@ -366,6 +366,12 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * through a saturator rather than allowed to clip, so a boosted loud passage compresses
      * instead of squaring off; at or below unity nothing is folded.
      *
+     * On Android the part at or below unity is the track's own volume instead, applied after its
+     * buffer, so the ring plays at unity there and a change is heard after that buffer, about
+     * 120 ms (#14). The ring's peak limiter then lets a loud passage past full scale as far as the
+     * track's volume brings it back and the track takes it, so a peak is not squeezed at a volume
+     * where it had room (#612).
+     *
      * The ceiling is 1 by default, which refuses every boost: amplifying without being asked is
      * not a player's decision. Raise [AudioConfig.volumeCeiling] to offer one.
      *
@@ -693,6 +699,11 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * next drawn frame with no decoder or pipeline work at all. Pass
      * [VideoAdjustments.Identity] to reset. Published as [PlayerSnapshot.videoAdjustments].
      *
+     * Not every renderer draws them: the desktop canvas view, the web canvas and Apple's picture
+     * in picture layer show the decoded picture as it is. With such a renderer attached the player
+     * warns [PlaybackWarning.PictureControlsUnavailable] once, rather than drop the value with
+     * nothing said (#610).
+     *
      * @throws IllegalArgumentException outside the documented ranges: brightness -1..1,
      *         contrast 0..2, saturation 0..2, hue -180..180, all finite. Gamma needs no check
      *         here, because [VideoAdjustments] refuses a gamma outside 0.5..2 when it is built.
@@ -922,6 +933,20 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Keeps subtitles above the player's own controls while they show: [bottom] is how far up the
+     * output they cover, a fraction of its height, and 0 when they are hidden (#648). The engine
+     * raises the bottom of [setSubtitleSafeArea]'s area to it, so the application's own safe area
+     * stays as the application set it, and nothing of this reaches the snapshot or a memento. For
+     * KitePlayer's default controls; an application that draws its own sets a safe area instead.
+     */
+    @KitePlayerInternalApi
+    @Throws(IllegalStateException::class, IllegalArgumentException::class)
+    public fun setControlsInset(bottom: Float) {
+        require(bottom.isFinite() && bottom in 0f..1f) { "the controls inset must be within 0..1, was $bottom" }
+        core.post(CoreCommand.SetControlsInset(minOf(bottom, MAX_CONTROLS_INSET), CompletableDeferred()))
+    }
+
+    /**
      * Draws only the forced pictures of a Blu-ray or DVD subtitle track, or every picture again
      * (#513), as mpv's `sub-forced-events-only`. [SubtitleConfig.forcedPicturesOnly] says what
      * that means and is where the player starts. Applies to the subtitles showing now, with no
@@ -1039,8 +1064,9 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * keeps its titles. A list it names is read in its place, one level deep, and the items it names
      * from the playlist's own server carry [headers] too.
      *
-     * @throws PlaylistException when the list cannot be read, is no playlist, names nothing, or
-     *         names itself.
+     * @throws PlaybackException with [PlaybackError.SourceUnavailable] when the list cannot be
+     *         read, and with [PlaybackError.NotMedia] when it is no playlist, names nothing, or names
+     *         itself, the reason in its detail (#654).
      */
     @Throws(Exception::class)
     public suspend fun readPlaylist(uri: String, headers: Map<String, String> = emptyMap()): List<MediaItem> =
@@ -1210,7 +1236,11 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * image playlist, which [Tracks.thumbnails] lists. An image downloads only when it is asked
      * for, and a few recent ones are kept, so asking at every step of a scrub costs one download
      * for each image. The picture's times count from the item's start, as [position] does.
+     *
+     * @throws IllegalStateException when the player is closed, declared for Swift as every other
+     *         suspending call is (#652).
      */
+    @Throws(Exception::class)
     public suspend fun thumbnailAt(position: Duration): StreamThumbnail? = core.thumbnailAt(position)
 
     /**
@@ -1425,6 +1455,10 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
             "volume must be finite and not negative, was ${memento.volume}"
         }
         checkBalance(memento.balance)
+        // Clamped to the player's range below, but a clamp keeps a NaN, and the setter then threw
+        // after the playing item had already been stopped (#213).
+        require(memento.dialogueLevelDb.isFinite()) { "the dialogue level must be finite, was ${memento.dialogueLevelDb}" }
+        require(memento.pitchSemitones.isFinite()) { "the pitch must be finite, was ${memento.pitchSemitones}" }
         checkDelay("subtitle delay", memento.subtitleDelay)
         checkDelay("audio delay", memento.audioDelay)
         checkSubtitleScale(memento.subtitleScale)
@@ -1898,3 +1932,6 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
 
 /** How far into a chapter "previous" still means the one before rather than a restart. */
 private val CHAPTER_RESTART_WINDOW: Duration = 3.seconds
+
+/** The most of the output the controls inset raises subtitles by, the largest inset a [io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea] takes. */
+private const val MAX_CONTROLS_INSET: Float = 0.45f

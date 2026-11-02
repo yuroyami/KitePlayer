@@ -334,6 +334,33 @@ class AudioTrackSinkTest {
         s.close()
     }
 
+    /**
+     * A reopen that throws after a device failure leaves the sink with no device, not the one it
+     * released a moment before (#665). Pause, stop and close then called the released track, which
+     * the platform answers with IllegalStateException.
+     */
+    @Test
+    fun `a refused reopen after a device failure leaves nothing that pause stop or close calls`() = runBlocking {
+        val drivers = mutableListOf<FakeAudioTrackDriver>()
+        val factory = AudioTrackDriverFactory { _, _ ->
+            if (drivers.isNotEmpty()) throw IllegalStateException("the audio service is still coming back")
+            FakeAudioTrackDriver().also { drivers += it }
+        }
+        val s = AudioTrackSink(factory, FixedClock())
+        s.open(stereo48k, FullBlockCallback())
+        drivers.single().writeResults.add(0) /* first block dies */
+        val lost = async { s.events.first { it is AudioSinkEvent.DeviceLost } }
+        yield()
+        s.start()
+        withTimeout(5_000) { lost.await() }
+
+        assertFailsWith<IllegalStateException> { s.start() }
+        s.setPaused(true)
+        s.stop()
+        s.close()
+        assertEquals(emptyList(), drivers.single().postReleaseCalls, "the released track was called again")
+    }
+
     @Test
     fun `each open and a recovery declare the content the engine set before it`() = runBlocking {
         val declared = mutableListOf<AudioContent>()

@@ -92,7 +92,7 @@ internal class FakeVideoFrame(
     override val duration: Pts? = null,
     override val size: VideoSize = VideoSize(1920, 1080),
     override val pixelFormat: PlayerPixelFormat = PlayerPixelFormat.Yuv420p,
-    override val colorSpace: ColorSpaceInfo = ColorSpaceInfo.guessFor(1080),
+    override val colorSpace: ColorSpaceInfo = ColorSpaceInfo.guessFor(1920, 1080),
     override val hardwareSurface: Nothing? = null,
     private val ledger: LeakLedger? = null,
     override val closedCaptions: ByteArray? = null,
@@ -167,6 +167,11 @@ internal class RecordingRenderer(
 
     /** What this renderer claims its surface is, so a test can prove which canvas the text used. */
     var outputSizeOverride: io.github.yuroyami.kiteplayer.VideoSize? = null
+
+    /** Whether this renderer says it draws the picture controls (#610). */
+    var appliesAdjustmentsOverride: Boolean = true
+
+    override val appliesAdjustments: Boolean get() = appliesAdjustmentsOverride
 
     override val outputSize: io.github.yuroyami.kiteplayer.VideoSize?
         get() = outputSizeOverride

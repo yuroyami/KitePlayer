@@ -73,11 +73,10 @@ public class DashMediaIo(
 }
 
 /**
- * A manifest that the DASH door does not play: an encrypted one, whose every picture and sound set
- * has a `ContentProtection` element, because digital rights management is out of scope, or one
- * whose segments the HLS path cannot carry, in a container other than fragmented MP4, MPEG-TS or
+ * A manifest that the DASH door does not play: one whose segments the HLS path cannot carry, in a container other than fragmented MP4, MPEG-TS or
  * WebM, when it has several Periods, is live or carries its audio in an adaptation set of its own.
- * It is refused rather than played wrong, so an application can fall back to another route.
+ * It is refused rather than played wrong, so an application can fall back to another route. An
+ * encrypted manifest is refused with `PlaybackError.DrmUnsupported` instead (#624).
  */
 public class DashUnsupportedException(message: String) : IllegalArgumentException(message)
 

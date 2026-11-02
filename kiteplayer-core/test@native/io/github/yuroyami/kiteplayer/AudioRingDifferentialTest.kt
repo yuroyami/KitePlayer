@@ -150,6 +150,9 @@ class AudioRingDifferentialTest {
      */
     private class SetGain(val target: Float) : Step
 
+    /** How loud a sample may leave before the limiter acts (#612). */
+    private class SetCeiling(val ceiling: Float) : Step
+
     /** Both rings are told to fade to silence and hold there, or to play again (#486). */
     private class Hold(val held: Boolean) : Step
 
@@ -278,6 +281,11 @@ class AudioRingDifferentialTest {
                     is SetGain -> {
                         kotlinRing.setGain(step.target)
                         nativeRing.setGain(step.target)
+                    }
+
+                    is SetCeiling -> {
+                        kotlinRing.setCeiling(step.ceiling)
+                        nativeRing.setCeiling(step.ceiling)
                     }
 
                     is Hold -> {
@@ -1048,6 +1056,48 @@ class AudioRingDifferentialTest {
                             Flush,
                             Hold(false),
                             FeedSine(frames = 2_000, level = 0.5f),
+                            Pull(frames = 2_048),
+                        ),
+                    ),
+                    sampleRate = rate,
+                    channels = channels,
+                )
+            }
+        }
+    }
+
+    /**
+     * A ceiling above full scale, set by a sink that turns the sound down after the ring (#612),
+     * measures the limiter against it in both rings alike: a burst under it untouched, one over it
+     * turned down to it, and a ceiling raised and lowered while the limiter holds a reduction.
+     */
+    @Test
+    fun theCeilingAgreesAtEveryRateAndChannelCount() {
+        for (rate in rates) {
+            for (channels in listOf(1, 2, 6)) {
+                runScenario(
+                    Scenario(
+                        "a ceiling above full scale",
+                        capacityFrames = 16_384,
+                        steps = listOf(
+                            SetCeiling(2f),
+                            FeedSine(frames = 3_000, level = 0.5f),
+                            FeedSine(frames = 2_000, level = 1.6f),
+                            FeedSine(frames = 3_000, level = 0.5f),
+                            Pull(frames = 1_000),
+                            Pull(frames = 777),
+                            Pull(frames = 3_000),
+                            SetCeiling(1.25f),
+                            FeedSine(frames = 2_000, level = 1.6f),
+                            Pull(frames = 1_333),
+                            SetCeiling(1.4125376f),
+                            Pull(frames = 2_000),
+                            SetGain(0.5f),
+                            FeedSine(frames = 2_000, level = 1.8f),
+                            Pull(frames = 2_500),
+                            SetCeiling(1f),
+                            SetGain(1f),
+                            FeedSine(frames = 2_000, level = 1.3f),
                             Pull(frames = 2_048),
                         ),
                     ),

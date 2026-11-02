@@ -62,14 +62,60 @@ fun findKonanc(kotlinVersion: String): File? {
 /**
  * Makes konan download the LLVM package and the sysroot of [konanTarget] when they are missing.
  * Every Kotlin/Native compile for that target needs them anyway, so this only moves the download earlier.
+ *
+ * It compiles a one-line program for the target, because a program is what needs them: from
+ * Kotlin/Native 2.4.21 `-Xcheck-dependencies` exits at once and downloads nothing, and a library
+ * needs no LLVM, so every CI job that started from an empty konan folder failed with no LLVM
+ * package. One provisioning runs at a time, as konan unpacks into one shared folder.
  */
-fun provisionKonanDependencies(konanTarget: String, kotlinVersion: String, log: (String) -> Unit) {
-    val konanc = findKonanc(kotlinVersion) ?: downloadKotlinNative(kotlinVersion, log)
+fun provisionKonanDependencies(konanTarget: String, kotlinVersion: String, log: (String) -> Unit): Unit = konanSetup {
+    val konanc = findKonanc(kotlinVersion) ?: downloadUnlocked(kotlinVersion, log)
     log("provisioning the konan dependencies of $konanTarget with ${konanc.absolutePath}")
-    runProcess(
-        listOf(konanc.absolutePath, "-Xcheck-dependencies", "-target", konanTarget),
-        environment = mapOf("JAVA_HOME" to System.getProperty("java.home")),
-    )
+    val scratch = java.nio.file.Files.createTempDirectory("konan-provision").toFile()
+    try {
+        val source = scratch.resolve("main.kt").apply { writeText("fun main() {}\n") }
+        runProcess(
+            listOf(
+                konanc.absolutePath, "-target", konanTarget, "-p", "program",
+                "-o", scratch.resolve("provision").absolutePath, source.absolutePath,
+            ),
+            environment = mapOf("JAVA_HOME" to System.getProperty("java.home")),
+        )
+    } finally {
+        scratch.deleteRecursively()
+    }
+}
+
+/**
+ * Runs [block] while no other download or provisioning of Kotlin/Native runs, in this process or
+ * another, since both write into the one konan folder. Two C tasks once downloaded the same archive
+ * into the same file at once, and the tar that came out was truncated.
+ */
+private fun <T> konanSetup(block: () -> T): T = synchronized(konanSetupMonitor()) {
+    val dataDir = konanDataDir().also { it.mkdirs() }
+    java.io.RandomAccessFile(dataDir.resolve(".kiteplayer-setup.lock"), "rw").use { file ->
+        lockFully(file.channel).use { block() }
+    }
+}
+
+/**
+ * One monitor for the whole JVM. Each build plugin loads these classes in a class loader of its
+ * own, so an object of this file would be one per plugin, and two plugins provisioning at once
+ * then reached the file lock together, which the JVM refuses with OverlappingFileLockException.
+ * The system properties are the one map every class loader of the JVM shares.
+ */
+private fun konanSetupMonitor(): Any =
+    System.getProperties().computeIfAbsent("io.github.yuroyami.kiteplayer.build.konanSetup") { Any() }
+
+/** The file lock of [channel], waiting while another class loader of this JVM still holds it. */
+private fun lockFully(channel: java.nio.channels.FileChannel): java.nio.channels.FileLock {
+    while (true) {
+        try {
+            return channel.lock()
+        } catch (held: java.nio.channels.OverlappingFileLockException) {
+            Thread.sleep(100)
+        }
+    }
 }
 
 /** The host part of the kotlin-native-prebuilt artifact name, such as `macos-aarch64`. */
@@ -88,7 +134,13 @@ fun kotlinNativeHost(): String {
  * returns its `konanc`. A fresh machine needs it when a C task here runs before the Kotlin
  * Toolchain has unpacked its own copy. The archive must match the SHA-1 that Central publishes.
  */
-fun downloadKotlinNative(kotlinVersion: String, log: (String) -> Unit): File {
+fun downloadKotlinNative(kotlinVersion: String, log: (String) -> Unit): File = konanSetup {
+    // Another task may have unpacked it while this one waited for the lock.
+    findKonanc(kotlinVersion) ?: downloadUnlocked(kotlinVersion, log)
+}
+
+/** [downloadKotlinNative], for a caller that already holds [konanSetup]. */
+private fun downloadUnlocked(kotlinVersion: String, log: (String) -> Unit): File {
     val host = kotlinNativeHost()
     val extension = if (hostIsWindows) "zip" else "tar.gz"
     val name = "kotlin-native-prebuilt-$kotlinVersion-$host.$extension"
@@ -99,7 +151,8 @@ fun downloadKotlinNative(kotlinVersion: String, log: (String) -> Unit): File {
     val expected = String(download("$url.sha1", log)).trim().substringBefore(' ').lowercase()
     val actual = java.security.MessageDigest.getInstance("SHA-1").digest(bytes).joinToString("") { "%02x".format(it) }
     if (actual != expected) throw BuildFailure("$name has SHA-1 $actual, but Maven Central lists $expected.")
-    val archive = File(dataDir, name)
+    // A name of its own, so no other writer of the same archive can cut it short.
+    val archive = File(dataDir, "$name.${ProcessHandle.current().pid()}.part")
     archive.writeBytes(bytes)
     try {
         if (hostIsWindows) {

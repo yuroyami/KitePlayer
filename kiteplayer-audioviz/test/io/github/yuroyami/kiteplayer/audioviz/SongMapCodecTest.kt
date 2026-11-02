@@ -145,6 +145,9 @@ class SongMapCodecTest {
         // The version is the second field, right after the magic.
         bytes[4] = (SongMap.VERSION + 1).toByte()
         assertNull(decodeSongMap(bytes), "a map from another analysis version was accepted")
+        // Version 1 is what 0.0.26 and 0.0.27 wrote, before three fixes changed what a map holds (#659).
+        bytes[4] = 1
+        assertNull(decodeSongMap(bytes), "a map stored by 0.0.27 was accepted")
     }
 
     @Test

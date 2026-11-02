@@ -75,6 +75,14 @@ internal class ProgressReportingMediaIo(
         return ProgressReportingMediaIo(opened, watch, related, isRelated = true)
     }
 
+    @io.github.yuroyami.kiteplayer.KitePlayerInternalApi
+    override suspend fun openRelated(uri: String, offset: Long, length: Long?): MediaIo? {
+        val opened = upstream.openRelated(uri, offset, length) ?: return null
+        related.opens.incrementAndGet()
+        watch.progress()
+        return ProgressReportingMediaIo(opened, watch, related, isRelated = true)
+    }
+
     override fun close() = upstream.close()
 }
 

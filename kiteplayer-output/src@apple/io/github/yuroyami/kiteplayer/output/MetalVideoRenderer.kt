@@ -239,7 +239,9 @@ public class MetalVideoRenderer internal constructor(
         if (!hostSettingsKept) {
             hostSettingsKept = true
             standardPixelFormat = layer.pixelFormat
-            standardColorspace = layer.colorspace
+            // Retained: the switch to extended range drops the layer's reference, and the layer may
+            // have held the only one, so restoring it later would hand back a freed space (#689).
+            standardColorspace = layer.colorspace?.let { platform.CoreGraphics.CGColorSpaceRetain(it) }
         }
         if (extended && extendedColorspace == null) {
             extendedColorspace = platform.CoreGraphics.CGColorSpaceCreateWithName(
@@ -280,9 +282,13 @@ public class MetalVideoRenderer internal constructor(
             composer
         }
 
-    /** The headroom to tone map to on [target], or null for a standard-range target. */
+    /**
+     * The headroom to tone map to on [target], or null for a standard-range target. Only while this
+     * renderer asked for extended range: a half-float drawable it did not ask for, as one left by an
+     * earlier renderer of the same layer, rolls HDR down to standard white (#689).
+     */
     private fun headroomFor(target: platform.Metal.MTLTextureProtocol): Float? =
-        if (target.pixelFormat == platform.Metal.MTLPixelFormatRGBA16Float) headroom.current else null
+        if (target.pixelFormat == platform.Metal.MTLPixelFormatRGBA16Float && layerExtended.value) headroom.current else null
 
     /**
      * Says what this renderer did with an HDR frame on [target]: showed it, or tone mapped it. Says
@@ -698,11 +704,35 @@ public class MetalVideoRenderer internal constructor(
         composer.close()
         extendedComposer?.close()
         headroom.close()
+        restoreHostSettings()
         extendedColorspace?.let { platform.CoreGraphics.CGColorSpaceRelease(it) }
         extendedColorspace = null
         taggedColorspaces.values.forEach { it?.let { space -> platform.CoreGraphics.CGColorSpaceRelease(space) } }
         taggedColorspaces.clear()
         dispatcher.close()
+    }
+
+    /**
+     * Gives the layer back as this renderer found it. The layer outlives its renderers, as a view
+     * keeps its own across a detach or a change of player, and the next renderer starts from what
+     * it finds there: left in extended range, it kept the half-float format, and on iOS the EDR
+     * flag, with no extended range asked for (#689). After the join, so no draw is in flight.
+     */
+    private fun restoreHostSettings() {
+        if (!hostSettingsKept) return
+        platform.QuartzCore.CATransaction.begin()
+        platform.QuartzCore.CATransaction.setDisableActions(true)
+        try {
+            layer.pixelFormat = standardPixelFormat
+            layer.colorspace = standardColorspace
+            setExtendedRangeContent(layer, false)
+        } finally {
+            platform.QuartzCore.CATransaction.commit()
+        }
+        layerExtended.value = false
+        standardColorspace?.let { platform.CoreGraphics.CGColorSpaceRelease(it) }
+        standardColorspace = null
+        hostSettingsKept = false
     }
 
     private fun drainPending() {

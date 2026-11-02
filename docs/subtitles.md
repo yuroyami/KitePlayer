@@ -20,8 +20,20 @@ on each renderer, and [TTML regions](subtitle-regions.md) describes how TTML tex
 - The closed captions that broadcast H.264, HEVC and MPEG-2 carry inside the picture (with no
   subtitle stream of their own) become a track, CC1, from the first picture that carries any. Each
   screen shows as it is sent. Like a television, the player shows them when the viewer's
-  preferences or the viewer ask, not by default. A platform decoder that draws straight to a
-  surface gives no captions.
+  preferences or the viewer ask, not by default. A hardware decoder whose pictures carry no
+  captions, as Android's MediaCodec on `KitePlayerView`, the Compose views and a live stream's
+  route, still gives CC1 for H.264 and HEVC: the player reads the captions from the SEI of the
+  packets it holds, and hands each picture those up to its time (#611). MPEG-2 decodes through
+  FFmpeg and gives them with its pictures.
+- The CEA-708 caption services in the same bytes become tracks of their own, Service 1, Service 2
+  and so on, one for each service that carries data, read in Kotlin on every platform (#678). A
+  broadcast often has its second language only there. Each visible window shows at the place its
+  anchor sets, with its pen's colors, background, italics, underline, size and edge, and a window
+  written while hidden shows when the stream displays it. Text printed other than left to right,
+  the font style, flashing, borders and the justification of a window's lines are not read: the
+  lines follow the horizontal part of the window's anchor. A picture whose bytes carry CEA-708 and
+  no CEA-608 makes no CC1. Only Service 1 takes the picture's language, because the stream names
+  the others' languages only in a transport stream descriptor the player does not read.
 - Synced lyrics: an `.lrc` file, or LRC lines in a song's own tags (an ID3 `USLT` frame, a Vorbis
   or Matroska `LYRICS`, an MP4 `©lyr`), become a track that shows line by line through
   `subtitleCues`. The player selects that track when no other track is selected. Lyrics without
@@ -65,6 +77,14 @@ on each renderer, and [TTML regions](subtitle-regions.md) describes how TTML tex
   a limited set of system font files.
 - `setSubtitleSafeArea` keeps the built-in text out of a display cutout, rounded corners or a
   control bar.
+- The caption look the viewer set for every app, under Accessibility on Android and Apple, reaches
+  the player through `player.followSystemCaptionStyle(context)` on Android and
+  `player.followSystemCaptionStyle()` on Apple: the text and background colours, the edge, the
+  typeface on Android, and the text size as the subtitle scale, applied now and at every change
+  until the handle closes. `systemSubtitleStyle` and `systemSubtitleScale` read them once for an
+  app that applies them itself. On Android the style is null while the viewer has captions off.
+  Nothing follows the settings unless the app asks, and a typeset ASS track keeps its own look
+  (#679).
 
 ## libass
 
@@ -75,6 +95,9 @@ on each renderer, and [TTML regions](subtitle-regions.md) describes how TTML tex
   picture.
 - On the web, libass is a separate module (see the [web setup](../README.md#web-setup)). A browser
   has no system font, so supply fonts as attachments or through `SubtitleConfig.fonts`.
+- On the web, image subtitles (PGS, DVB, DVD and XSUB) and the CEA-608 captions inside the picture
+  (CC1) do not decode, because the web's FFmpeg has none of their decoders. The CEA-708 services
+  are read in Kotlin, so they show there too.
 - On the web, the browser's own text engine and fonts draw SubRip, WebVTT, TTML and the built-in
   ASS styling, on the page and in the worker player. See
   [the web section of TTML regions](subtitle-regions.md#the-web).

@@ -103,6 +103,9 @@ internal interface KitePlayerPlatformDefaults {
      * set one already, so a view needs only its player (#384). Nothing to do where there is no view.
      */
     fun installViewDefaults() = Unit
+
+    /** Whether the renderer [installViewDefaults] gives shows the frames [backend] makes (#601). */
+    fun viewsShowFramesOf(backend: io.github.yuroyami.kiteplayer.spi.MediaBackend): Boolean = false
 }
 
 internal class UnavailableKitePlayerPlatformDefaults(

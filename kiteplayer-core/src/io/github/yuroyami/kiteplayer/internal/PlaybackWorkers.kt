@@ -59,6 +59,13 @@ internal interface PlaybackDispatchers : AutoCloseable {
      */
     val release: CoroutineContext get() = session
 
+    /**
+     * Where an external subtitle file is decoded and parsed, off the actor, whose lane a large file
+     * otherwise held for up to a second (#594). The default answers with the session lane, which
+     * is right for the single-threaded runtimes and for tests, as for [release].
+     */
+    val parse: CoroutineContext get() = session
+
     companion object {
         /**
          * Every worker on one context.
@@ -283,6 +290,9 @@ internal class AttachableRenderer : VideoRenderer {
 
     var delegate: VideoRenderer? = null
 
+    /** Called before each frame is handed to a [delegate], accepted or not, from the scheduler's lane. */
+    var onHanded: () -> Unit = {}
+
     /** Frames a real renderer accepted. Not frames drawn: a renderer counts that itself. */
     val submittedFrames: Long get() = submittedCount.value
 
@@ -316,6 +326,7 @@ internal class AttachableRenderer : VideoRenderer {
             // True, because the schedule did its job: there is simply nothing attached to draw on.
             return true
         }
+        onHanded()
         // Counted only after the renderer says yes: submittedFrames documents "frames a real
         // renderer accepted", and counting before the answer contradicted that on every refusal.
         val accepted = target.present(frame, targetNanos)
@@ -339,6 +350,8 @@ internal class AttachableRenderer : VideoRenderer {
     override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
         delegate?.setAdjustments(adjustments)
     }
+
+    override val appliesAdjustments: Boolean get() = delegate?.appliesAdjustments ?: true
 
     override fun setFlashGuard(mode: io.github.yuroyami.kiteplayer.FlashGuard) {
         delegate?.setFlashGuard(mode)

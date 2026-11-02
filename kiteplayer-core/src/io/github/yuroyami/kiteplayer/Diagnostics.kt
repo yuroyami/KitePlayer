@@ -25,6 +25,14 @@ public data class TimedWarning(
  *
  * The player's own record-keeping does not depend on this: warnings are always kept in the bounded
  * history [KitePlayer.warningHistory] and printed by [KitePlayer.diagnosticsDump], sink or no sink.
+ *
+ * With the FFmpeg backend, FFmpeg's own warnings and errors arrive here under the tag `ffmpeg`.
+ * FFmpeg has one log sink for the whole process, and KiteFFmpeg's `FFmpeg.setLogSink` replaces
+ * it, so the two cannot share it (#670). The player installs its own the first time it opens an
+ * item, at the warning level, which replaces a sink the application set with `FFmpeg.setLogSink`
+ * before. A sink the application sets after that replaces the player's, and the `ffmpeg` lines stop
+ * arriving here for the rest of the process. An application that wants FFmpeg's lines of its own
+ * should take them from this sink, by the `ffmpeg` tag, rather than set FFmpeg's.
  */
 public object KiteLog {
 

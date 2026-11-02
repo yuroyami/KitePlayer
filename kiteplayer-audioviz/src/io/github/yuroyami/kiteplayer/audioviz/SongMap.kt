@@ -61,8 +61,17 @@ public class SongMap internal constructor(
     }
 
     public companion object {
-        /** The analysis version of maps built by this release. */
-        public const val VERSION: Int = 1
+        /**
+         * The analysis version of maps built by this release. It rises with every change to what a
+         * map holds, so a map stored by an older analysis is a miss and is scanned again.
+         *
+         * 2: the fixes of #322 and #323 (the merge of scanned parts and the key boundaries), #336
+         * (event times after a timestamp jump) and #339 (the level reference for layouts the
+         * loudness meter cannot read) changed maps while this stayed 1, so maps stored by 0.0.26
+         * and 0.0.27 were trusted (#659). `SongMapGoldenTest` holds the bytes of one map, and turns
+         * red when they change, until this and its hash both change.
+         */
+        public const val VERSION: Int = 2
         internal const val CURVE_STEP_MICROS: Long = 100_000L
     }
 }

@@ -103,6 +103,8 @@ struct kprt_ring {
      * may not take a lock. `gain_current` belongs to the consumer alone and needs no atomic;
      * `gain_slope` is immutable after create. */
     _Alignas(KPRT_CACHELINE) _Atomic uint32_t gain_target_bits;
+    /* The bits of the ceiling `kprt_ring_set_ceiling` set, read once by each render's limiter. */
+    _Atomic uint32_t ceiling_bits;
     /* Nonzero while `kprt_ring_set_hold` holds the sound: the session owner writes it, the render
      * reads it. */
     _Atomic int32_t hold;

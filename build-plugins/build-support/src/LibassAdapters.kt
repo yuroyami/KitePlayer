@@ -68,6 +68,7 @@ object LibassAdapters {
                 "-isysroot", xcrunSdkPath("macosx"), "-mmacosx-version-min=12.0",
                 "-install_name", "@rpath/$libraryName",
                 "-I${jniInclude.resolve("darwin").absolutePath}",
+                STRIP_DEBUG_INFO,
             ) + common + listOf(
                 "-lz", "-liconv", "-lc++",
                 "-framework", "CoreText", "-framework", "CoreFoundation", "-framework", "CoreGraphics",
@@ -82,6 +83,7 @@ object LibassAdapters {
                 ) + konan.libraryDirs.flatMap { listOf("-B$it", "-L$it") } + common + listOf(
                     "-lz", "-lstdc++", "-lm",
                     "-Wl,--no-undefined",
+                    STRIP_DEBUG_INFO,
                 )
             }
             "windows-x64" -> {
@@ -95,6 +97,7 @@ object LibassAdapters {
                     "-static-libstdc++", "-static-libgcc",
                     "-Wl,-Bstatic", "-liconv", "-Wl,-Bdynamic",
                     "-lgdi32", "-ldwrite", "-lole32", "-luuid", "-luser32",
+                    STRIP_DEBUG_INFO,
                 )
             }
             else -> throw BuildFailure("No desktop JNI build is known for host '$hostTriple'.")
@@ -197,10 +200,20 @@ object LibassAdapters {
             "-lz", "-lm",
             // A missing symbol must fail here, not as a dlopen failure on a device.
             "-Wl,--no-undefined",
+            STRIP_DEBUG_INFO,
         ) + if (abi.sixteenKibPages) listOf("-Wl,-z,max-page-size=16384", "-Wl,-z,common-page-size=16384") else emptyList()
         runProcess(command)
         log("${abi.abiDirName}/${destination.name} built (${destination.length()} bytes)")
     }
+
+    /**
+     * Leaves the chain's debug info out of every adapter (#615). The chain is built with autoconf's
+     * default `-g -O2`, so its DWARF was a third of each published library, about 1.1 MB for each
+     * Android ABI, and an app built without the NDK ships it as it is. The symbol tables stay, so
+     * a native crash still names its functions. Every linker here takes `-S`: lld for Android,
+     * Linux and Windows, and ld64 on macOS, where it also drops the debug map.
+     */
+    private const val STRIP_DEBUG_INFO: String = "-Wl,-S"
 
     const val WASM_MODULE_NAME: String = "kiteass.mjs"
     const val WASM_NAME: String = "kiteass.wasm"

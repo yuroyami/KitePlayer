@@ -73,7 +73,11 @@ internal class SincResampler(
 
     private val half = TAPS / 2
 
-    /** [PHASES] rows of [TAPS] weights, one row per position between two input frames. */
+    /**
+     * [PHASES] + 1 rows of [TAPS] weights, one row per position between two input frames, and a
+     * last one that is the first moved one tap later, so the row after any row exists to
+     * interpolate towards.
+     */
     private val kernel: FloatArray = buildKernel()
 
     /**
@@ -167,12 +171,20 @@ internal class SincResampler(
         var produced = 0
         val last = pendingFrames - 1L - half
         while (readIndex <= last) {
-            val phase = (remainder * PHASES / targetRate).toInt().coerceIn(0, PHASES - 1)
+            // Between the two rows around the exact position, not the one below it: snapped to a
+            // row, the timing error of up to 1/PHASES of a frame changed from frame to frame, which
+            // is phase noise that grows with frequency, 62 dB under a 10 kHz tone where the filter
+            // allows 94 (#661). libswresample interpolates the same way by default.
+            val scaled = remainder * PHASES
+            val phase = (scaled / targetRate).toInt().coerceIn(0, PHASES - 1)
+            val between = (scaled - phase.toLong() * targetRate).toFloat() / targetRate
             val row = phase * TAPS
+            val next = row + TAPS
             for (channel in 0 until channels) accumulator[channel] = 0f
             var at = (readIndex - half + 1).toInt() * channels
             for (tap in 0 until TAPS) {
-                val weight = kernel[row + tap]
+                val below = kernel[row + tap]
+                val weight = below + (kernel[next + tap] - below) * between
                 for (channel in 0 until channels) accumulator[channel] += weight * pending[at + channel]
                 at += channels
             }
@@ -252,8 +264,8 @@ internal class SincResampler(
         // The lower of the two Nyquists, with a little transition room. Going down, this is what
         // removes the content that would otherwise fold back into the audible band.
         val cutoff = min(1.0, targetRate.toDouble() / sourceRate) * ROLLOFF
-        val table = FloatArray(PHASES * TAPS)
-        for (phase in 0 until PHASES) {
+        val table = FloatArray((PHASES + 1) * TAPS)
+        for (phase in 0..PHASES) {
             val fraction = phase.toDouble() / PHASES
             val row = phase * TAPS
             var sum = 0.0
@@ -300,9 +312,9 @@ internal class SincResampler(
         /**
          * Positions between two input frames that get their own row of weights.
          *
-         * The quantisation error left over is one part in [PHASES] of a frame, far below the
-         * quantisation of the samples themselves, so nothing is gained by interpolating between
-         * rows the way some implementations do.
+         * An output between two rows takes the weights interpolated between them. Snapped to the
+         * row below, the error of up to one part in [PHASES] of a frame was phase noise of -62 dB
+         * at 10 kHz, far above what the filter itself leaves (#661).
          */
         const val PHASES: Int = 512
 

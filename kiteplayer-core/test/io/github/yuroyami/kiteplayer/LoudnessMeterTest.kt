@@ -215,11 +215,14 @@ class LoudnessMeterTest {
 
     @Test
     fun `a source with no mask is weighted by the conventional layout for its count`() {
-        assertEquals(-21.5, toneIn(2, 4, null), 0.1, "four channels are quad, and the third is back left")
+        // FFmpeg guesses four unmasked channels as 4.0 (#664): ffmpeg 6.1.1's ebur128 read this
+        // tone, raw f32le on the third of four channels, at -23.0 LUFS, a front centre's weight.
+        assertEquals(-23.0, toneIn(2, 4, null), 0.1, "four channels are 4.0, and the third is front centre")
+        assertEquals(-21.5, toneIn(3, 4, null), 0.1, "four channels are 4.0, and the fourth is back centre")
         assertEquals(-21.5, toneIn(5, 7, null), 0.1, "seven channels are 6.1, and the sixth is side left")
         assertEquals(Double.NEGATIVE_INFINITY, toneIn(3, 7, null), "the 6.1 LFE must not be measured")
         // A mask that names another number of speakers than the stream has is not trusted.
-        assertEquals(-21.5, toneIn(2, 4, 0x7L), 0.1, "a three speaker mask on four channels falls back to quad")
+        assertEquals(-23.0, toneIn(2, 4, 0x7L), 0.1, "a three speaker mask on four channels falls back to 4.0")
     }
 
     @Test

@@ -17,10 +17,11 @@ import kotlin.time.Duration.Companion.seconds
  * @OptIn(KitePlayerLowLevelApi::class) // decoderOptions is low-level API
  * fun scrubbingPlayer(): KitePlayer {
  *     val profile = PlaybackProfile.Scrubbing
- *     return KitePlayer.create(
+ *     // KitePlayer(config) fills in the platform's output and gives the native views their
+ *     // renderer for this FFmpeg backend; KitePlayer.create would give them none (#601).
+ *     return KitePlayer(
  *         profile.applyTo(PlayerConfig(backends = Backends(
  *             backend = KiteFFmpegMediaBackend(decoderOptions = profile.decoderOptions),
- *             output = mobileBackends().output,
  *         ))),
  *     )
  * }

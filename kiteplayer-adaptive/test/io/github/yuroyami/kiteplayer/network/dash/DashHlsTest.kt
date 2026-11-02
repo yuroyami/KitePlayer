@@ -77,6 +77,107 @@ class DashHlsTest {
         assertEquals(2, variants.count { "VIDEO-RANGE" !in it }, variants.joinToString("\n"))
     }
 
+    /**
+     * A trick play set, which holds keyframes for fast forward, is marked by an EssentialProperty this
+     * reader does not play, so it is left out rather than offered as the lowest quality (#622). An
+     * essential colour description, which the reader does understand, keeps its set.
+     */
+    @Test
+    fun aSetWithAnEssentialPropertyThePlayerDoesNotUnderstandIsLeftOut() {
+        val period = parse(
+            """
+            <MPD type="static" mediaPresentationDuration="PT4S">
+                <Period>
+                    <AdaptationSet id="1" contentType="video" mimeType="video/mp4" codecs="avc1.64001f">
+                        <SegmentTemplate media="v-${'$'}RepresentationID${'$'}-${'$'}Number${'$'}.m4s" initialization="v-${'$'}RepresentationID${'$'}.mp4" timescale="1" duration="2"/>
+                        <EssentialProperty schemeIdUri="urn:mpeg:mpegB:cicp:ColourPrimaries" value="1"/>
+                        <Representation id="hi" bandwidth="6000000" width="1920" height="1080"/>
+                        <Representation id="lo" bandwidth="400000" width="640" height="360"/>
+                        <Representation id="odd" bandwidth="300000" width="320" height="180">
+                            <EssentialProperty schemeIdUri="urn:example:unknown" value="1"/>
+                        </Representation>
+                    </AdaptationSet>
+                    <AdaptationSet id="2" contentType="video" mimeType="video/mp4" codecs="avc1.64001f" maxFrameRate="1/2">
+                        <EssentialProperty schemeIdUri="http://dashif.org/guidelines/trickmode" value="1"/>
+                        <SegmentTemplate media="t-${'$'}Number${'$'}.m4s" initialization="t.mp4" timescale="1" duration="8"/>
+                        <Representation id="trick" bandwidth="80000" width="320" height="180"/>
+                    </AdaptationSet>
+                </Period>
+            </MPD>
+            """.trimIndent(),
+        ).periods.single()
+        assertEquals(listOf("1"), period.adaptationSets.map { it.id }, "the trick play set was kept")
+        assertEquals(listOf("hi", "lo"), period.adaptationSets.single().representations.map { it.id })
+        val variants = DashHls.presentation(period).master.lines().filter { it.startsWith("#EXT-X-STREAM-INF:") }
+        assertEquals(2, variants.size, variants.joinToString("\n"))
+        assertTrue(variants.none { "BANDWIDTH=80000" in it }, variants.joinToString("\n"))
+    }
+
+    /**
+     * An audio only Period offers every audio set: the default one by its role carries the variants,
+     * and each other set is a rendition beside them (#630). Taking the first set alone, a description
+     * listed first was the only sound a listener could hear.
+     */
+    @Test
+    fun anAudioOnlyPeriodOffersEveryAudioSetAndTheMainOneByDefault() {
+        val period = parse(
+            """
+            <MPD type="static" mediaPresentationDuration="PT4S">
+                <Period>
+                    <AdaptationSet id="desc" contentType="audio" mimeType="audio/mp4" lang="en" codecs="mp4a.40.2">
+                        <Role schemeIdUri="urn:mpeg:dash:role:2011" value="description"/>
+                        <SegmentTemplate media="d-${'$'}Number${'$'}.m4s" initialization="d.mp4" timescale="1" duration="2"/>
+                        <Representation id="d" bandwidth="64000"/>
+                    </AdaptationSet>
+                    <AdaptationSet id="main" contentType="audio" mimeType="audio/mp4" lang="en" codecs="mp4a.40.2">
+                        <Role schemeIdUri="urn:mpeg:dash:role:2011" value="main"/>
+                        <SegmentTemplate media="m-${'$'}RepresentationID${'$'}-${'$'}Number${'$'}.m4s" initialization="m-${'$'}RepresentationID${'$'}.mp4" timescale="1" duration="2"/>
+                        <Representation id="m-lo" bandwidth="64000"/>
+                        <Representation id="m-hi" bandwidth="128000"/>
+                    </AdaptationSet>
+                </Period>
+            </MPD>
+            """.trimIndent(),
+        ).periods.single()
+        val presentation = DashHls.presentation(period)
+        val lines = presentation.master.lines()
+        val variants = lines.filter { it.startsWith("#EXT-X-STREAM-INF:") }
+        val variantTracks = presentation.tracks.filter { it.role == DashHlsRole.Audio && lines.contains(it.address) }
+        assertEquals(setOf("main"), variantTracks.map { it.set.id }.toSet(), "the variants came from the description: ${presentation.master}")
+        assertTrue(variants.all { "AUDIO=\"" in it }, presentation.master)
+        val renditions = lines.filter { it.startsWith("#EXT-X-MEDIA:TYPE=AUDIO") }
+        assertEquals(2, renditions.size, presentation.master)
+        val own = renditions.single { "URI=" !in it }
+        assertTrue("DEFAULT=YES" in own, "the variants' own sound is the default: $own")
+        val description = renditions.single { "URI=" in it }
+        assertTrue("DEFAULT=NO" in description && "public.accessibility.describes-video" in description, description)
+        val address = description.substringAfter("URI=\"").substringBefore('"')
+        assertEquals("desc", presentation.tracks.single { it.address == address }.set.id)
+    }
+
+    /** A size the adaptation set states once holds for each of its representations, as Shaka Packager writes it (#623). */
+    @Test
+    fun aSizeOnTheAdaptationSetReachesItsRepresentations() {
+        val period = parse(
+            """
+            <MPD type="static" mediaPresentationDuration="PT4S">
+                <Period>
+                    <AdaptationSet contentType="video" mimeType="video/mp4" codecs="hvc1.2.4.L153.90" width="3840" height="2160">
+                        <SegmentTemplate media="v-${'$'}Number${'$'}.m4s" initialization="v-init.mp4" timescale="1" duration="2"/>
+                        <Representation id="uhd" bandwidth="16000000"/>
+                        <Representation id="own" bandwidth="8000000" width="2560" height="1440"/>
+                    </AdaptationSet>
+                </Period>
+            </MPD>
+            """.trimIndent(),
+        ).periods.single()
+        val sizes = period.adaptationSets.single().representations.associate { it.id to (it.width to it.height) }
+        assertEquals(mapOf<String?, Pair<Int?, Int?>>("uhd" to (3840 to 2160), "own" to (2560 to 1440)), sizes)
+        val variants = DashHls.presentation(period).master.lines().filter { it.startsWith("#EXT-X-STREAM-INF:") }
+        assertTrue(variants.any { "RESOLUTION=3840x2160" in it }, variants.joinToString("\n"))
+        assertTrue(variants.any { "RESOLUTION=2560x1440" in it }, "a representation's own size wins: ${variants.joinToString("\n")}")
+    }
+
     @Test
     fun separateVideoAndAudioSetsBecomeVariantsAndOneRendition() {
         val period = parse(separateSets).periods.single()
@@ -228,6 +329,39 @@ class DashHlsTest {
         }
     }
 
+    /**
+     * The initialization range of a WebM file comes from the manifest, and the player allocated it
+     * whole before reading: 1 GiB for `0-1073741823`, and a NegativeArraySizeException for
+     * `0-2147483647` (#626). It is refused as a manifest this reader cannot play.
+     */
+    @Test
+    fun aWebmInitializationRangePastTheLimitIsRefusedBeforeAnythingIsRead() = runTest {
+        val file = WebmBytes.file(listOf(0, 2000, 4000), blockBytes = 500, durationMillis = 5000.0)
+        for (end in listOf(1_073_741_823L, 2_147_483_647L, 9_000_000_000L)) {
+            val manifest = parse(
+                """
+                <MPD type="static" mediaPresentationDuration="PT5S">
+                    <Period>
+                        <AdaptationSet contentType="video" mimeType="video/webm" codecs="vp9">
+                            <Representation id="v" bandwidth="500000"><BaseURL>single.webm</BaseURL>
+                                <SegmentBase><Initialization range="0-$end"/></SegmentBase></Representation>
+                        </AdaptationSet>
+                    </Period>
+                </MPD>
+                """.trimIndent(),
+            )
+            val presentation = DashHls.presentation(manifest.periods.single())
+            var opened = 0
+            val io = DashHlsMediaIo(presentation, manifest, "https://cdn.test/vod/movie.mpd", DashUrlPolicy.Default, {
+                opened++
+                BytesMediaIo(file.bytes)
+            }, null, { 0L })
+            val refusal = assertFailsWith<DashUnsupportedException> { io.openRelated(presentation.tracks.single().address) }
+            assertTrue("${DashHlsMediaIo.MAX_INDEX_BYTES}" in refusal.message!!, "the refusal names the limit: ${refusal.message}")
+            assertEquals(0, opened, "the file was opened for a range that was always going to be refused")
+        }
+    }
+
     /** A video set beside a sidecar TTML set and a segmented stpp set; the video's own time starts at [videoOffsetSeconds]. */
     private fun subtitled(videoOffsetSeconds: Int = 0) = parse(
         """
@@ -340,6 +474,22 @@ class DashHlsTest {
         assertFalse("#EXT-X-PLAYLIST-TYPE" in playlist)
         // Before the first segment has ended, nothing is available yet.
         assertTrue(DashManifestParser.timedPlan(manifest, period, rep, DashUrlPolicy.Default, 1_000_000L)!!.segments.isEmpty())
+    }
+
+    /** A manifest's suggested delay behind the live edge reaches FFmpeg as the playlist's start point (#627). */
+    @Test
+    fun aLivePlaylistStartsAsFarBehindTheEdgeAsTheManifestSuggests() {
+        val manifest = parse(live.replace("<MPD ", "<MPD suggestedPresentationDelay=\"PT20S\" "))
+        assertEquals(20_000_000L, manifest.suggestedPresentationDelayMicros)
+        val period = manifest.periods.single()
+        val rep = period.adaptationSets.single().representations.single()
+        val plan = assertNotNull(DashManifestParser.timedPlan(manifest, period, rep, DashUrlPolicy.Default, 61_000_000L))
+        val playlist = DashHls.mediaPlaylist(plan, live = true, startBehindLiveMicros = manifest.suggestedPresentationDelayMicros)
+        assertTrue("#EXT-X-START:TIME-OFFSET=-20.000000\n" in playlist, playlist)
+        // None without a suggestion, and none in a playlist that has ended or never was live.
+        assertFalse("EXT-X-START" in DashHls.mediaPlaylist(plan, live = true))
+        assertFalse("EXT-X-START" in DashHls.mediaPlaylist(plan, live = true, ended = true, startBehindLiveMicros = 20_000_000L))
+        assertFalse("EXT-X-START" in DashHls.mediaPlaylist(plan, live = false, startBehindLiveMicros = 20_000_000L))
     }
 
     @Test

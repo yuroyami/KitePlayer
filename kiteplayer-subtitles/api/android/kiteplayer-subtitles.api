@@ -8,6 +8,12 @@ public final class io/github/yuroyami/kiteplayer/subtitle/AssTrackParser {
 	public final fun parseEvent (Ljava/lang/String;JJ)Lio/github/yuroyami/kiteplayer/subtitle/SubtitleCue$Text;
 }
 
+public final class io/github/yuroyami/kiteplayer/subtitle/Cea708DecoderFactory : io/github/yuroyami/kiteplayer/spi/SubtitleDecoderFactory {
+	public fun <init> ()V
+	public fun create (Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun getName ()Ljava/lang/String;
+}
+
 public final class io/github/yuroyami/kiteplayer/subtitle/EastAsianText {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/subtitle/EastAsianText;
 	public final fun decode ([BLjava/lang/String;)Ljava/lang/String;

@@ -8,8 +8,10 @@ import kotlinx.atomicfu.atomic
  * The byte cache: one contiguous RAM window over the wrapped [MediaIo].
  *
  * What it buys, in order of value on a network stream:
- *  - Chunked upstream reads: the demuxer's small nibbles become [IoCachePolicy.readChunkBytes]
- *    pulls, so a remote source sees hundreds of times fewer round trips.
+ *  - Chunked upstream reads: each upstream read asks for [IoCachePolicy.readChunkBytes], so a
+ *    source that can answer that much at once sees far fewer round trips than the demuxer's
+ *    small reads would make. A source that answers less, as a network reader answering about
+ *    8 KiB a read does, is asked as often as it answers.
  *  - A free seek-back window: a seek landing inside the window is served from RAM with NO
  *    upstream seek, which on http means no new ranged request. This is the piece that makes
  *    scrubbing a network stream tolerable.
@@ -37,9 +39,20 @@ internal class CachingMediaIo(
 
     /** A related reader skips this cache: a segment is read once, from start to end. */
     override suspend fun openRelated(uri: String): MediaIo? = upstream.openRelated(uri)
+    @io.github.yuroyami.kiteplayer.KitePlayerInternalApi
+    override suspend fun openRelated(uri: String, offset: Long, length: Long?): MediaIo? = upstream.openRelated(uri, offset, length)
 
-    /** The window's bytes: dense, variable-length chunks; copyOut walks their actual sizes. */
+    /**
+     * The window's bytes, in chunks of [chunkSize]. Every chunk but the last is full, so the chunk
+     * that holds a position is found by division, and the last fills from upstream reads until it
+     * is full. A network reader answers about 8 KiB a read, and a chunk for each answer allocated
+     * 256 KiB for each 8 KiB and walked thousands of chunks on every read (#649).
+     */
     private val chunks = ArrayDeque<ByteArray>()
+    private val chunkSize = policy.readChunkBytes
+
+    /** Where each upstream read lands before it joins the window, made once (#649). */
+    private var scratch: ByteArray? = null
     private var windowStart = 0L
     private var windowEnd = 0L
 
@@ -79,7 +92,7 @@ internal class CachingMediaIo(
         // advance the cursor to windowEnd.
         check(cursor == windowEnd) { "cache cursor $cursor escaped the window [$windowStart, $windowEnd]" }
         if (upstreamEof && cursor == upstreamPos) return -1
-        val chunk = ByteArray(policy.readChunkBytes)
+        val chunk = scratch ?: ByteArray(chunkSize).also { scratch = it }
         val pulled = upstream.read(chunk, 0, chunk.size)
         if (pulled > 0) {
             upstreamBytesRead.addAndGet(pulled.toLong())
@@ -123,6 +136,7 @@ internal class CachingMediaIo(
 
     override fun close() {
         chunks.clear()
+        scratch = null
         upstream.close()
     }
 
@@ -133,9 +147,22 @@ internal class CachingMediaIo(
         publish()
     }
 
-    private fun append(chunk: ByteArray, filled: Int) {
-        chunks.addLast(if (filled == chunk.size) chunk else chunk.copyOf(filled))
-        windowEnd += filled
+    /** How many bytes of the last chunk hold window bytes. */
+    private val lastFilled: Int get() = if (chunks.isEmpty()) 0 else (windowEnd - windowStart - (chunks.size - 1).toLong() * chunkSize).toInt()
+
+    private fun append(bytes: ByteArray, filled: Int) {
+        var from = 0
+        while (from < filled) {
+            var at = lastFilled
+            if (chunks.isEmpty() || at == chunkSize) {
+                chunks.addLast(ByteArray(chunkSize))
+                at = 0
+            }
+            val take = (chunkSize - at).coerceAtMost(filled - from)
+            bytes.copyInto(chunks.last(), at, from, from + take)
+            from += take
+            windowEnd += take
+        }
         // Evict from the front, keeping the back window behind the cursor and the total budget.
         while (chunks.size > 1) {
             val first = chunks.first()
@@ -156,21 +183,16 @@ internal class CachingMediaIo(
         var remaining = length
         var at = from
         var written = offset
-        var chunkStart = windowStart
-        for (chunk in chunks) {
-            val chunkEnd = chunkStart + chunk.size
-            if (at < chunkEnd) {
-                val inChunk = (at - chunkStart).toInt()
-                val take = (chunk.size - inChunk).coerceAtMost(remaining)
-                chunk.copyInto(into, written, inChunk, inChunk + take)
-                written += take
-                at += take
-                remaining -= take
-                if (remaining == 0) return
-            }
-            chunkStart = chunkEnd
+        check(from >= windowStart && from + length <= windowEnd) { "cache window failed to cover $length bytes at $from" }
+        while (remaining > 0) {
+            val index = ((at - windowStart) / chunkSize).toInt()
+            val inChunk = ((at - windowStart) % chunkSize).toInt()
+            val take = (chunkSize - inChunk).coerceAtMost(remaining)
+            chunks[index].copyInto(into, written, inChunk, inChunk + take)
+            written += take
+            at += take
+            remaining -= take
         }
-        check(remaining == 0) { "cache window failed to cover $length bytes at $from" }
     }
 
     private fun publish() {

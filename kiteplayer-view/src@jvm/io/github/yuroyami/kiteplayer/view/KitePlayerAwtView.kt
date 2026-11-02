@@ -27,7 +27,8 @@ import kotlin.time.Duration
  * heavy Compose window stuttering the picture and not.
  *
  * A view with no [rendererFactory] of its own uses [PlayerViewDefaults.rendererFactory], which the
- * `kiteplayer` module sets when it builds a player, so `view.player = player` is the whole setup.
+ * `kiteplayer` module's `KitePlayer(config)` sets when it builds a player on the FFmpeg backend, so
+ * `view.player = player` is the whole setup; see that object for the rule.
  * The renderer is attached as soon as the player and a factory exist, before the canvas has a peer,
  * so a renderer-coupled decoder can take part in decoder selection; the canvas is then handed over
  * and taken back as AWT creates and destroys the peer. Unlike the Android view there is no separate subtitle component: a desktop
@@ -52,9 +53,11 @@ public open class KitePlayerAwtView : Canvas() {
 
     private val ledger = AwtViewLedger()
 
+    private val missingRenderer = MissingRendererNotice("KitePlayerAwtView")
+
     internal val binding = PlayerViewBinding<KitePlayer, AwtPlayerViewRenderer>(
         createRenderer = {
-            (rendererFactory ?: PlayerViewDefaults.rendererFactory)?.let { factory ->
+            (rendererFactory ?: PlayerViewDefaults.rendererFactory ?: run { missingRenderer.note(); null })?.let { factory ->
                 val renderer = factory.create(
                     onVideoGeometry = { size, rotationDegrees ->
                         ledger.geometry(size.displayAspect, rotationDegrees)
@@ -80,6 +83,9 @@ public open class KitePlayerAwtView : Canvas() {
             }
         },
         attach = { player, renderer -> player.attachRenderer(renderer) },
+        // A closed player refuses every command with IllegalStateException, and the view then shows
+        // nothing, as its detach already treats a closed player (#603).
+        refusesAttach = { it is IllegalStateException },
         detach = { player, renderer ->
             try {
                 player.detachRenderer(expected = renderer)

@@ -34,8 +34,17 @@ exclude_set() {
         # One assertion in CoreAudioSinkTest needs real audio hardware. A GitHub macOS runner opens
         # CoreAudio and passes every other test of kiteplayer-output. Its virtual output device lags
         # where real hardware leads: the anchor measured -451.7 ms against a window of -5 to +500 ms.
+        # The device tests of CoreAudioSinkOutputLatencyTest, CoreAudioSinkDeviceWatchTest and
+        # AppleAudioOutputDeviceTest fail on a Mac with no default output instead of passing without
+        # running (#641), so a host like that names them with --exclude.
         no-audio-hardware)
             excludes+=("*CoreAudioSinkTest.the anchor the device publishes is in the near future on the engine clock")
+            # The same virtual device stalls under load: in two runs of three its clock moved
+            # 171 ms while 353 ms passed, and not at all in 228 ms. It passes on real hardware.
+            excludes+=("*CoreAudioSinkRealTimeTest.the anchor advances with the device rather than with the clock")
+            # And its buffer runs deep: with a route of 180 ms the latency read 418 ms and 378 ms in two
+            # runs of four, where a device buffer of at most 100 ms beside the route is the bound.
+            excludes+=("*CoreAudioSinkOutputLatencyTest.theReportedRouteLatencyIsInTheSinksDeadline")
             ;;
         # The iOS simulator cannot open an audio device ("opening the audio device failed" from a
         # simctl-spawned process). The same suites pass on macosArm64 and on a device. Two classes
@@ -70,6 +79,11 @@ while [ $# -gt 0 ]; do
     esac
 done
 [ -n "$module" ] && [ -n "$platform" ] || { echo "usage: $0 -m MODULE -p PLATFORM ..." >&2; exit 2; }
+# The supervised device soaks fail without KPRT_DEVICE_SOAK rather than passing over nothing (#641),
+# so they are left out unless it is set, and report as not run.
+if [ -z "${KPRT_DEVICE_SOAK:-}" ]; then
+    excludes+=("*RealTimeSoakTest.*" "*RealTimeMediaSoakTest.*")
+fi
 
 # shellcheck source=test-env.sh
 . "$ROOT/scripts/test-env.sh"

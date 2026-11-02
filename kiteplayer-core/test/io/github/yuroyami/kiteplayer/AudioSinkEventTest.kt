@@ -174,6 +174,46 @@ class AudioSinkEventTest {
         harness.close()
     }
 
+    /**
+     * No decoded buffer is lost across an output change (#592). The decode lane was asked to park
+     * while it waited to hand a buffer on, closed it, and resumed on the same epoch with nothing to
+     * flush it, so the new output's sound skipped one buffer. A continuous tone shows a skip as a
+     * step far larger than the tone's own.
+     */
+    @Test
+    fun anOutputChangeLosesNoDecodedSound() = runTest {
+        val tone = MediaScript(
+            durationUs = 10_000_000,
+            channels = 6,
+            audioChannelMarkers = listOf(0f, 0f, 0.5f, 0f, 0f, 0f),
+            audioToneHz = 50.0,
+        )
+        val harness = CoreHarness(this, script = tone, publishesSinkEvents = true)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(500.milliseconds)
+
+        val speakers = ScriptedSink(accepts = stereo, publishesEvents = true)
+        speakers.recordsSamples = true
+        harness.output.laterSinks += speakers
+        backgroundScope.launch { speakers.runDevice(harness.clock) }
+        harness.sink.publish(AudioSinkEvent.FormatChangeRequested("the output now takes 2 channels"))
+        harness.run(1_000.milliseconds)
+
+        val heard = speakers.recorded.toFloatArray()
+        val start = heard.indexOfFirst { it != 0f }
+        assertTrue(start >= 0, "the new output played nothing")
+        // The steepest step of a 50 Hz tone at 0.5 is 2 pi 50 / 48000 / 2, about 0.0033.
+        var worst = 0f
+        var at = -1
+        for (i in start + 1 until heard.size) {
+            val step = kotlin.math.abs(heard[i] - heard[i - 1])
+            if (step > worst) { worst = step; at = i - start }
+        }
+        assertTrue(worst < 0.02f, "the sound jumped by $worst at frame $at after it returned, a lost buffer")
+        harness.close()
+    }
+
     /** The other way: headphones first, then a receiver, and the centre gets its own speaker back. */
     @Test
     fun `an output with more speakers gets the channels a stereo one had folded`() = runTest {

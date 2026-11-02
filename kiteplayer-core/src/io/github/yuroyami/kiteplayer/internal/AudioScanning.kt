@@ -68,6 +68,9 @@ internal suspend fun scanMediaAudio(
             val clipFrom = clip?.start?.takeIf { it.isPositive() }?.let { Pts(it.inWholeMicroseconds) }
             val from = listOfNotNull(range?.from, clipFrom).maxOrNull()
             val untilMicros = listOfNotNull(range?.until?.micros, clip?.end?.inWholeMicroseconds).minOrNull()
+            // The clip's end is the item's end, so a scan that stops there reached it (#672). A
+            // range's own limit is not, unless the clip ends first.
+            val clipEndIsTheLimit = clip?.end != null && untilMicros == clip.end.inWholeMicroseconds
             // A source that cannot seek reaches the clip by decoding forward, and what ends before
             // it is not handed on.
             val skipUntilMicros = if (range?.from == null && from != null && !source.seekable) from.micros else Long.MIN_VALUE
@@ -119,7 +122,8 @@ internal suspend fun scanMediaAudio(
                     break
                 }
             }
-            return AudioScanResult(TrackId(stream.index), frames, first, end, !stoppedAtLimit && active.isDrained)
+            val reachedEnd = if (stoppedAtLimit) clipEndIsTheLimit else active.isDrained
+            return AudioScanResult(TrackId(stream.index), frames, first, end, reachedEnd)
         } finally {
             active.close()
         }

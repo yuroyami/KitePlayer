@@ -113,6 +113,14 @@ class MediaIoResolutionTest {
         assertNull(localPathOf("https://host/b.ts"))
         assertNull(localPathOf("content://media/1"))
         assertNull(localPathOf(""))
+        // The escapes of a file URI are decoded and a drive letter loses its slash (#655).
+        assertEquals("/a/b c.ts", localPathOf("file:///a/b%20c.ts"))
+        assertEquals("C:/v/b.ts", localPathOf("file:///C:/v/b.ts"))
+        assertEquals("C:/Media/rec.ts", localPathOf("file:/C:/Media/rec.ts"))
+        assertEquals("/sdcard/Movies/\u00c9t\u00e9 2024.mkv", localPathOf("file:///sdcard/Movies/%C3%89t%C3%A9%202024.mkv"))
+        assertEquals("/music/\ud83d\ude00 mix.flac", localPathOf("file:///music/\ud83d\ude00%20mix.flac"))
+        assertEquals("/music/\ud83d\ude00 mix.flac", localPathOf("file:///music/%F0%9F%98%80%20mix.flac"))
+        assertEquals("/x/y.mkv", localPathOf("file://localhost/x/y.mkv"))
     }
 }
 

@@ -5,6 +5,7 @@ import io.github.yuroyami.kiteplayer.PlaybackException
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
 import kotlinx.coroutines.runBlocking
+import org.junit.Assume.assumeTrue
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -18,14 +19,16 @@ class DesktopAudioOutputDeviceTest {
     @Test
     fun aMachineWithAnyOutputListsExactlyOneDefault() {
         val devices = DesktopOutputBackend.audioOutputDevices()
-        if (devices.isEmpty()) return println("skipped: this machine has no audio output")
+        // Reported as skipped, not passed, where there is nothing to check (#641).
+        assumeTrue("this machine has no audio output", devices.isNotEmpty())
         assertEquals(1, devices.count { it.isDefault }, "the default among $devices")
     }
 
     @Test
     fun theDefaultDeviceOpensThroughItsId() = runBlocking {
         val default = DesktopOutputBackend.audioOutputDevices().firstOrNull { it.isDefault }
-            ?: return@runBlocking println("skipped: this machine has no audio output")
+        assumeTrue("this machine has no audio output", default != null)
+        checkNotNull(default)
         val sink = DesktopOutputBackend.withAudioOutputDevice(default.id).audioSink.create()
         try {
             val accepted = sink.open(format) { buffer, frames, _ ->

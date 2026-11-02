@@ -89,6 +89,71 @@ class PlaylistsTest {
         assertEquals(listOf("/music/r&r.ogg", "Rock & Roll", "Somebody", "Album"), listOf(item.uri, item.title, item.artist, item.album))
     }
 
+    /** An XSPF element is its namespace and local name, whatever prefix spells it (#490). */
+    @Test
+    fun aPrefixedXspfListIsTheSameListAsAnUnprefixedOne() {
+        val plain = """<?xml version="1.0"?><playlist version="1" xmlns="http://xspf.org/ns/0/"><trackList>
+            <track><location>song.flac</location><title>Song</title></track></trackList></playlist>"""
+        val prefixed = """<?xml version="1.0"?><x:playlist version="1" xmlns:x="http://xspf.org/ns/0/"><x:trackList>
+            <x:track><x:location>song.flac</x:location><x:title>Song</x:title></x:track></x:trackList></x:playlist>"""
+        val expected = listOf("https://cdn.test/lists/song.flac" to "Song")
+        assertEquals(expected, read(Playlists.parse(plain, "https://cdn.test/lists/a.xspf")))
+        assertEquals(expected, read(Playlists.parse(prefixed, "https://cdn.test/lists/a.xspf")))
+        // An element of another namespace with the same local name is not XSPF's.
+        val foreign = """<playlist xmlns="http://xspf.org/ns/0/" xmlns:o="urn:other"><trackList>
+            <track><o:location>wrong.flac</o:location><location>right.flac</location></track></trackList></playlist>"""
+        assertEquals(listOf("https://cdn.test/lists/right.flac"), read(Playlists.parse(foreign, "https://cdn.test/lists/a.xspf")).map { it.first })
+    }
+
+    /** A closing tag in character data, a comment or an extension ends nothing (#490). */
+    @Test
+    fun closingTagTextInsideCdataCommentsAndExtensionsLosesNoTrack() {
+        val xspf = """<playlist xmlns="http://xspf.org/ns/0/"><trackList>
+            <track><title><![CDATA[Literal </track> marker]]></title><!-- </track> --><extension application="urn:x">
+            <inner><track>not a track</track></inner></extension><location>one.flac</location></track>
+            <track><location>two.flac</location></track></trackList></playlist>"""
+        val items = Playlists.parse(xspf, "https://cdn.test/lists/a.xspf").orEmpty()
+        assertEquals(listOf("https://cdn.test/lists/one.flac", "https://cdn.test/lists/two.flac"), items.map { it.uri })
+        assertEquals("Literal </track> marker", items.first().title)
+    }
+
+    /** `xml:base` applies to what it holds, the nearest one winning (#490). */
+    @Test
+    fun xmlBaseIsInheritedAndOverridden() {
+        val xspf = """<playlist xmlns="http://xspf.org/ns/0/" xml:base="https://other.test/audio/"><trackList>
+            <track><location>song.flac</location></track>
+            <track xml:base="../video/"><location>clip.mp4</location></track></trackList></playlist>"""
+        assertEquals(
+            listOf("https://other.test/audio/song.flac", "https://other.test/video/clip.mp4"),
+            read(Playlists.parse(xspf, "https://cdn.test/lists/a.xspf")).map { it.first },
+        )
+    }
+
+    /** A location is a URI reference, so beside a list on disk its escapes are decoded (#490). */
+    @Test
+    fun anEscapedLocalLocationNamesTheFileItEscapes() {
+        val xspf = """<playlist xmlns="http://xspf.org/ns/0/"><trackList>
+            <track><location>My%20Song.flac</location></track>
+            <track><location>%C3%89t%C3%A9.flac</location></track></trackList></playlist>"""
+        assertEquals(
+            listOf("/music/My Song.flac", "/music/\u00c9t\u00e9.flac"),
+            read(Playlists.parse(xspf, "/music/list.xspf")).map { it.first },
+        )
+        // A folder whose own name holds a percent sign keeps it.
+        assertEquals(
+            listOf("/music/100% hits/My Song.flac"),
+            read(Playlists.parse(xspf.replace("<track><location>%C3%89t%C3%A9.flac</location></track>", ""), "/music/100% hits/list.xspf")).map { it.first },
+        )
+        // An M3U path is a path, so a percent sign in it is the file's own.
+        assertEquals(listOf("/music/My%20Song.flac"), read(Playlists.parse("My%20Song.flac\n", "/music/list.m3u")).map { it.first })
+    }
+
+    @Test
+    fun markupThatIsNotAWellFormedXspfListIsNoList() {
+        assertNull(Playlists.parse("<playlist><trackList><track><location>a.flac</location></track>", "/m/a.xspf"))
+        assertNull(Playlists.parse("<rss><channel/></rss>", "/m/a.xspf"))
+    }
+
     /** An album ripped to one file with its cue sheet plays as its tracks (#456). */
     @Test
     fun aCueSheetsTracksAreClipsOfItsFile() {
@@ -115,11 +180,23 @@ class PlaylistsTest {
         assertEquals(listOf("The Band", "A Guest", "The Band"), items.map { it.artist })
         assertEquals(List(3) { "The Album" }, items.map { it.album })
         val clips = items.map { it.clip!! }
-        // The pregap of track 2 plays at the end of track 1.
-        assertEquals(MediaClip(0.seconds, 250.seconds), clips[0])
-        assertEquals((4 * 60 + 12).seconds + (37 * 1_000_000 / 75).microseconds, clips[1].start)
+        // The pregap of track 2, 4:10 to 4:12 and 37 frames, plays at the end of track 1, so the
+        // tracks meet at one boundary and no second of the file is left out (#456).
+        val second = (4 * 60 + 12).seconds + (37 * 1_000_000 / 75).microseconds
+        assertEquals(MediaClip(0.seconds, second), clips[0])
+        assertEquals(second, clips[1].start)
         assertEquals(483.seconds, clips[1].end)
         assertEquals(MediaClip(483.seconds, null), clips[2])
+        clips.zipWithNext().forEach { (a, b) -> assertEquals(a.end, b.start, "a gap or an overlap between $a and $b") }
+    }
+
+    /** The first track starts at its own INDEX 01, past a pregap before it (#456). */
+    @Test
+    fun aFirstTracksPregapIsBeforeItsStart() {
+        val cue = "FILE a.flac WAVE\nTRACK 01 AUDIO\nINDEX 00 00:00:00\nINDEX 01 00:02:00\nTRACK 02 AUDIO\nINDEX 00 03:00:00\nINDEX 01 03:01:15\n"
+        val clips = Playlists.parse(cue, "/m/a.cue").orEmpty().map { it.clip }
+        val second = 181.seconds + (15 * 1_000_000 / 75).microseconds
+        assertEquals(listOf(MediaClip(2.seconds, second), MediaClip(second, null)), clips)
     }
 
     @Test

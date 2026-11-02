@@ -298,6 +298,9 @@ public class WebCanvasVideoRenderer(
      * travel as a Latin-1 string and one JS loop writes them into the ImageData. This used to cross
      * one byte per JS call, which was tolerable for a cue a second and not for typesetting that
      * re-renders every frame while a sign moves.
+     *
+     * The overlay is premultiplied and an `ImageData` holds straight alpha, which `putImageData`
+     * multiplies in again, so the colours are divided by their alpha as they are packed (#607).
      */
     private fun drawOverlay(s: JsAny) {
         val current = overlay
@@ -313,10 +316,7 @@ public class WebCanvasVideoRenderer(
             current.images.forEach { image ->
                 val bitmap = image.bitmap
                 val handle = webOverlayImage(s, bitmap.width, bitmap.height, image.x, image.y)
-                val bytes = bitmap.width * bitmap.height * 4
-                val packed = StringBuilder(bytes)
-                for (i in 0 until bytes) packed.append((bitmap.pixels[i].toInt() and 0xFF).toChar())
-                webOverlayBytes(handle, packed.toString())
+                webOverlayBytes(handle, straightAlphaLatin1(bitmap.pixels, bitmap.width * bitmap.height * 4))
                 webOverlayCommit(s, handle)
             }
             overlayHash = current.contentHash
@@ -354,6 +354,9 @@ public class WebCanvasVideoRenderer(
         webResizeCanvas(s, pixelWidth, pixelHeight)
         redrawRetained(s)
     }
+
+    /** The canvas draws the decoded picture as it is, so the engine warns when picture controls are set (#610). */
+    override val appliesAdjustments: Boolean get() = false
 
     override fun setScaleMode(mode: VideoScale) {
         scaleMode = mode
@@ -566,6 +569,32 @@ private external fun webBeginOverlay(state: JsAny, count: Int)
     }""",
 )
 private external fun webOverlayImage(state: JsAny, width: Int, height: Int, x: Int, y: Int): JsAny?
+
+/**
+ * The first [bytes] of premultiplied RGBA [pixels] as straight-alpha RGBA, one Latin-1 character
+ * per byte, which is what an `ImageData` holds (#607). Each colour is divided by its alpha, rounded
+ * to the nearest, and a pixel with no alpha is zero. Without this `putImageData` multiplies by the
+ * alpha a second time, and every soft edge of a subtitle draws too dark.
+ */
+internal fun straightAlphaLatin1(pixels: ByteArray, bytes: Int): String {
+    val packed = StringBuilder(bytes)
+    var at = 0
+    while (at + 3 < bytes) {
+        val alpha = pixels[at + 3].toInt() and 0xFF
+        for (channel in 0 until 3) {
+            val value = pixels[at + channel].toInt() and 0xFF
+            val straight = when (alpha) {
+                255 -> value
+                0 -> 0
+                else -> minOf(255, (value * 255 + alpha / 2) / alpha)
+            }
+            packed.append(straight.toChar())
+        }
+        packed.append(alpha.toChar())
+        at += 4
+    }
+    return packed.toString()
+}
 
 // Latin-1 by construction: every byte is one code unit below 0x100, so no encoding step can touch it.
 @JsFun("(h, s) => { if (h) { const d = h.image.data; const n = Math.min(s.length, d.length); for (let i = 0; i < n; i++) d[i] = s.charCodeAt(i); } }")

@@ -83,6 +83,18 @@ internal interface AudioRingHandle {
     fun setGain(target: Float)
 
     /**
+     * Sets how loud a rendered sample may be before the limiter turns it down, from full scale at 1,
+     * the default, up to [CEILING_MAX] (#612).
+     *
+     * A device that turns the sound down after the ring, as Android's track volume does, hears a
+     * sample at 1.6 under a volume of 0.5 at 0.8, so limiting it to 1 here squeezed loud passages
+     * that had room. The caller passes the lower of the inverse of that later volume and the
+     * device's [io.github.yuroyami.kiteplayer.spi.AudioSink.deviceGainHeadroom]. At 1 the limiter
+     * is exactly the one of #504, bit for bit. Safe from any thread.
+     */
+    fun setCeiling(ceiling: Float)
+
+    /**
      * Fades the sound out and holds it there, or lets it play again (#486).
      *
      * While [held], the render walks the applied gain down to silence over the real frames it
@@ -191,6 +203,9 @@ internal val GAIN_RAMP_DURATION: kotlin.time.Duration = kotlin.time.Duration.par
  * One law, in one place, and the C ring's `KPRT_GAIN_MAX` carries the same value.
  */
 internal const val GAIN_MAX: Float = 2f
+
+/** The loudest ceiling [AudioRingHandle.setCeiling] takes. The C ring's `KPRT_CEILING_MAX` carries the same value. */
+internal const val CEILING_MAX: Float = 4f
 
 /** Sample frames [GAIN_RAMP_DURATION] is worth at [sampleRate]. At least one, so the slope is finite. */
 internal fun gainRampFrames(sampleRate: Int): Int {

@@ -1,8 +1,10 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteffmpeg.CodecId
+import io.github.yuroyami.kiteffmpeg.FilterGraph
 import io.github.yuroyami.kiteffmpeg.Frame
 import io.github.yuroyami.kiteffmpeg.PixelFormat
+import io.github.yuroyami.kiteffmpeg.Rational
 import io.github.yuroyami.kiteplayer.spi.ColorMatrix
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.SoftwareReadableFrame
@@ -14,6 +16,9 @@ public enum class SnapshotFormat { Png, Jpeg }
  * Encodes a frame with readable planes as a standalone image: a `CapturedFrame` from
  * `KitePlayer.captureFrame`, or any software frame a backend produced.
  *
+ * The image is the picture as a renderer shows it (#608): the frame's crop comes off, its pixels
+ * become square by its pixel aspect, and its mirror and turn apply, so a portrait phone recording
+ * saves upright and an anamorphic picture keeps its proportions. A subtitle overlay is not drawn.
  * Runs the pixel conversion FFmpeg needs on the calling thread and leaves this frame untouched.
  * A hardware frame that is read through a downloaded copy, such as a VideoToolbox frame, encodes
  * that copy.
@@ -30,11 +35,43 @@ public fun SoftwareReadableFrame.encode(format: SnapshotFormat = SnapshotFormat.
         planeFormat.ffmpegName()
             ?: throw UnsupportedOperationException("a $planeFormat frame has no pixels an image encoder can take")
     }
+    val codec = if (format == SnapshotFormat.Png) CodecId.Png else CodecId.Mjpeg
     val frame = Frame.ofVideo(tightlyPackedPlanes(), size.width, size.height, PixelFormat(name))
-    try {
-        return frame.encodeImage(if (format == SnapshotFormat.Png) CodecId.Png else CodecId.Mjpeg)
-    } finally {
+    val shown = shownGeometry(
+        size.width, size.height, size.pixelAspectNumerator, size.pixelAspectDenominator,
+        crop, rotationDegrees, mirrored,
+    )
+    val filter = shown.filter
+    if (filter == null) {
+        try {
+            return frame.encodeImage(codec)
+        } finally {
+            frame.close()
+        }
+    }
+    val graph = try {
+        FilterGraph.buildVideo(
+            description = filter,
+            width = size.width,
+            height = size.height,
+            pixelFormat = PixelFormat(name),
+            timeBase = Rational(1, 1_000_000),
+            frameRate = Rational(25, 1),
+            sampleAspectRatio = Rational(1, 1),
+        )
+    } catch (failure: Throwable) {
         frame.close()
+        throw failure
+    }
+    try {
+        var image: ByteArray? = null
+        val take: (Frame) -> Unit = { out -> if (image == null) image = out.encodeImage(codec) }
+        // The graph closes the frame it is fed.
+        graph.feedInput(0, frame, take)
+        if (image == null) graph.flushInput(0, take)
+        return image ?: error("the filters produced no frame to encode")
+    } finally {
+        graph.close()
     }
 }
 

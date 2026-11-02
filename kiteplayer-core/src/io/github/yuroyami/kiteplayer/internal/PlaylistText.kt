@@ -1,7 +1,10 @@
+@file:OptIn(io.github.yuroyami.kiteplayer.KitePlayerInternalApi::class)
+
 package io.github.yuroyami.kiteplayer.internal
 
 import io.github.yuroyami.kiteplayer.MediaClip
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.uri.FileUri
 import kotlin.time.Duration.Companion.microseconds
 
 /** The text work of [io.github.yuroyami.kiteplayer.Playlists] (#490), with no I/O. */
@@ -12,7 +15,8 @@ internal object PlaylistText {
         val start = body.trimStart()
         return when {
             start.startsWith("[playlist]", ignoreCase = true) -> pls(body, base)
-            start.startsWith("<?xml") || start.startsWith("<playlist") -> xspf(body, base)
+            // Markup is XSPF or nothing, whatever prefix its elements carry (#490).
+            start.startsWith("<") -> XspfReader.read(body, base)
             isCueSheet(body) -> cueSheet(body, base)
             else -> m3u(body, base)
         }
@@ -99,87 +103,6 @@ internal object PlaylistText {
         return files.keys.sorted().map { n -> MediaItem(uri = playlistAddress(base, files.getValue(n)), title = titles[n]) }
     }
 
-    /**
-     * Each `<track>` of an XSPF list with a `<location>`, read as the well-formed XML the format
-     * requires: the first location, and the title, creator and album beside it.
-     */
-    private fun xspf(text: String, base: String): List<MediaItem>? {
-        if (!text.contains("<playlist")) return null
-        val items = mutableListOf<MediaItem>()
-        var at = 0
-        while (true) {
-            val open = TRACK_OPEN.find(text, at) ?: break
-            val close = text.indexOf("</track>", open.range.last + 1)
-            if (close < 0) break
-            val track = text.substring(open.range.last + 1, close)
-            at = close + "</track>".length
-            val location = element(track, "location") ?: continue
-            items += MediaItem(
-                uri = playlistAddress(base, location),
-                title = element(track, "title"),
-                artist = element(track, "creator"),
-                album = element(track, "album"),
-            )
-        }
-        return items
-    }
-
-    /** The decoded text of the first [name] element in [xml], or null when it has none or it is empty. */
-    private fun element(xml: String, name: String): String? {
-        val open = Regex("<$name(\\s[^>]*)?>").find(xml) ?: return null
-        val close = xml.indexOf("</$name>", open.range.last + 1).takeIf { it >= 0 } ?: return null
-        return xmlText(xml.substring(open.range.last + 1, close)).trim().ifEmpty { null }
-    }
-
-    /** XML character data with its CDATA sections unwrapped and its entity and character references decoded. */
-    private fun xmlText(raw: String): String {
-        if ('&' !in raw && "<![CDATA[" !in raw) return raw
-        val out = StringBuilder(raw.length)
-        var at = 0
-        while (at < raw.length) {
-            if (raw.startsWith("<![CDATA[", at)) {
-                val end = raw.indexOf("]]>", at).takeIf { it >= 0 } ?: raw.length
-                out.append(raw, at + 9, end)
-                at = end + 3
-                continue
-            }
-            val char = raw[at]
-            if (char == '&') {
-                val semicolon = raw.indexOf(';', at)
-                val entity = if (semicolon > at) raw.substring(at + 1, semicolon) else ""
-                val decoded = when {
-                    entity == "amp" -> "&"
-                    entity == "lt" -> "<"
-                    entity == "gt" -> ">"
-                    entity == "quot" -> "\""
-                    entity == "apos" -> "'"
-                    entity.startsWith("#x") || entity.startsWith("#X") -> entity.drop(2).toIntOrNull(16)?.let(::codePoint)
-                    entity.startsWith("#") -> entity.drop(1).toIntOrNull()?.let(::codePoint)
-                    else -> null
-                }
-                if (decoded != null) {
-                    out.append(decoded)
-                    at = semicolon + 1
-                    continue
-                }
-            }
-            out.append(char)
-            at++
-        }
-        return out.toString()
-    }
-
-    private fun codePoint(value: Int): String? = when {
-        value in 0..0xFFFF -> value.toChar().toString()
-        value in 0x10000..0x10FFFF -> {
-            val offset = value - 0x10000
-            charArrayOf((0xD800 + (offset shr 10)).toChar(), (0xDC00 + (offset and 0x3FF)).toChar()).concatToString()
-        }
-        else -> null
-    }
-
-    private val TRACK_OPEN = Regex("<track(\\s[^>]*)?>")
-
     /** A cue sheet names a file, and a track in it, on lines of their own. */
     private fun isCueSheet(text: String): Boolean {
         var file = false
@@ -194,15 +117,16 @@ internal object PlaylistText {
     }
 
     /**
-     * The tracks of a cue sheet (#456), each its file's part from its `INDEX 01` to where the next
-     * track of the same file begins: that track's `INDEX 00` when it has a pregap, which plays at
-     * the end of the track before it, as foobar2000 plays it, and its `INDEX 01` otherwise. The last
-     * track of a file runs to the file's end. A track takes its own `TITLE` and `PERFORMER`, the
+     * The tracks of a cue sheet (#456), each its file's part from its `INDEX 01` to the `INDEX 01`
+     * of the next track of the same file. A pregap, from a track's `INDEX 00` to its `INDEX 01`,
+     * therefore plays at the end of the track before it, as foobar2000 plays it, and two tracks of
+     * one file meet at one boundary, so they join with no gap. The first track starts at its own
+     * `INDEX 01`, past any pregap before it. The last track of a file runs to the file's end. A track takes its own `TITLE` and `PERFORMER`, the
      * sheet's `PERFORMER` when it names none, and the sheet's `TITLE` as its album. Times are
      * minutes, seconds and frames of a compact disc, 75 to the second.
      */
     private fun cueSheet(text: String, base: String): List<MediaItem> {
-        class Track(val file: String, var title: String? = null, var performer: String? = null, var pregap: Long? = null, var start: Long? = null)
+        class Track(val file: String, var title: String? = null, var performer: String? = null, var start: Long? = null)
         var albumTitle: String? = null
         var albumPerformer: String? = null
         var file: String? = null
@@ -227,12 +151,10 @@ internal object PlaylistText {
                 "PERFORMER" -> if (current == null) albumPerformer = cueValue(rest) else current.performer = cueValue(rest)
                 "INDEX" -> {
                     val track = current ?: continue
+                    // INDEX 00, a pregap, needs no note: it plays at the end of the track before.
                     val number = rest.substringBefore(' ').toIntOrNull() ?: continue
                     val time = cueTime(rest.substringAfter(' ').trim()) ?: continue
-                    when (number) {
-                        0 -> track.pregap = time
-                        1 -> track.start = time
-                    }
+                    if (number == 1) track.start = time
                 }
             }
         }
@@ -240,7 +162,8 @@ internal object PlaylistText {
         return playable.mapIndexed { index, track ->
             val next = playable.getOrNull(index + 1)?.takeIf { it.file == track.file }
             val start = track.start!!
-            val end = next?.let { it.pregap ?: it.start }?.takeIf { it > start }
+            // The next track's pregap is this track's end, so no second of the file is left out.
+            val end = next?.start?.takeIf { it > start }
             MediaItem(
                 uri = playlistAddress(base, track.file),
                 clip = MediaClip(start = start.microseconds, end = end?.microseconds),
@@ -321,36 +244,7 @@ private fun joinPath(folder: String, path: String): String {
 }
 
 /** The path a `file:` address names, its percent escapes decoded, `file:///C:/x` as `C:/x`. */
-private fun filePath(uri: String): String {
-    var rest = uri.substring("file:".length)
-    if (rest.startsWith("//")) {
-        rest = rest.substring(2)
-        // file://host/path: the local host is the only one a player can read.
-        if (!rest.startsWith("/")) rest = rest.substringAfter('/', "").let { "/$it" }
-    }
-    val decoded = percentDecoded(rest.substringBefore('?').substringBefore('#'))
-    return if (decoded.length >= 3 && decoded[0] == '/' && decoded[2] == ':' && decoded[1].isLetter()) decoded.substring(1) else decoded
-}
-
-private fun percentDecoded(text: String): String {
-    if ('%' !in text) return text
-    val bytes = ArrayList<Byte>(text.length)
-    var at = 0
-    while (at < text.length) {
-        val char = text[at]
-        if (char == '%' && at + 2 < text.length) {
-            val value = text.substring(at + 1, at + 3).toIntOrNull(16)
-            if (value != null) {
-                bytes += value.toByte()
-                at += 3
-                continue
-            }
-        }
-        char.toString().encodeToByteArray().forEach { bytes += it }
-        at++
-    }
-    return bytes.toByteArray().decodeToString()
-}
+private fun filePath(uri: String): String = FileUri.localPath(uri).orEmpty()
 
 private fun hasScheme(text: String): Boolean {
     val colon = text.indexOf(':')

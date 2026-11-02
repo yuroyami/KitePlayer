@@ -31,8 +31,9 @@ kotlin() { run env KOTLIN_CLI_NO_WELCOME_BANNER=1 ./kotlin "$@"; }
 scan_em_dashes() {
     # git grep reads the working copies of tracked files and preserves errors separately from
     # its expected no-match exit code. Add new files to the index before the final commit gate.
+    # The two Kotlin Toolchain wrappers are JetBrains' files, replaced at each toolchain upgrade.
     local status
-    if git grep -n "$(printf '\342\200\224')"; then
+    if git grep -n "$(printf '\342\200\224')" -- . ':!kotlin' ':!kotlin.bat'; then
         echo 'Em dash found in tracked source.' >&2
         return 1
     else
@@ -85,6 +86,7 @@ base() {
     run kiteplayer-rt/native/scripts/render-audit.sh
     run kiteplayer-rt/native/scripts/source-discipline.sh
     run scan_em_dashes
+    run python3 scripts/check-test-coverage.py
 }
 build_logic() { kotlin test -m build-support; }
 publication() {
@@ -98,13 +100,23 @@ publication() {
     run ./scripts/check-dependency-hygiene.sh
 }
 macos() {
+    # The device soaks fail without KPRT_DEVICE_SOAK, so they run only when it is set (#641).
+    local soaks=(--exclude-classes='*SoakTest')
+    [ -n "${KPRT_DEVICE_SOAK:-}" ] && soaks=()
     kotlin test -p macosArm64 -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
         -m kiteplayer-output -m kiteplayer-rt \
         -m kiteplayer-libass -m kiteplayer-adaptive -m kiteplayer-network \
-        -m kiteplayer-ffmpeg -m kiteplayer
+        -m kiteplayer-ffmpeg -m kiteplayer -m kiteplayer-view "${soaks[@]}"
 }
 ios_simulator() {
-    kotlin test -p iosSimulatorArm64 -m kiteplayer-view -m kiteplayer-audioviz -m kiteplayer
+    kotlin test -p iosSimulatorArm64 -m kiteplayer-view -m kiteplayer-audioviz -m kiteplayer \
+        -m kiteplayer-compose-video
+}
+android_host() {
+    # The Android unit tests on the JVM, the media session's among them, which no step ran (#637).
+    kotlin test -p android -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
+        -m kiteplayer-output -m kiteplayer-compose-video -m kiteplayer-view -m kiteplayer-adaptive \
+        -m kiteplayer-network -m kiteplayer-audioviz -m kiteplayer-libass -m kiteplayer -m kiteplayer-ffmpeg
 }
 c_sanitizers() {
     # This reuses the plain build from base. When resuming here, that earlier build must exist.
@@ -161,7 +173,7 @@ sample() {
 # Generate first: no real-media suite may consume stale fixtures in a full Tier 2 run.
 STEPS=(base)
 if [ "$TIER" = tier2 ]; then
-    STEPS=(fixtures base build_logic publication macos ios_simulator c_sanitizers jvm web linux windows cross_compile sample)
+    STEPS=(fixtures base build_logic publication macos ios_simulator android_host c_sanitizers jvm web linux windows cross_compile sample)
 fi
 FROM="${FROM:-${STEPS[0]}}"
 case " ${STEPS[*]} " in

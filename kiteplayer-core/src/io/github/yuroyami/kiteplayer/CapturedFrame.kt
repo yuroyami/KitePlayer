@@ -97,6 +97,9 @@ public class CapturedFrame internal constructor(
     /** The copies are plain arrays; there is nothing to release. */
     override fun close(): Unit = Unit
 
+    /** What the engine sampled beside the copy, read once by the capture that asked (#73). Not part of the picture. */
+    internal var moment: Any? = null
+
     internal companion object {
         /**
          * Copies [frame]'s planes, or refuses typed when the frame keeps its pixels somewhere a

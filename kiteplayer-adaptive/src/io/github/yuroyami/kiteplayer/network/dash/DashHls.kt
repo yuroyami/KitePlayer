@@ -103,8 +103,10 @@ internal object DashHls {
 
     /**
      * The stand-in for [period]. Video sets give variants, in ascending bandwidth. With no video, the
-     * representations of the first audio set are the variants, and the other audio sets are not
-     * offered. Each audio set offers its highest bandwidth representation as its rendition. A
+     * representations of the default audio set are the variants, and every other audio set is an
+     * audio rendition beside them, its highest bandwidth representation, so an audio only stream in
+     * several languages or mixes offers each one (#630). With video, each audio set offers its
+     * highest bandwidth representation as its rendition. A
      * [live] presentation offers no subtitle file that has no segments, because such a file has
      * no length to give. An encrypted set is not offered at all (#404).
      *
@@ -113,7 +115,8 @@ internal object DashHls {
      * describe sound, `description` that of sound that describes the picture, `easyreader` the
      * easy-to-read one, and `forced-subtitle` a forced rendition. The first audio set whose role is
      * `main` is the default, or else the first that is neither a description nor a commentary, and
-     * an audio rendition states its channels.
+     * an audio rendition states its channels. With no video the default set is the variants' own
+     * sound, which a rendition with no URI names, as RFC 8216 asks of a variant that carries audio.
      *
      * With [thumbnails], the first thumbnail set's representation of the largest tiles becomes an
      * HLS image stream, as Roku's and Apple's packagers write one, with RESOLUTION the size of one
@@ -135,6 +138,8 @@ internal object DashHls {
 
         val variants: List<DashHlsTrack>
         val audio: List<DashHlsTrack>
+        // With no video, the set whose sound the variants carry, which a rendition with no URI names.
+        var soundOfVariants: DashHlsTrack? = null
         if (videoSets.isNotEmpty()) {
             variants = videoSets.flatMap { (setIndex, set) ->
                 set.representations.indices.map { track(DashHlsRole.Video, setIndex, set, it) }
@@ -143,11 +148,19 @@ internal object DashHls {
                 track(DashHlsRole.Audio, setIndex, set, set.representations.indices.maxBy { set.representations[it].bandwidth })
             }
         } else {
-            val (setIndex, set) = audioSets.first()
+            // The default sound by the rule the renditions follow, so a description listed first is
+            // not the only thing a listener can hear (#630).
+            val chosen = audioSets.indexOfFirst { "main" in it.value.roles }.takeIf { it >= 0 }
+                ?: audioSets.indexOfFirst { (_, set) -> set.roles.none { it == "description" || it == "commentary" } }.coerceAtLeast(0)
+            val (setIndex, set) = audioSets[chosen]
             variants = set.representations.indices.map { track(DashHlsRole.Audio, setIndex, set, it) }
                 .sortedBy { it.representation.bandwidth }
-            audio = emptyList()
+            audio = audioSets.filterIndexed { index, _ -> index != chosen }.map { (otherIndex, other) ->
+                track(DashHlsRole.Audio, otherIndex, other, other.representations.indices.maxBy { other.representations[it].bandwidth })
+            }
+            if (audio.isNotEmpty()) soundOfVariants = variants.last()
         }
+        val variantSound = soundOfVariants
         val subtitles = textSets.mapNotNull { (setIndex, set) ->
             val rep = set.representations.firstOrNull() ?: return@mapNotNull null
             val format = subtitleFormat(set) ?: return@mapNotNull null
@@ -172,17 +185,26 @@ internal object DashHls {
         val master = buildString {
             append("#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-INDEPENDENT-SEGMENTS\n")
             // With no set marked main, a description or a commentary is nobody's default sound.
-            val mainAudio = audio.indexOfFirst { "main" in it.set.roles }.takeIf { it >= 0 }
-                ?: audio.indexOfFirst { track -> track.set.roles.none { it == "description" || it == "commentary" } }.coerceAtLeast(0)
-            val audioNames = names("audio", audio)
-            for ((index, rendition) in audio.withIndex()) {
-                append(rendition("AUDIO", AUDIO_GROUP, rendition, audioNames[index], isDefault = index == mainAudio))
+            val audioNames = names("audio", listOfNotNull(variantSound) + audio)
+            if (variantSound != null) {
+                // The variants' own sound is the default, and the other sets are its alternatives.
+                append(rendition("AUDIO", AUDIO_GROUP, variantSound, audioNames[0], isDefault = true, withUri = false))
+                for ((index, rendition) in audio.withIndex()) {
+                    append(rendition("AUDIO", AUDIO_GROUP, rendition, audioNames[index + 1], isDefault = false))
+                }
+            } else {
+                val mainAudio = audio.indexOfFirst { "main" in it.set.roles }.takeIf { it >= 0 }
+                    ?: audio.indexOfFirst { track -> track.set.roles.none { it == "description" || it == "commentary" } }.coerceAtLeast(0)
+                for ((index, rendition) in audio.withIndex()) {
+                    append(rendition("AUDIO", AUDIO_GROUP, rendition, audioNames[index], isDefault = index == mainAudio))
+                }
             }
             val subtitleNames = names("subtitles", subtitles)
             for ((index, rendition) in subtitles.withIndex()) {
                 append(rendition("SUBTITLES", SUBTITLE_GROUP, rendition, subtitleNames[index], isDefault = false))
             }
-            val audioBandwidth = audio.maxOfOrNull { it.representation.bandwidth } ?: 0L
+            // A variant that carries its own sound is not also paying for an alternative it replaces.
+            val audioBandwidth = if (variantSound != null) 0L else audio.maxOfOrNull { it.representation.bandwidth } ?: 0L
             val audioCodecs = audio.mapNotNull { it.representation.codecs }.distinct()
             for (variant in variants) {
                 val rep = variant.representation
@@ -223,6 +245,17 @@ internal object DashHls {
         sequence: Long = plan.segments.firstOrNull()?.number ?: 0L,
         images: DashRepresentation? = null,
         dateOriginMicros: Long? = null,
+        /**
+         * Ends a live playlist whose event has ended, with `EXT-X-ENDLIST` and no playlist type,
+         * because a playlist that began live may not change its type (RFC 8216, 6.2.1) (#616).
+         */
+        ended: Boolean = false,
+        /**
+         * How far behind the live edge a player should start, the manifest's
+         * `suggestedPresentationDelay`, written as `EXT-X-START` so that FFmpeg starts there (#627).
+         * Null, and any playlist that is not live, writes none.
+         */
+        startBehindLiveMicros: Long? = null,
     ): String =
         buildString {
             val longest = plan.segments.maxOfOrNull { it.durationMicros } ?: 1_000_000L
@@ -230,6 +263,9 @@ internal object DashHls {
             append("#EXT-X-TARGETDURATION:").append((longest + 999_999) / 1_000_000).append('\n')
             append("#EXT-X-MEDIA-SEQUENCE:").append(sequence).append('\n')
             if (!live) append("#EXT-X-PLAYLIST-TYPE:VOD\n")
+            if (live && !ended && startBehindLiveMicros != null && startBehindLiveMicros > 0) {
+                append("#EXT-X-START:TIME-OFFSET=-").append(seconds(startBehindLiveMicros)).append('\n')
+            }
             // A thumbnail set's playlist is an image playlist: each segment one grid image, whose
             // tiles share its time evenly (#433).
             val grid = images?.tiles
@@ -269,7 +305,7 @@ internal object DashHls {
                 segment.range?.let { append("#EXT-X-BYTERANGE:").append(byteRange(it)).append('\n') }
                 append(segment.url).append('\n')
             }
-            if (!live) append("#EXT-X-ENDLIST\n")
+            if (!live || ended) append("#EXT-X-ENDLIST\n")
         }
 
     /**
@@ -337,7 +373,7 @@ internal object DashHls {
         }
     }
 
-    private fun rendition(type: String, group: String, track: DashHlsTrack, name: String, isDefault: Boolean): String {
+    private fun rendition(type: String, group: String, track: DashHlsTrack, name: String, isDefault: Boolean, withUri: Boolean = true): String {
         val set = track.set
         val language = set.lang
         val roles = set.roles.map { it.lowercase() }
@@ -349,7 +385,7 @@ internal object DashHls {
         val characteristics = roles.mapNotNull { CHARACTERISTICS[it] }.distinct()
         if (characteristics.isNotEmpty()) attributes += "CHARACTERISTICS=\"${characteristics.joinToString(",")}\""
         if (type == "AUDIO") track.representation.audioChannels?.let { attributes += "CHANNELS=\"$it\"" }
-        attributes += "URI=\"${track.address}\""
+        if (withUri) attributes += "URI=\"${track.address}\""
         return "#EXT-X-MEDIA:" + attributes.joinToString(",") + "\n"
     }
 

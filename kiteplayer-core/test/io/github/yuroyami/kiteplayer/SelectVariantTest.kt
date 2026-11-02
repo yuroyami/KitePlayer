@@ -376,6 +376,84 @@ class SelectVariantTest {
         own.close()
     }
 
+    /**
+     * A stream opened before its view had a size takes the top rung, and steps down to the view
+     * once it has one (#600). Nothing corrected it before, so a phone played 2160p for good.
+     */
+    @Test
+    fun aViewThatGetsItsSizeAfterTheOpenStepsTheVariantDownToIt() = runTest {
+        val script = MediaScript(durationUs = 240_000_000, variants = ladder, linkBitsPerSecond = { 50_000_000 })
+        val harness = CoreHarness(this, script = script)
+        harness.attachRenderer()
+        harness.core.open(MediaItem("scripted://media", io = { LinkIo(script, harness.clock) }))
+        assertEquals(2, harness.core.snapshots.value.tracks.selectedVariant, "with no size the open took the top rung")
+        harness.core.play()
+        harness.run(5.seconds)
+
+        assertNotNull(harness.renderer).outputSizeOverride = VideoSize(640, 360)
+        harness.run(70.seconds)
+        assertEquals(0, harness.core.snapshots.value.tracks.selectedVariant, "the variant did not follow the view down to 360p")
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        harness.close()
+    }
+
+    /**
+     * With the picture off nobody sees the video, so the stream moves to its cheapest variant, and
+     * back to the one before when the picture is on again (#595). A parked picture kept the top
+     * rung downloading.
+     */
+    @Test
+    fun aParkedPictureMovesTheStreamToItsCheapestVariantAndBack() = runTest {
+        val script = MediaScript(durationUs = 240_000_000, variants = ladder, linkBitsPerSecond = { 50_000_000 })
+        val harness = CoreHarness(this, script = script)
+        harness.attachRenderer()
+        assertNotNull(harness.renderer).outputSizeOverride = VideoSize(1920, 1080)
+        harness.core.open(MediaItem("scripted://media", io = { LinkIo(script, harness.clock) }))
+        assertEquals(2, harness.core.snapshots.value.tracks.selectedVariant)
+        harness.core.play()
+        harness.run(5.seconds)
+
+        harness.core.post(io.github.yuroyami.kiteplayer.internal.CoreCommand.SetVideoEnabled(false, kotlinx.coroutines.CompletableDeferred()))
+        harness.run(10.seconds)
+        assertEquals(0, harness.core.snapshots.value.tracks.selectedVariant, "the parked picture kept its 1080p rung")
+        harness.run(70.seconds)
+        assertEquals(0, harness.core.snapshots.value.tracks.selectedVariant, "the stream climbed while nobody saw it")
+
+        harness.core.post(io.github.yuroyami.kiteplayer.internal.CoreCommand.SetVideoEnabled(true, kotlinx.coroutines.CompletableDeferred()))
+        harness.run(10.seconds)
+        assertEquals(2, harness.core.snapshots.value.tracks.selectedVariant, "the picture came back on the cheapest rung")
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        harness.close()
+    }
+
+    /**
+     * A quality step skips a variant this build cannot decode (#625), such as the E-AC-3 copy of a
+     * tier on the web, which played the picture in silence.
+     */
+    @Test
+    fun aStepDownPassesOverAVariantThatDoesNotDecode() = runTest {
+        val three = listOf(
+            StreamVariant(index = 0, bitrate = 5_000_000, width = 1920, height = 1080),
+            StreamVariant(index = 1, bitrate = 2_500_000, width = 1280, height = 720),
+            StreamVariant(index = 2, bitrate = 800_000, width = 640, height = 360),
+        )
+        val script = MediaScript(
+            durationUs = 60_000_000,
+            variants = three,
+            undecodableVariants = setOf(1),
+            readDelayUsByVariant = mapOf(0 to 200_000L),
+        )
+        val harness = CoreHarness(this, script = script)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(15.seconds)
+        val lowered = harness.core.warningHistory().map { it.warning }.filterIsInstance<PlaybackWarning.VariantLowered>()
+        assertEquals(listOf(0 to 2), lowered.map { it.from to it.to }, "the step went onto a variant that does not decode: $lowered")
+        assertEquals(2, harness.core.snapshots.value.tracks.selectedVariant)
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        harness.close()
+    }
+
     /** A fast link steps up only as far as the view, and further once the view grows (#447). */
     @Test
     fun aStepUpStopsAtTheDrawnSizeAndRisesWithTheView() = runTest {
@@ -414,6 +492,37 @@ class SelectVariantTest {
         harness.core.play()
         harness.run(150.seconds)
         assertEquals(1, harness.core.snapshots.value.tracks.selectedVariant, "the SDR stream stepped into the HDR ladder")
+        harness.close()
+    }
+
+    /**
+     * A display that reports HDR after the open moves the stream to its HDR rung, and back to SDR
+     * when it stops (#600). The open ran before the view described its display, took the SDR rung,
+     * and no step ever changed the range.
+     */
+    @Test
+    fun aDisplayThatReportsHdrAfterTheOpenMovesTheStreamToItsHdrRung() = runTest {
+        val mixed = listOf(
+            StreamVariant(index = 0, bitrate = 800_000, width = 640, height = 360),
+            StreamVariant(index = 1, bitrate = 5_000_000, width = 1920, height = 1080),
+            StreamVariant(index = 2, bitrate = 9_000_000, width = 1920, height = 1080, hdr = true),
+        )
+        val script = MediaScript(durationUs = 240_000_000, variants = mixed, linkBitsPerSecond = { 50_000_000 })
+        val harness = CoreHarness(this, script = script)
+        harness.attachRenderer()
+        harness.core.open(MediaItem("scripted://media", io = { LinkIo(script, harness.clock) }))
+        assertEquals(1, harness.core.snapshots.value.tracks.selectedVariant, "with no HDR answer the open took SDR")
+        harness.core.play()
+        harness.run(5.seconds)
+
+        assertNotNull(harness.renderer).showsHdrOverride = true
+        harness.run(30.seconds)
+        assertEquals(2, harness.core.snapshots.value.tracks.selectedVariant, "the stream stayed SDR on an HDR display")
+
+        assertNotNull(harness.renderer).showsHdrOverride = false
+        harness.run(30.seconds)
+        assertEquals(1, harness.core.snapshots.value.tracks.selectedVariant, "the stream stayed HDR on a display that stopped showing it")
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
         harness.close()
     }
 

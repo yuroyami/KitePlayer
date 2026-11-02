@@ -309,7 +309,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun sixteenMiBCapCountsOldAndCandidateWindowsBeforeAcceptingCrossingPacket() = runTest {
+    fun sixteenMiBCapCountsOldAndCandidateWindowsAndKeepsTheHardware() = runTest {
         val h = Harness().apply {
             // The delayed frame belongs to the OLD window, so its timestamp sits BEFORE the
             // candidate keyframe's. It used to carry a fictional future pts, which was harmless
@@ -326,9 +326,62 @@ class DecoderFallbackTest {
         assertDelivered(decoder, h.packet(1, keyframe = true, bytes = 8 * 1024 * 1024), 1)
         assertDelivered(decoder, h.packet(2, bytes = 6 * 1024 * 1024), 2)
         assertDelivered(decoder, h.packet(3, keyframe = true, bytes = 1 * 1024 * 1024), 30, expectedPts = Pts(0))
+        // The old and the candidate window together reach 15 MiB, so this one would pass the cap.
+        // The window goes, and the hardware decoder that works stays (#645).
         assertDelivered(decoder, h.packet(4, bytes = 2 * 1024 * 1024), 4)
+        assertEquals(h.hardwareStatus, decoder.hardware)
+        assertEquals(listOf(1, 2, 3, 4), h.hardware().acceptedPacketIds)
+        assertEquals(listOf<DecoderId?>(DecoderId.H264MediaCodec), h.opens)
+        assertTrue(h.warnings.isEmpty())
+        decoder.close()
+        h.assertLedgerZero()
+    }
+
+    @Test
+    fun aLongKeyframeIntervalPastTheCapStaysOnTheHardware() = runTest {
+        // A keyframe and then 17 MiB of pictures with no failure: a static scene at a high rate.
+        val h = Harness()
+        val decoder = requireNotNull(h.open(autoSelection()))
+        assertDelivered(decoder, h.packet(1, keyframe = true, bytes = 1024 * 1024), 1)
+        for (id in 2..18) assertDelivered(decoder, h.packet(id, bytes = 1024 * 1024), id)
+        assertEquals(h.hardwareStatus, decoder.hardware, "a working hardware decoder was demoted")
+        assertTrue(h.warnings.isEmpty())
+        decoder.close()
+        h.assertLedgerZero()
+    }
+
+    @Test
+    fun aFailureAfterTheWindowWasGivenUpIsTypedAndLeavesTheHardwareStatusForRecovery() = runTest {
+        val h = Harness().apply {
+            hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failSendAt = 20) }
+        }
+        val decoder = requireNotNull(h.open(autoSelection()))
+        assertDelivered(decoder, h.packet(1, keyframe = true, bytes = 1024 * 1024), 1)
+        for (id in 2..19) assertDelivered(decoder, h.packet(id, bytes = 1024 * 1024), id)
+        val packet = h.packet(20)
+        val failure = assertFailsWith<PlaybackException> { decoder.send(packet) }
+        packet.close()
+        assertTrue(failure.error.message.contains("given up"), failure.error.message)
+        // The engine reopens in software at the current position only for a hardware decoder.
+        assertEquals(h.hardwareStatus, decoder.hardware)
+        assertEquals(1, h.opens.size)
+        decoder.close()
+        h.assertLedgerZero()
+    }
+
+    @Test
+    fun theNextKeyframeAfterAGivenUpWindowRestoresTheReplay() = runTest {
+        val h = Harness().apply {
+            hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failSendAt = 21) }
+        }
+        val decoder = requireNotNull(h.open(autoSelection()))
+        assertDelivered(decoder, h.packet(1, keyframe = true, bytes = 1024 * 1024), 1)
+        for (id in 2..18) assertDelivered(decoder, h.packet(id, bytes = 1024 * 1024), id)
+        assertDelivered(decoder, h.packet(19, keyframe = true), 19)
+        assertDelivered(decoder, h.packet(20), 20)
+        // Sending 21 fails; software replays 19 and 20, suppresses both, and decodes 21.
+        assertDelivered(decoder, h.packet(21), 21)
         assertEquals(HwdecStatus.Software, decoder.hardware)
-        assertEquals(3, h.hardware().acceptedPacketIds.size)
         assertEquals(1, h.warnings.size)
         decoder.close()
         h.assertLedgerZero()

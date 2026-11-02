@@ -175,13 +175,19 @@ internal class HlsThumbnails(
         )
     }
 
-    /** The image playlist, read once; a failed read gives no pictures for the session. */
+    /**
+     * The image playlist, read once; a failed read gives no pictures for the session. A read the
+     * caller cancelled has not been made, so the next request reads again (#433): a seek bar that
+     * cancels the preview it no longer wants used to leave the stream with no pictures at all.
+     */
     private suspend fun playlist(): List<HlsImage>? {
         if (playlistRead) return images
-        playlistRead = true
         val address = Playlists.resolve(base, stream.uri)
-        images = readRelated(address)?.let { parseHlsImagePlaylist(it.decodeToString(), address) }
-        return images
+        // Published only when the read returned, so a cancellation leaves nothing decided.
+        val read = readRelated(address)?.let { parseHlsImagePlaylist(it.decodeToString(), address) }
+        images = read
+        playlistRead = true
+        return read
     }
 
     private suspend fun image(uri: String): ByteArray? {

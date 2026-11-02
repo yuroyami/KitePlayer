@@ -14,8 +14,10 @@ import kotlin.time.Duration.Companion.seconds
  * takes them over, and the first player keeps playing.
  *
  * @param skipInterval how far the skip back and skip forward buttons move. Positive.
+ * @throws IllegalArgumentException for a [skipInterval] that is not positive, declared so a Swift
+ *         app catches it rather than ending (#652).
  */
-public expect class KitePlayerMediaSession(
+public expect class KitePlayerMediaSession @Throws(IllegalArgumentException::class) constructor(
     player: KitePlayer,
     skipInterval: Duration = 15.seconds,
 ) : AutoCloseable {
@@ -35,10 +37,16 @@ public expect class KitePlayerMediaSession(
  *
  * - [interruptions] pauses when the headphones come out, and on iOS for a call. Null turns that off.
  * - [background] and [pictureInPicture] say what happens when an iOS app leaves the screen. macOS
- *   ignores both.
+ *   ignores both. A session attached while the app is not active counts that as the app having
+ *   left: [BackgroundPolicy.ContinueAudio] parks the video at once, and [BackgroundPolicy.PauseAll]
+ *   leaves a player that plays already playing and pauses from the next time the app leaves (#690).
  *
  * Call this on the main thread.
+ *
+ * @throws IllegalArgumentException for a [skipInterval] that is not positive, and whatever the
+ *         session's setup threw, after it closed the session, declared for Swift (#652).
  */
+@Throws(Exception::class)
 public expect fun KitePlayer.attachMediaSession(
     background: BackgroundPolicy? = BackgroundPolicy.ContinueAudio,
     interruptions: InterruptionPolicy? = InterruptionPolicy(),

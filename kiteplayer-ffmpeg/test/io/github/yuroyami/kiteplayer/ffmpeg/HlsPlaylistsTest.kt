@@ -103,6 +103,44 @@ class HlsPlaylistsTest {
         assertEquals(0, chooseHlsVariant(listOf(variants[0], variants[3]), maxBitrate = null, maxVideoHeight = null).tagLine)
     }
 
+    /**
+     * A master that offers each quality with AAC and with E-AC-3 plays the AAC copy where no E-AC-3
+     * decoder exists, rather than the picture in silence (#625).
+     */
+    @Test
+    fun aVariantWhoseCodecsDecodeWinsOverOneThatDoesNot() {
+        val variants = listOf(360, 720, 1080).flatMapIndexed { tier, height ->
+            listOf(
+                HlsVariant(tier * 4, tier * 4 + 1, parseHlsAttributes("BANDWIDTH=${(tier + 1) * 2_000_000},RESOLUTION=${height * 16 / 9}x$height,CODECS=\"avc1.640028,mp4a.40.2\",AUDIO=\"aac\"")),
+                HlsVariant(tier * 4 + 2, tier * 4 + 3, parseHlsAttributes("BANDWIDTH=${(tier + 1) * 2_000_000 + 400_000},RESOLUTION=${height * 16 / 9}x$height,CODECS=\"avc1.640028,ec-3\",AUDIO=\"ec3\"")),
+            )
+        }
+        val noEac3: (String) -> Boolean = { ffmpegDecoderForCodec(it) != "eac3" }
+        assertEquals(8, chooseHlsVariant(variants, null, null, decodable = noEac3).tagLine)
+        // With every decoder, the E-AC-3 copy has the highest bitrate.
+        assertEquals(10, chooseHlsVariant(variants, null, null).tagLine)
+        // An AV1 tier above the H.264 ones is left where AV1 does not decode.
+        val av1 = HlsVariant(20, 21, parseHlsAttributes("BANDWIDTH=9000000,RESOLUTION=3840x2160,CODECS=\"av01.0.12M.10,mp4a.40.2\""))
+        assertEquals(8, chooseHlsVariant(variants + av1, null, null, decodable = { it.startsWith("av01").not() && noEac3(it) }).tagLine)
+        // When no variant decodes, the choice goes on as before rather than play nothing.
+        assertEquals(10, chooseHlsVariant(variants, null, null, decodable = { false }).tagLine)
+    }
+
+    @Test
+    fun codecNamesMapOntoFFmpegsDecoders() {
+        assertEquals("h264", ffmpegDecoderForCodec("avc1.640028"))
+        assertEquals("hevc", ffmpegDecoderForCodec("hvc1.2.4.L153.B0"))
+        assertEquals("av1", ffmpegDecoderForCodec("av01.0.12M.10"))
+        assertEquals("vp9", ffmpegDecoderForCodec("vp09.00.40.08"))
+        assertEquals("aac", ffmpegDecoderForCodec("mp4a.40.2"))
+        assertEquals("mp3", ffmpegDecoderForCodec("mp4a.40.34"))
+        assertEquals("eac3", ffmpegDecoderForCodec("ec-3"))
+        assertEquals("ac3", ffmpegDecoderForCodec("AC-3"))
+        assertEquals("opus", ffmpegDecoderForCodec("Opus"))
+        assertEquals(null, ffmpegDecoderForCodec("stpp.ttml.im1t"))
+        assertEquals(null, ffmpegDecoderForCodec("wvtt"))
+    }
+
     /** An HDR display gets the HDR version of the same picture, and any other the SDR one (#447). */
     @Test
     fun anHdrVariantPlaysWhenTheOutputShowsHdr() {
@@ -195,5 +233,39 @@ class HlsPlaylistsTest {
             "#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=200000,RESOLUTION=640x360,URI=\"video/360-iframes.m3u8\"",
             "",
         ).joinToString("\n")
+    }
+
+    /** Which key lines are protection a player refuses, and which are keys it reads (#624). */
+    @Test
+    fun aDrmKeyIsRefusedAndAClearKeyIsRead() {
+        fun refused(line: String) = hlsDrmRefusal("#EXTM3U\n$line\n", "x")?.error as? io.github.yuroyami.kiteplayer.PlaybackError.DrmUnsupported
+        assertEquals(null, refused("#EXT-X-KEY:METHOD=AES-128,URI=\"https://cdn.test/key\""))
+        assertEquals(null, refused("#EXT-X-KEY:METHOD=AES-128,URI=\"key.bin\",KEYFORMAT=\"identity\""))
+        assertEquals(null, refused("#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"https://cdn.test/key\""))
+        assertEquals(null, refused("#EXT-X-KEY:METHOD=NONE"))
+        assertEquals("PlayReady", refused("#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"data:x\",KEYFORMAT=\"com.microsoft.playready\"")?.system)
+        assertEquals("FairPlay", refused("#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"skd://k\"")?.system)
+        assertEquals("SAMPLE-AES-CTR", refused("#EXT-X-KEY:METHOD=SAMPLE-AES-CTR,URI=\"https://k\"")?.system)
+    }
+
+    /**
+     * A finished media playlist's EXT-X-START names where it starts (#627): a positive offset from
+     * its start, a negative one back from its end. A live playlist, which FFmpeg starts itself, and
+     * a playlist with no tag name nothing.
+     */
+    @Test
+    fun aFinishedPlaylistNamesItsStartAndALiveOneLeavesItToFfmpeg() {
+        fun playlist(start: String?, ended: Boolean) = buildString {
+            append("#EXTM3U\n#EXT-X-VERSION:6\n#EXT-X-TARGETDURATION:4\n")
+            if (start != null) append("#EXT-X-START:$start\n")
+            repeat(5) { append("#EXTINF:4.0,\nseg$it.ts\n") }
+            if (ended) append("#EXT-X-ENDLIST\n")
+        }
+        assertEquals(6_500_000L, hlsSuggestedStartUs(playlist("TIME-OFFSET=6.5", ended = true)))
+        assertEquals(12_000_000L, hlsSuggestedStartUs(playlist("TIME-OFFSET=-8,PRECISE=YES", ended = true)))
+        assertEquals(0L, hlsSuggestedStartUs(playlist("TIME-OFFSET=-60", ended = true)))
+        assertEquals(null, hlsSuggestedStartUs(playlist("TIME-OFFSET=6.5", ended = false)))
+        assertEquals(null, hlsSuggestedStartUs(playlist(null, ended = true)))
+        assertEquals(null, hlsSuggestedStartUs(playlist("PRECISE=YES", ended = true)))
     }
 }

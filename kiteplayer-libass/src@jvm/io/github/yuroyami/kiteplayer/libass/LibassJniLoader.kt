@@ -10,8 +10,9 @@ import java.nio.file.StandardCopyOption
  *
  * 1. `-Dkiteplayer.libass.jni.path=/abs/path` wins outright.
  * 2. `System.loadLibrary`, which reads `java.library.path`, for packagers that ship their own copy.
- * 3. The copy bundled in this jar under `kiteplayer-libass-native/<os>-<arch>/`, extracted once
- *    to a temporary directory. This is what makes one dependency line enough on a desktop.
+ * 3. The copy bundled in this jar under `kiteplayer-libass-native/<os>-<arch>/`, extracted to a
+ *    temporary folder named for its contents and reused by every later launch (see
+ *    [extractBundle]). This is what makes one dependency line enough on a desktop.
  *
  * The bundled library is self-contained: libass, HarfBuzz, FreeType and FriBidi are linked into it
  * statically, so one file is the whole adapter and the manifest names exactly one entry.
@@ -34,18 +35,73 @@ internal actual fun loadLibassJni() {
                 "This build of kiteplayer-libass carries no native library for $platformDirectory; " +
                 "supply one with -Dkiteplayer.libass.jni.path or -Djava.library.path.",
         )
-    val directory = Files.createTempDirectory("kiteplayer-libass-jni").toFile().apply { deleteOnExit() }
-    var library: File? = null
-    for (name in manifest) {
-        val stream = LibassTypesetter::class.java.getResourceAsStream("$directoryResource/$name")
+    val files = manifest.associateWith { name ->
+        LibassTypesetter::class.java.getResourceAsStream("$directoryResource/$name")?.use { it.readBytes() }
             ?: throw UnsatisfiedLinkError("the bundle manifest names $name but $directoryResource/$name is not in the jar.")
-        val target = File(directory, name)
-        stream.use { Files.copy(it, target.toPath(), StandardCopyOption.REPLACE_EXISTING) }
-        target.deleteOnExit()
-        if (name == fileName) library = target
     }
-    System.load((library ?: throw UnsatisfiedLinkError("the bundle at $directoryResource carries no $fileName.")).absolutePath)
+    if (fileName !in files) throw UnsatisfiedLinkError("the bundle at $directoryResource carries no $fileName.")
+    val directory = extractBundle(File(System.getProperty("java.io.tmpdir")), files)
+    System.load(File(directory, fileName).absolutePath)
 }
+
+/**
+ * Writes [files] into a folder of [temp] named for their contents, and answers that folder (#651).
+ *
+ * A launch reuses the copy an earlier one wrote and writes only a file that is missing or differs,
+ * so the folder holds one copy per build of the library rather than one per launch. Windows
+ * cannot delete a library that is loaded, so a folder made fresh at every launch and left to
+ * `deleteOnExit` stayed behind at every launch, 5 MB each time. The other folders of this prefix,
+ * those of other builds and of the old one-per-launch loader, are deleted once they are an hour
+ * old, so a process that is just starting keeps the copy it is about to load; a delete that fails,
+ * because a running process holds the library, is left for a later launch.
+ */
+internal fun extractBundle(temp: File, files: Map<String, ByteArray>, nowMillis: Long = System.currentTimeMillis()): File {
+    val digest = java.security.MessageDigest.getInstance("SHA-256")
+    for ((name, bytes) in files.toSortedMap()) {
+        digest.update(name.encodeToByteArray())
+        digest.update(0)
+        digest.update(bytes)
+    }
+    val tag = digest.digest().take(12).joinToString("") { ((it.toInt() and 0xFF) + 0x100).toString(16).substring(1) }
+    val directory = File(temp, "$EXTRACT_PREFIX-$tag")
+    directory.mkdirs()
+    // Fresh at every launch, so a launch of another build leaves a folder in use alone.
+    directory.setLastModified(nowMillis)
+    for ((name, bytes) in files) {
+        val target = File(directory, name)
+        if (target.isFile && target.length() == bytes.size.toLong() && target.readBytes().contentEquals(bytes)) continue
+        // Written beside its place and moved there whole, so a launch at the same moment never
+        // loads half a file.
+        val partial = Files.createTempFile(directory.toPath(), "$name.", ".part")
+        try {
+            Files.write(partial, bytes)
+            try {
+                Files.move(partial, target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
+                Files.move(partial, target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
+        } catch (failure: java.io.IOException) {
+            // A loaded library on Windows cannot be replaced; the same bytes already there serve.
+            if (!(target.isFile && target.readBytes().contentEquals(bytes))) throw failure
+        } finally {
+            Files.deleteIfExists(partial)
+        }
+    }
+    temp.listFiles()?.forEach { other ->
+        if (other.isDirectory && other.name.startsWith(EXTRACT_PREFIX) && other != directory &&
+            nowMillis - other.lastModified() > STALE_AFTER_MILLIS
+        ) {
+            runCatching { other.deleteRecursively() }
+        }
+    }
+    return directory
+}
+
+/** The folder name of every copy this loader writes, and of the folders the earlier loader made. */
+internal const val EXTRACT_PREFIX = "kiteplayer-libass-jni"
+
+/** How old another copy's folder must be before a launch deletes it. */
+private const val STALE_AFTER_MILLIS = 60 * 60 * 1000L
 
 /** `macos-arm64`, `linux-x64`, `windows-x64`: the same names KiteFFmpeg's vendored trees use. */
 private val platformDirectory: String by lazy {

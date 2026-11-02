@@ -119,8 +119,18 @@ public class KitePlayerWorker private constructor(
      * its [PlayerEvent.Opened] are mapped back through this, so the page reads the objects it gave,
      * relative addresses and all. An item the worker changed, or one this map has forgotten, reads
      * as it crossed.
+     *
+     * Bounded by what the worker still holds (#687): each state keeps only the items it shows and
+     * those a command has sent that no state has shown yet, a refused add takes its own back, and
+     * the end of the player clears it. It once kept every item a long radio page had ever queued.
      */
     private val sentItems = HashMap<MediaItem, MediaItem>()
+
+    /** Items sent by a command that no state has shown yet, which a state must not forget. */
+    private val awaitingState = HashSet<MediaItem>()
+
+    /** How many items [sentItems] maps, for a test. */
+    internal val retainedItemCount: Int get() = sentItems.size
 
     /** Set by [start] until the worker has answered the first message. */
     private var started: CompletableDeferred<Unit>? = null
@@ -134,7 +144,9 @@ public class KitePlayerWorker private constructor(
     public suspend fun open(media: MediaItem) {
         val crossing = crossing(media)
         sentItems.clear()
+        awaitingState.clear()
         sentItems[crossing] = media
+        awaitingState += crossing
         call(Command.Open(crossing))
     }
 
@@ -142,7 +154,9 @@ public class KitePlayerWorker private constructor(
     public suspend fun openQueue(items: List<MediaItem>, startIndex: Int = 0) {
         val crossing = items.map(::crossing)
         sentItems.clear()
+        awaitingState.clear()
         crossing.forEachIndexed { i, item -> sentItems[item] = items[i] }
+        awaitingState += crossing
         call(Command.OpenQueue(crossing, startIndex))
     }
 
@@ -189,8 +203,19 @@ public class KitePlayerWorker private constructor(
     /** Inserts [items] at [index], or at the end when [index] is null. */
     public suspend fun addToQueue(items: List<MediaItem>, index: Int? = null) {
         val crossing = items.map(::crossing)
+        val added = crossing.filter { it !in sentItems }
         crossing.forEachIndexed { i, item -> sentItems[item] = items[i] }
-        call(Command.AddToQueue(crossing, index))
+        awaitingState += added
+        try {
+            call(Command.AddToQueue(crossing, index))
+        } catch (refused: Throwable) {
+            // The worker did not take them, so nothing will show them.
+            for (item in added) {
+                sentItems.remove(item)
+                awaitingState.remove(item)
+            }
+            throw refused
+        }
     }
 
     /** Inserts one item. See the list overload. */
@@ -501,7 +526,7 @@ public class KitePlayerWorker private constructor(
         if (dead == null) workerPostTo(worker, message.encode())
     }
 
-    private fun receive(data: JsAny?) {
+    internal fun receive(data: JsAny?) {
         when (val message = decodeWorkerMessage(data) ?: return) {
             WorkerMessage.Hello -> Unit
             WorkerMessage.Ready -> started?.complete(Unit)
@@ -517,6 +542,7 @@ public class KitePlayerWorker private constructor(
                 stateFlow.value = message.snapshot.let { snapshot ->
                     snapshot.copy(media = snapshot.media?.let(::own), queue = snapshot.queue.map(::own))
                 }
+                forgetWhatTheWorkerLetGo(message.snapshot)
                 holdDisplay(message.snapshot)
             }
             is WorkerMessage.Progressed -> progressFlow.value = message.progress
@@ -554,17 +580,42 @@ public class KitePlayerWorker private constructor(
         stateFlow.update { it.copy(status = PlaybackStatus.Failed, error = error) }
         eventFlow.tryEmit(PlayerEvent.Failed(error))
         workerTerminate(worker)
+        // A dead worker cannot come back through this player, so its page side goes with it, rather
+        // than leaving the worklet running until the application closes a player it may replace (#686).
+        releaseAudio()
+    }
+
+    private var audioReleased = false
+
+    /** Closes the page's audio once, whichever of a close and a dead worker comes first. */
+    private fun releaseAudio() {
+        if (audioReleased) return
+        audioReleased = true
+        audio?.close()
+    }
+
+    /** Keeps of [sentItems] only what [snapshot] shows and what no state has shown yet (#687). */
+    private fun forgetWhatTheWorkerLetGo(snapshot: PlayerSnapshot) {
+        val shown = HashSet<MediaItem>(snapshot.queue)
+        snapshot.media?.let(shown::add)
+        awaitingState.removeAll(shown)
+        sentItems.keys.retainAll { it in shown || it in awaitingState }
     }
 
     /** Ends the worker and the page's audio once the close is answered, or the worker is gone. */
     private fun finish() {
+        sentItems.clear()
+        awaitingState.clear()
         holdDisplay(null)
         workerTerminate(worker)
-        audio?.close()
+        releaseAudio()
         closeId?.let { pending.remove(it) }?.complete(null)
     }
 
     public companion object {
+        /** A player on [worker], an object with `postMessage` and `terminate`, for a test that plays the worker. */
+        internal fun onWorkerForTest(worker: JsAny): KitePlayerWorker = KitePlayerWorker(worker, null, null, false)
+
         /** Keeps the original startup entry point with display wake enabled. */
         public suspend fun start(
             canvas: JsAny?,
@@ -600,28 +651,42 @@ public class KitePlayerWorker private constructor(
             keepDisplayAwake: Boolean = true,
         ): KitePlayerWorker {
             val audio = WebWorkletAudio.createOrNull()
-            val offscreen = canvas?.let(::canvasTransfer)
             val hello = CompletableDeferred<Unit>()
             var player: KitePlayerWorker? = null
-            val worker = workerCreate(
-                workerUrl,
-                { data ->
-                    val current = player
-                    if (current != null) {
-                        current.receive(data)
-                    } else if (decodeWorkerMessage(data) == WorkerMessage.Hello) {
-                        hello.complete(Unit)
-                    }
-                },
-                { detail ->
-                    val current = player
-                    if (current != null) {
-                        current.died(detail)
-                    } else {
-                        hello.completeExceptionally(PlaybackException(PlaybackError.Internal("the player's worker stopped: $detail")))
-                    }
-                },
-            )
+            // The audio has one owner from here: a canvas that cannot be transferred, or a worker
+            // address the browser refuses, used to throw past the cleanup below and leave the page's
+            // audio context and its worklet running with no player to close them (#686).
+            val offscreen: JsAny?
+            val worker: JsAny
+            try {
+                offscreen = canvas?.let(::canvasTransfer)
+                worker = workerCreate(
+                    workerUrl,
+                    { data ->
+                        val current = player
+                        if (current != null) {
+                            current.receive(data)
+                        } else if (decodeWorkerMessage(data) == WorkerMessage.Hello) {
+                            hello.complete(Unit)
+                        }
+                    },
+                    { detail ->
+                        val current = player
+                        if (current != null) {
+                            current.died(detail)
+                        } else {
+                            hello.completeExceptionally(PlaybackException(PlaybackError.Internal("the player's worker stopped: $detail")))
+                        }
+                    },
+                )
+            } catch (failure: Throwable) {
+                try {
+                    audio?.close()
+                } catch (closeFailure: Throwable) {
+                    if (closeFailure !== failure) failure.addSuppressed(closeFailure)
+                }
+                throw failure
+            }
             try {
                 // The worker sets its listener once its code has loaded. A message sent before that
                 // is lost, so the first one waits for the worker to say it is listening.

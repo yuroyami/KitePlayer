@@ -12,7 +12,11 @@ import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import kotlinx.atomicfu.atomic
 import kotlin.coroutines.cancellation.CancellationException
 
-/** Maximum compressed replay window held by one hardware decoder. */
+/**
+ * Maximum compressed replay window held by one hardware decoder. A window that would pass it is
+ * given up, never the hardware decoder (#645): long keyframe intervals at a high rate pass it in
+ * one static scene, and demoting a decoder that works moved 4K onto software.
+ */
 internal const val DECODER_REPLAY_LIMIT_BYTES: Int = 16 * 1024 * 1024
 
 /**
@@ -95,6 +99,12 @@ private class ReplayFallbackDecoder(
     private var pendingBoundary: Int? = null
     private var hasConfirmedBoundary: Boolean = false
 
+    /**
+     * The window passed [DECODER_REPLAY_LIMIT_BYTES] and was closed, and no keyframe since has been
+     * confirmed, so a hardware failure now has nothing exact to replay (#645).
+     */
+    private var windowAbandoned: Boolean = false
+
     /** Outputs handed to the caller since the confirmed keyframe, including that keyframe. */
     private var deliveredSinceBoundary: Long = 0
 
@@ -130,22 +140,20 @@ private class ReplayFallbackDecoder(
         // replay already found output: hand those frames out before accepting anything new.
         if (!usingHardware && replayOutputs.isNotEmpty()) return false
 
-        if (usingHardware && shouldRetain(packet)) {
-            val bytes = packet.sizeBytes.coerceAtLeast(0)
-            if (retainedBytes.toLong() + bytes.toLong() > DECODER_REPLAY_LIMIT_BYTES.toLong()) {
-                demote(
-                    reason = "compressed replay window would exceed $DECODER_REPLAY_LIMIT_BYTES bytes",
-                    failure = null,
-                    replayDrain = hardwareDrainAccepted,
-                )
-                if (replayOutputs.isNotEmpty()) return false
-                return sendSoftware(packet)
+        if (!usingHardware) return sendSoftware(packet)
+
+        var retain = shouldRetain(packet)
+        if (retain) {
+            val bytes = packet.sizeBytes.coerceAtLeast(0).toLong()
+            if (retainedBytes.toLong() + bytes > DECODER_REPLAY_LIMIT_BYTES.toLong()) {
+                // Keep the decoder that works and give up the window instead (#645). Retention
+                // starts again at the next keyframe; a failure before then has no exact replay.
+                abandonWindow()
+                retain = packet.isKeyframe && bytes <= DECODER_REPLAY_LIMIT_BYTES.toLong()
             }
         }
 
-        if (!usingHardware) return sendSoftware(packet)
-
-        val clone = if (shouldRetain(packet)) copyPacket(packet) else null
+        val clone = if (retain) copyPacket(packet) else null
         val accepted = try {
             requireActive().send(packet)
         } catch (failure: Throwable) {
@@ -263,6 +271,7 @@ private class ReplayFallbackDecoder(
             // B-frames observed before this point belonged to the old ordinal window.
             closeRetainedPrefix(boundary)
             hasConfirmedBoundary = true
+            windowAbandoned = false
             deliveredSinceBoundary = 1
             pendingBoundary = retained
                 .indexOfFirstFrom(startIndex = 1) { it.isKeyframe }
@@ -295,12 +304,19 @@ private class ReplayFallbackDecoder(
         // Terminal only when outputs already crossed to the caller WITHOUT a confirmed keyframe
         // boundary: replaying then risks duplicating them. With nothing delivered this epoch the
         // window is the complete history and the head replay below is exact (the head-replay licence).
+        // The hardware status stays as it was, so the engine's own recovery can reopen the source
+        // in software at the current position.
         if (!hasConfirmedBoundary && deliveredThisEpoch > 0) {
+            val why = if (windowAbandoned) {
+                "the replay window passed $DECODER_REPLAY_LIMIT_BYTES bytes and was given up before this keyframe interval"
+            } else {
+                "outputs were delivered but no replay keyframe was confirmed"
+            }
             failTerminal(
                 PlaybackException(
                     PlaybackError.DecoderFailed(
                         codec = stream.codec,
-                        detail = "$reason; outputs were delivered but no replay keyframe was confirmed",
+                        detail = "$reason; $why",
                         cause = failure,
                     ),
                 ),
@@ -515,6 +531,19 @@ private class ReplayFallbackDecoder(
         }
     }
 
+    /**
+     * Closes the whole replay window and forgets its boundary, keeping the hardware decoder (#645).
+     * What was delivered this epoch stays counted, so a failure before the next confirmed keyframe
+     * is a typed failure rather than a replay that would show frames twice.
+     */
+    private fun abandonWindow() {
+        closeRetainedQuietly()
+        pendingBoundary = null
+        hasConfirmedBoundary = false
+        deliveredSinceBoundary = 0
+        windowAbandoned = true
+    }
+
     private fun warnOnce(reason: String) {
         if (warned) return
         warned = true
@@ -586,6 +615,7 @@ private class ReplayFallbackDecoder(
         retainedBytes = 0
         pendingBoundary = null
         hasConfirmedBoundary = false
+        windowAbandoned = false
         deliveredSinceBoundary = 0
         deliveredThisEpoch = 0
         replaySuppressRemaining = 0

@@ -76,8 +76,11 @@ internal class ScanTarget(
     val identity: Triple<MediaItem, TrackId?, Boolean> get() = Triple(media, track, durationMicros != null && seekable)
 }
 
-/** What one scan decoded: the track, whether it reached the end, and where its last block ended. */
-internal class ScanOutcome(val track: TrackId, val reachedEnd: Boolean, val endMicros: Long = 0L)
+/**
+ * What one scan decoded: the track, whether it reached the end, where its last block ended, and
+ * where its first block started, null when it decoded nothing or the source does not say.
+ */
+internal class ScanOutcome(val track: TrackId, val reachedEnd: Boolean, val endMicros: Long = 0L, val firstMicros: Long? = null)
 
 /** Where scan targets come from and how a scan reads them. The player is the production source. */
 internal interface SongScanSource {
@@ -96,7 +99,7 @@ internal class PlayerScanSource(private val player: KitePlayer) : SongScanSource
 
     override suspend fun scan(target: ScanTarget, range: AudioScanRange?, sink: AudioScanSink): ScanOutcome =
         player.scanAudio(target.media, target.track, range, sink)
-            .let { ScanOutcome(it.track, it.reachedEnd, it.endPts?.micros ?: 0L) }
+            .let { ScanOutcome(it.track, it.reachedEnd, it.endPts?.micros ?: 0L, it.firstPts?.micros) }
 }
 
 /** How many ranges of one song may be scanned at once. Half the cores, so playback keeps its own. */
@@ -266,19 +269,25 @@ internal class SongScanner(
      * A worker analyses [SongMapBuilder.WARM_UP_MICROS] before the stretch it owns and a little
      * past its end, so every detector is warm at a seam and the section detector can still look
      * ahead. Seeking is the risk: a container that seeks by estimate can land late enough to leave
-     * a hole, so the parts are checked for continuity and a short one falls back to one pass.
+     * a hole, so the parts are checked for continuity at both ends, and a part that started late or
+     * ended short sends the song to one pass.
      */
     private suspend fun scan(target: ScanTarget): SongMap {
         val duration = target.durationMicros ?: 0L
         val count = chunkCount(duration)
         if (count > 1) {
+            // The duration counts from a clip's start, and the scan and every time it reports are in
+            // the file's own times, so the ranges are planned there (#672). Planned from zero, the
+            // ranges of a clip in the middle of an album's file all fell before the clip.
+            val clipStart = target.media.clip?.start?.inWholeMicroseconds?.coerceAtLeast(0L) ?: 0L
             val ranges = (0 until count).map { index ->
-                (index * duration / count) to if (index == count - 1) duration else (index + 1) * duration / count
+                (clipStart + index * duration / count) to
+                    clipStart + if (index == count - 1) duration else (index + 1) * duration / count
             }
             val scanned = try {
                 coroutineScope {
                     ranges.mapIndexed { index, (from, until) ->
-                        async(scanDispatcher) { scanRange(target, from, until, last = index == count - 1) }
+                        async(scanDispatcher) { scanRange(target, from, until, first = index == 0, last = index == count - 1) }
                     }.awaitAll()
                 }
             } catch (cancellation: CancellationException) {
@@ -289,8 +298,15 @@ internal class SongScanner(
             }
             // Only the seams have to be proven. A declared duration is often a little longer than
             // the audio really is, so the end is proven by reaching it, not by counting up to it.
+            // A part's start is proven by its first block: a seek is not promised to land early,
+            // and one that landed past its warm-up left a hole in the stretch it owns, which the
+            // merge filled and called complete (#671). Half the warm-up is the most it may lose.
             val whole = scanned?.takeIf { results ->
                 results.dropLast(1).all { it.part.coveredThroughMicros >= it.ownedUntil } &&
+                    results.drop(1).all { result ->
+                        val first = result.outcome.firstMicros
+                        first == null || first <= result.ownedFrom - SongMapBuilder.WARM_UP_MICROS / 2
+                    } &&
                     results.last().outcome.reachedEnd
             }
             if (whole != null) {
@@ -309,12 +325,12 @@ internal class SongScanner(
         builder.build(outcome.reachedEnd, outcome.track)
     }
 
-    private class RangeResult(val part: SongMapPart, val ownedUntil: Long, val outcome: ScanOutcome)
+    private class RangeResult(val part: SongMapPart, val ownedFrom: Long, val ownedUntil: Long, val outcome: ScanOutcome)
 
-    private suspend fun scanRange(target: ScanTarget, from: Long, until: Long, last: Boolean): RangeResult {
+    private suspend fun scanRange(target: ScanTarget, from: Long, until: Long, first: Boolean, last: Boolean): RangeResult {
         val builder = SongMapBuilder(
             target.track ?: TrackId(-1),
-            ownedFromMicros = if (from == 0L) Long.MIN_VALUE else from,
+            ownedFromMicros = if (first) Long.MIN_VALUE else from,
             ownedUntilMicros = if (last) Long.MAX_VALUE else until,
         )
         val range = AudioScanRange(
@@ -324,7 +340,7 @@ internal class SongScanner(
         val outcome = source.scan(target, range) { pts, interleaved, frames, format ->
             builder.feed(pts, interleaved, frames, format)
         }
-        return RangeResult(builder.part(), until, outcome)
+        return RangeResult(builder.part(), from, until, outcome)
     }
 
     /** Ranges are worth their warm-up only when each one is long, so a short song stays one pass. */

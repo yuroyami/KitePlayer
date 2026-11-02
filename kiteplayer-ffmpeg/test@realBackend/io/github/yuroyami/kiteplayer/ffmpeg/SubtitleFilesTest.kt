@@ -58,6 +58,29 @@ class SubtitleFilesTest {
         assertNull(reading.assumedFrameRate, "a file that names its rate assumed one")
     }
 
+    /**
+     * A UTF-16 file reads from the text the engine decoded, whatever FFmpeg makes of its raw bytes
+     * (#492). The probe of the raw bytes threw, and the throw ended the whole read.
+     */
+    @Test
+    fun aUtf16MicroDvdFileReadsAsTheUtf8OneDoes() {
+        val text = "{1}{1}25.000\n{25}{50}First\n{75}{100}Second\n"
+        val expected = listOf(1_000_000L to "First", 3_000_000L to "Second")
+        assertEquals(expected, lines(read(text, "/films/film.sub")))
+        fun utf16(bigEndian: Boolean): ByteArray {
+            val out = ArrayList<Byte>()
+            out += if (bigEndian) listOf(0xFE.toByte(), 0xFF.toByte()) else listOf(0xFF.toByte(), 0xFE.toByte())
+            for (char in text) {
+                val high = (char.code shr 8).toByte()
+                val low = char.code.toByte()
+                if (bigEndian) { out += high; out += low } else { out += low; out += high }
+            }
+            return out.toByteArray()
+        }
+        assertEquals(expected, lines(read(text, "/films/film.sub", utf16(bigEndian = false))), "UTF-16LE")
+        assertEquals(expected, lines(read(text, "/films/film.sub", utf16(bigEndian = true))), "UTF-16BE")
+    }
+
     @Test
     fun aMicroDvdFileThatNamesNoRateSaysWhichItAssumed() {
         val reading = read("{240}{288}Ten seconds in\n{300}{350}Two\n{400}{450}Three\n", "/films/film.sub")

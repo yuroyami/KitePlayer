@@ -45,7 +45,17 @@ fun prepareWebAssets(
     val target = File(moduleDir).resolve(directory).also { it.mkdirs() }
     val cache = cacheDir.toFile().also { it.mkdirs() }
     if (set.codec) unpackCodec(root, cache, target)
-    if (set.libass) linkLibass(root, cache, target)
+    if (set.libass) {
+        // The test files serve only the wasmJs tests, but this task runs before the tests of every
+        // platform, so a linuxX64 or a Kotlin/JS run on a machine with no emcc failed here. Only
+        // those tests read the module, and a run that must build every half still fails.
+        val requireAll = System.getenv("KITEPLAYER_LIBASS_REQUIRE_ALL_HOST_JNI") == "true"
+        if (forTests && !requireAll && LibassAdapters.findEmcc() == null) {
+            log("no emcc on PATH, so the wasmJs tests have no libass web module; every other platform's tests need none")
+        } else {
+            linkLibass(root, cache, target)
+        }
+    }
     if (set.clip) copyClip(root, target)
 }
 

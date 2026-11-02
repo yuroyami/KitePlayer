@@ -43,8 +43,9 @@ import kotlin.time.Duration
  * ### Ownership
  *
  * [output] is this pipeline's own buffer and it is reused by the next [process], so the caller reads
- * what it needs before calling again. The caller's input array is never written to, never held, and
- * never handed back.
+ * what it needs before calling again. The caller's input array is never written to. When every stage
+ * passes through, [output] is that same array rather than a copy, so the caller reads [output]
+ * before it changes its input again.
  *
  * One instance per audio stream, owned by the audio feeder. Not thread safe by design: the feeder is
  * the ring's single producer and this sits directly in front of it.
@@ -145,8 +146,9 @@ internal class AudioPipeline(
      */
     /**
      * The processed samples. When every stage passes through, this ALIASES the last
-     * [process] call's input rather than copying it; the caller's buffer is scratch by the
-     * submit contract, consumed before the next decode reuses it.
+     * [process] call's input rather than copying it, so the caller reads it before it changes
+     * that array again. No stage ever writes into the input: an in-place stage that has work to do
+     * runs on this pipeline's own copy.
      */
     var output: FloatArray = FloatArray(0)
         private set
@@ -432,9 +434,17 @@ internal class AudioPipeline(
         }
 
         /* Last, so it scales exactly what reaches the ring, and skipped entirely at unity so a file
-         * with no ReplayGain tags pays nothing for the feature. In place: `result` is either our own
-         * scratch or, in the all-bypass case, the caller's input, and the caller hands that buffer
-         * over for the duration of the call. */
+         * with no ReplayGain tags pays nothing for the feature. In place, so `result` must be our
+         * own: when every earlier stage stood aside it is still the caller's input, which is copied
+         * here before any stage scales it. A caller that submitted one array twice heard the gain
+         * of the first pass applied again on the second (#662). With every stage at identity the
+         * input passes untouched and uncopied. */
+        if (result === input && scalesInPlace()) {
+            // The mixer is an identity whenever `result` is the input, so its buffer is free.
+            mixed = grown(mixed, mixValues(produced))
+            input.copyInto(mixed, 0, 0, produced * targetChannels)
+            result = mixed
+        }
         // The stereo mode first, so the balance and the equaliser act on the sides the listener
         // hears (#462). Skipped in stereo, so it costs an ordinary file nothing.
         stereo.apply(result, produced)
@@ -449,6 +459,10 @@ internal class AudioPipeline(
         output = result
         return produced
     }
+
+    /** Whether any stage after the tempo and pitch stages will change samples in place. */
+    private fun scalesInPlace(): Boolean =
+        !stereo.isIdentity || !equalizer.isFlat || !night.isIdentity || !trim.isIdentity
 
     /**
      * The per-channel pre-gain: ReplayGain today, balance next.

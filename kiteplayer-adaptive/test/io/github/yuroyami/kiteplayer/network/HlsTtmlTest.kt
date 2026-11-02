@@ -124,4 +124,68 @@ class HlsTtmlTest {
         assertNull(reader.openRelated("https://${HlsTtmlMediaIo.HOST}/99.vtt"), "an address the reader never named opened")
         assertEquals(master, reader.text(), "the master playlist reads as it came")
     }
+
+    /** A rendition of one segment file per cue, numbered from zero, whose playlist the test writes. */
+    private inner class Numbered(private val playlistUri: String) : MediaIo {
+        var playlist = ""
+        override val location: String get() = playlistUri
+        override val size: Long? get() = null
+        override val seekable: Boolean get() = false
+        override suspend fun read(into: ByteArray, offset: Int, length: Int): Int = -1
+        override suspend fun seek(position: Long) {}
+        override fun close() {}
+
+        override suspend fun openRelated(uri: String): MediaIo? = when {
+            uri == playlistUri -> Served(uri, playlist.encodeToByteArray())
+            uri == "https://cdn.test/live/init.mp4" -> Served(uri, init)
+            uri.startsWith("https://cdn.test/live/s-") -> {
+                val n = uri.removePrefix("https://cdn.test/live/s-").removeSuffix(".mp4").toLong()
+                val cue = ttml("""<p begin="${n * 2}s" end="${n * 2 + 1}s">cue $n</p>""").encodeToByteArray()
+                Served(uri, Mp4Bytes.segment(1, decodeTime = n * 2000, listOf(Sample(2000, cue))))
+            }
+            else -> null
+        }
+
+        fun window(from: Long, count: Int, ended: Boolean = false) {
+            playlist = buildString {
+                append("#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:$from\n")
+                append("#EXT-X-MAP:URI=\"init.mp4\"\n")
+                for (n in from until from + count) append("#EXTINF:2.0,\ns-$n.mp4\n")
+                if (ended) append("#EXT-X-ENDLIST\n")
+            }
+        }
+    }
+
+    /**
+     * A live window that moves one segment a reload names every segment under its own address once
+     * the reader holds [HlsTtmlMediaIo.MAX_SEGMENTS] of them (#618). Numbered by the map's size, the
+     * third reload named its last two segments alike and served the newer cues for both.
+     */
+    @Test
+    fun aLongLiveWindowNamesEverySegmentOnce() = runTest {
+        val uri = "https://cdn.test/live/subs.m3u8"
+        val upstream = Numbered(uri)
+        val reader = HlsTtmlMediaIo(upstream, setOf(uri))
+        val size = HlsTtmlMediaIo.MAX_SEGMENTS
+        var named = emptyList<String>()
+        for (moved in 0L..3L) {
+            upstream.window(from = moved, count = size)
+            named = reader.openRelated(uri)!!.text().lines().filter { it.startsWith("https://") }
+            assertEquals(size, named.toSet().size, "reload $moved named ${named.size - named.toSet().size} segments twice")
+        }
+        val last = 3L + size - 1
+        assertEquals("cue ${last - 1}", reader.openRelated(named[size - 2])!!.text().lines()[3])
+        assertEquals("cue $last", reader.openRelated(named[size - 1])!!.text().lines()[3])
+    }
+
+    /** A playlist that has ended is never reloaded, so every segment it names stays named, however many. */
+    @Test
+    fun anEndedPlaylistLongerThanTheLimitKeepsItsFirstSegments() = runTest {
+        val uri = "https://cdn.test/live/subs.m3u8"
+        val upstream = Numbered(uri)
+        val reader = HlsTtmlMediaIo(upstream, setOf(uri))
+        upstream.window(from = 0, count = HlsTtmlMediaIo.MAX_SEGMENTS + 100, ended = true)
+        val named = reader.openRelated(uri)!!.text().lines().filter { it.startsWith("https://") }
+        assertEquals("cue 0", reader.openRelated(named.first())?.text()?.lines()?.get(3), "the first segment no longer opens")
+    }
 }

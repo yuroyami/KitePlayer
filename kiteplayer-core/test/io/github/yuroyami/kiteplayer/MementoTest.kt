@@ -167,6 +167,34 @@ class MementoTest {
         harness.close()
     }
 
+    /** A NaN pitch or dialogue level, as the text form reads "NaN", is refused before the playing item stops (#213). */
+    @Test
+    fun aNonFinitePitchOrDialogueLevelLeavesThePlayingItemAsItWas() = runTest {
+        for (broken in listOf(
+            memento(speed = 1.5, volume = 0.25f).copy(pitchSemitones = Double.NaN),
+            memento(speed = 1.5, volume = 0.25f).copy(dialogueLevelDb = Float.NaN),
+        )) {
+            val harness = CoreHarness(this, script = script())
+            val player = KitePlayer(harness.core)
+            harness.attachRenderer()
+            player.open(MediaItem("scripted://already-playing"))
+            player.play()
+            harness.run(200.milliseconds)
+
+            assertFailsWith<IllegalArgumentException> { player.restore(broken) }
+            // The same memento through the text form, which reads "NaN" as a number.
+            assertFailsWith<IllegalArgumentException> { player.restore(PlayerMemento.fromProperties(broken.asProperties())) }
+            harness.run(200.milliseconds)
+
+            val snapshot = player.state.value
+            assertEquals(PlaybackStatus.Playing, snapshot.status, "a refused restore stopped what was playing")
+            assertEquals("scripted://already-playing", snapshot.media?.uri)
+            assertEquals(1.0, snapshot.speed, "a refused restore applied its speed")
+            assertEquals(1f, snapshot.volume, "a refused restore applied its volume")
+            harness.close()
+        }
+    }
+
     @Test
     fun `an unseekable stream gets its speed and languages and skips its position with a warning`() = runTest {
         val unseekable = MediaScript(

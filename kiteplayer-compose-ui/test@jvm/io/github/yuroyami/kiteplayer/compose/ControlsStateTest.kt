@@ -301,39 +301,25 @@ class ControlsStateTest {
     }
 
     @Test
-    fun `subtitles settle back only when the application left them alone`() {
+    fun `the lift is an inset of its own and never the user's position`() {
         val target = ScriptedTarget(playing())
         val source = target.source()
         val lift = SubtitleLift()
 
-        lift.raise(source, 0.8f)
+        lift.raise(source, 0.2f)
+        lift.raise(source, 0.2f)
         lift.settle(source)
-        assertEquals(listOf("subtitles 0.8", "subtitles 1.0"), target.callsSoFar())
+        lift.settle(source)
+        assertEquals(listOf("inset 0.2", "inset 0.0"), target.callsSoFar(), "each change is sent once")
+        assertEquals(1f, target.snapshot.value.subtitlePosition, "the lift moved the user's own position")
 
-        // The application moves them while the controls show: its position stays.
+        // A position the application sets while the controls show is its own, and stays (#648).
         target.calls.clear()
-        lift.raise(source, 0.8f)
+        lift.raise(source, 0.2f)
         target.snapshot.value = target.snapshot.value.copy(subtitlePosition = 0.5f)
         lift.settle(source)
-        assertEquals(listOf("subtitles 0.8"), target.callsSoFar())
-
-        // Already above the controls: nothing to lift and nothing to restore.
-        target.calls.clear()
-        lift.raise(source, 0.8f)
-        lift.settle(source)
-        assertEquals(emptyList(), target.callsSoFar())
-    }
-
-    @Test
-    fun `a settle sent before the lift shows still puts subtitles back`() {
-        val target = ScriptedTarget(playing())
-        val source = target.source()
-        val lift = SubtitleLift()
-        lift.raise(source, 0.8f)
-        // The engine has not applied the lift yet, so the player still shows the old position.
-        target.snapshot.value = target.snapshot.value.copy(subtitlePosition = 1f)
-        lift.settle(source)
-        assertEquals(listOf("subtitles 0.8", "subtitles 1.0"), target.callsSoFar())
+        assertEquals(listOf("inset 0.2", "inset 0.0"), target.callsSoFar())
+        assertEquals(0.5f, target.snapshot.value.subtitlePosition)
     }
 
     @Test

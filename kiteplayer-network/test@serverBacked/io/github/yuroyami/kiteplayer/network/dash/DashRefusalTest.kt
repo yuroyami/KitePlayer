@@ -126,11 +126,13 @@ class DashRefusalTest {
         )
         val client = HttpClient()
         try {
-            val failure = assertFailsWith<DashUnsupportedException> {
+            // The typed refusal of protected media, as for HLS (#624).
+            val failure = assertFailsWith<io.github.yuroyami.kiteplayer.PlaybackException> {
                 Dash.mediaItemFor("http://127.0.0.1:$port/movie.mpd", client)
             }
-            assertTrue("encrypted" in failure.message.orEmpty(), "the refusal says why: ${failure.message}")
-            assertTrue("edef8ba9" in failure.message.orEmpty(), "the refusal names the system: ${failure.message}")
+            val refused = failure.error as? io.github.yuroyami.kiteplayer.PlaybackError.DrmUnsupported
+            assertTrue(refused != null, "the refusal is not typed as DRM: ${failure.error}")
+            assertTrue(refused.system == "Widevine", "the refusal names the system: ${refused.system}")
         } finally {
             client.close()
         }

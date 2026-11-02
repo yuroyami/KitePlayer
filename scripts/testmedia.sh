@@ -327,21 +327,27 @@ echo "Identity (GBR) clip plus its reference dump"
 # written once and read back under the other name. So the reference is the original picture. The
 # range and matrix are codec options on both sides, because setparams alone let the encoder's range
 # negotiation squeeze the planes to studio range, measured.
+# The pattern is drawn once, as RGBA, and the planes, the reference and the RGB-coded H.264 clip
+# below are all made from that one drawing, each by a reordering that cannot round. ffmpeg 6.1 draws
+# testsrc2 a step apart in gbrp and in rgba, in 76,487 of its 76,800 pixels, measured, so two
+# drawings left the reference a step off the clip on that series (#639).
 ffmpeg -v error -y -f lavfi -i "testsrc2=size=320x240:rate=25:duration=1" -frames:v 2 \
+  -vf "format=rgba" -f rawvideo colors-gbr.drawn
+head -c $((320 * 240 * 4)) colors-gbr.drawn > colors-gbr.rgba
+ffmpeg -v error -y -f rawvideo -pixel_format rgba -video_size 320x240 -framerate 25 -i colors-gbr.drawn \
   -vf "format=gbrp" -f rawvideo colors-gbr.planes
 ffmpeg -v error -y -f rawvideo -pixel_format yuv444p -video_size 320x240 -framerate 25 \
   -color_range pc -colorspace rgb -i colors-gbr.planes \
   -c:v ffv1 -color_range pc -colorspace rgb colors-gbr.mkv
 rm colors-gbr.planes
-ffmpeg -v error -y -f lavfi -i "testsrc2=size=320x240:rate=25:duration=1" -frames:v 1 \
-  -vf "format=rgba" -f rawvideo colors-gbr.rgba
 
 echo "RGB-coded H.264 clip, which decodes to planar GBR"
 # What a lossless screen capture looks like: H.264 coded as RGB, which the decoder hands over as
-# gbrp. Lossless, so its first frame is the same picture as colors-gbr.rgba. The pattern is drawn in
-# bgr0: drawn in rgb24 or bgr24 it differs from that reference before the encoder sees it, measured.
-ffmpeg -v error -y -f lavfi -i "testsrc2=size=320x240:rate=25:duration=1" -frames:v 2 \
+# gbrp. Lossless, so its first frame is the same picture as colors-gbr.rgba: it is made from the
+# drawing above, reordered to bgr0, which libx264rgb takes as it is.
+ffmpeg -v error -y -f rawvideo -pixel_format rgba -video_size 320x240 -framerate 25 -i colors-gbr.drawn \
   -vf "format=bgr0" -c:v libx264rgb -qp 0 colors-rgb-h264.mp4
+rm colors-gbr.drawn
 
 echo "Rotated clip, for the renderer's quarter turn"
 # What a phone writes: the pixels are stored landscape and a display matrix in the container tells the

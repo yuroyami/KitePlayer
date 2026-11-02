@@ -2,6 +2,7 @@
 
 package io.github.yuroyami.kiteplayer.view
 
+import platform.UIKit.UIAccessibilityIsVoiceOverRunning
 import platform.UIKit.setIsAccessibilityElement
 import platform.UIKit.setAccessibilityValue
 import platform.UIKit.setAccessibilityTraits
@@ -39,7 +40,8 @@ import platform.UIKit.UIView
  * playback, because a backgrounded view should not stop the sound.
  *
  * With no [rendererFactory] of its own, the view uses [PlayerViewDefaults.rendererFactory], which
- * the `kiteplayer` module sets when it builds a player. The default adapter in `kiteplayer` uses
+ * `KitePlayer(config)` sets when it builds a player on the FFmpeg backend; see that object for the
+ * rule. The default adapter in `kiteplayer` uses
  * Metal: VideoToolbox frames wrap into textures with no copy and software
  * frames upload in their native format. [preferMetal] set false before the view enters a window
  * asks that adapter for its CPU-converter CALayer fallback. A custom backend can install its own
@@ -77,8 +79,9 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
 
     /**
      * The renderer adapter for this view. Null uses [PlayerViewDefaults.rendererFactory], which the
-     * `kiteplayer` module sets when it builds a player. A view with neither remains a valid UIKit
-     * container and attaches no renderer; installing one later rebuilds immediately.
+     * `kiteplayer` module's `KitePlayer(config)` sets when it builds a player on the FFmpeg backend. A
+     * view with neither remains a valid UIKit container, attaches no renderer and logs that once;
+     * installing one later rebuilds immediately.
      */
     public var rendererFactory: ApplePlayerViewRendererFactory? = null
         set(value) {
@@ -87,10 +90,13 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
             binding.rendererConfigurationChanged()
         }
 
+    private val missingRenderer = MissingRendererNotice("KitePlayerUIView")
+
     private val binding = PlayerViewBinding<KitePlayer, PlayerViewRenderer>(
         createRenderer = {
             val useMetal = preferMetal
-            (rendererFactory ?: PlayerViewDefaults.rendererFactory)?.create(videoLayer, metalLayer, useMetal)?.also {
+            (rendererFactory ?: PlayerViewDefaults.rendererFactory ?: run { missingRenderer.note(); null })
+                ?.create(videoLayer, metalLayer, useMetal)?.also {
                 // Exactly one layer is on the glass. Both stayed visible before,
                 // with the Metal layer on top, so its last drawable covered every CG frame a
                 // fallback generation delivered afterwards.
@@ -100,6 +106,9 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
             }
         },
         attach = { player, renderer -> player.attachRenderer(renderer) },
+        // A closed player refuses every command with IllegalStateException, and the view then shows
+        // nothing, as its detach already treats a closed player (#603).
+        refusesAttach = { it is IllegalStateException },
         detach = { player, renderer ->
             try {
                 player.detachRenderer(expected = renderer)
@@ -203,6 +212,8 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
         }
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
         val model = PlayerControlsModel(paired, scope, controlsStrings)
+        // iOS has no recommended timeout for controls, so they stay while VoiceOver reads them (#653).
+        model.recommendedHideAfter = { asked -> if (UIAccessibilityIsVoiceOverRunning()) Duration.INFINITE else asked }
         model.onFullScreen = onFullScreen
         model.onPictureInPicture = onPictureInPicture
         controlsScope = scope

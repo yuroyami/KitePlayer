@@ -117,6 +117,9 @@ internal interface ControlsPlayer {
     fun setVolume(value: Float)
     fun setMuted(value: Boolean)
     fun setSubtitlePosition(value: Float)
+
+    /** Keeps subtitles above the controls, which cover [bottom] of the output, or none for 0 (#648). */
+    fun setControlsInset(bottom: Float)
     suspend fun next()
     suspend fun previous()
     suspend fun selectTrack(kind: TrackKind, track: TrackId?)
@@ -134,6 +137,9 @@ private class RealPlayer(private val player: KitePlayer) : ControlsPlayer {
     override fun setVolume(value: Float) = player.setVolume(value)
     override fun setMuted(value: Boolean) = player.setMuted(value)
     override fun setSubtitlePosition(value: Float) = player.setSubtitlePosition(value)
+
+    @OptIn(io.github.yuroyami.kiteplayer.KitePlayerInternalApi::class)
+    override fun setControlsInset(bottom: Float) = player.setControlsInset(bottom)
     override suspend fun next() = player.next()
     override suspend fun previous() = player.previous()
     override suspend fun selectTrack(kind: TrackKind, track: TrackId?) {
@@ -183,6 +189,14 @@ public class PlayerControlsModel internal constructor(
         strings: PlayerControlsStrings = PlayerControlsStrings.Default,
         hideAfter: Duration = 3.seconds,
     ) : this(RealPlayer(player), scope, strings, hideAfter, DefaultSpeeds, CoroutineScope(SupervisorJob() + Dispatchers.Default))
+
+    /**
+     * How long the platform recommends the controls stay up, given [hideAfter] (#653). Android's
+     * view answers with the accessibility manager's recommended timeout for controls, which honours
+     * a user's longer time to take action. Read at every start of the timeout, so a change of the
+     * setting reaches the next one. The default keeps [hideAfter].
+     */
+    internal var recommendedHideAfter: (Duration) -> Duration = { it }
 
     private var visible = true
     private var held = false
@@ -402,7 +416,7 @@ public class PlayerControlsModel internal constructor(
         hideJob = null
         if (closed || !visible || held || scrubStart != null || !playRequested) return
         hideJob = scope.launch {
-            delay(hideAfter)
+            delay(recommendedHideAfter(hideAfter))
             hideJob = null
             hide()
         }
@@ -410,7 +424,7 @@ public class PlayerControlsModel internal constructor(
 
     private fun applyLift() {
         if (closed) return
-        if (visible && barShare > 0f) lift.raise((1f - barShare).coerceIn(SubtitleLift.LOWEST, 1f)) else lift.settle()
+        if (visible && barShare > 0f) lift.raise(barShare.coerceIn(0f, 1f)) else lift.settle()
     }
 
     private fun publish() {
@@ -595,52 +609,33 @@ private fun bufferedFractions(progress: Progress, total: Duration?): List<Closed
 }
 
 /**
- * Moves subtitles above the controls while they show, and back when they hide, unless the
- * application moved them itself in between.
+ * Keeps subtitles above the controls while they show (#648): it tells the engine how much of the
+ * output they cover, apart from the application's own safe area. It used to move the subtitle
+ * position, the user's own setting, which a memento then saved.
  */
 private class SubtitleLift(private val target: ControlsPlayer) {
-    private var before: Float? = null
-    private var lifted: Float? = null
+    private var shown: Float? = null
 
-    /** Lifts subtitles to [wanted], or keeps them where they are when they already stand higher. */
-    fun raise(wanted: Float) {
-        val current = target.state.value.subtitlePosition
-        val base = before?.takeIf { mine(current) } ?: current
-        val next = minOf(base, wanted)
-        if (next >= base) {
-            settle()
-            return
-        }
-        if (next == lifted && base == before) return
-        before = base
-        lifted = next
-        move(next)
+    /** Keeps subtitles above controls that cover [bottom] of the output. */
+    fun raise(bottom: Float) {
+        if (shown == bottom) return
+        shown = bottom
+        send(bottom)
     }
 
-    /** Puts subtitles back where they were before the lift, unless the application moved them. */
+    /** Lets subtitles use the output down to the application's own safe area again. */
     fun settle() {
-        val restore = before ?: return
-        val untouched = mine(target.state.value.subtitlePosition)
-        before = null
-        lifted = null
-        // Sent even when the player still shows the old position: the lift may be on its way.
-        if (untouched) move(restore)
+        if (shown == null) return
+        shown = null
+        send(0f)
     }
 
-    /** True when [current] is the lift, or the position before it, which the player can still show. */
-    private fun mine(current: Float): Boolean = current == lifted || current == before
-
-    private fun move(to: Float) {
+    private fun send(bottom: Float) {
         try {
-            target.setSubtitlePosition(to)
+            target.setControlsInset(bottom)
         } catch (_: IllegalStateException) {
             // A closed player has no subtitles to move.
         } catch (_: IllegalArgumentException) {
         }
-    }
-
-    companion object {
-        /** The highest the player places subtitles, a tenth of the way down. */
-        const val LOWEST = 0.1f
     }
 }

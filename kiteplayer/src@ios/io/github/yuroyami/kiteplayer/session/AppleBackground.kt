@@ -10,8 +10,10 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSOperationQueue
+import platform.UIKit.UIApplication
 import platform.UIKit.UIApplicationDidBecomeActiveNotification
 import platform.UIKit.UIApplicationDidEnterBackgroundNotification
+import platform.UIKit.UIApplicationState
 import platform.darwin.NSObjectProtocol
 
 /**
@@ -67,6 +69,11 @@ private class AppleBackgroundHandle(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     init {
+        // An app that is not active now is away from the screen, as from the resume of a media
+        // control: that is the first trip away, and becoming active the return (#690).
+        if (UIApplication.sharedApplication.applicationState != UIApplicationState.UIApplicationStateActive) {
+            applier.attachedAway()
+        }
         observe(UIApplicationDidEnterBackgroundNotification, foreground = false)
         // Becoming active rather than entering the foreground: the second one also fires on the
         // way through a control centre pull, where the app never actually came back.

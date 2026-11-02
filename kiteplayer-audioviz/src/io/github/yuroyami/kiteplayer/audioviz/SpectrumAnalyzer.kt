@@ -113,6 +113,16 @@ public class SpectrumAnalyzer(
     public var onAnalysis: ((SpectrumFrame) -> Unit)? = null
 
     /**
+     * The song scan's narrow reading, in place of [onAnalysis] and [latest] (#657). Set, the
+     * analyser hands this one reused [ScanReading] to it at every hop and builds no display frame,
+     * no traces and no stereo history: a display frame per 10 ms hop was about 12 KB of garbage,
+     * 290 MB for a four minute song, of which the scan kept four values. Everything the song map
+     * reads is computed exactly as for a display frame.
+     */
+    internal var onScan: ((ScanReading) -> Unit)? = null
+    private val scanReading = ScanReading()
+
+    /**
      * Takes [frames] sample frames of [channels]-channel interleaved audio and analyses whatever
      * it can. [ptsMicros] is the media timestamp of the first frame, or null when unknown.
      * Zero and negative positions are valid timestamps.
@@ -165,7 +175,7 @@ public class SpectrumAnalyzer(
                 analyse(channels)
             }
         }
-        stereoHistory.write(interleaved, frames, channels, startMicros, analysisRevision)
+        if (onScan == null) stereoHistory.write(interleaved, frames, channels, startMicros, analysisRevision)
     }
 
     /**
@@ -294,7 +304,8 @@ public class SpectrumAnalyzer(
         snarePulse = maxOf(snare, snarePulse * exp(-secondsPerAnalysis / 0.12f))
         hatPulse = maxOf(hat, hatPulse * exp(-secondsPerAnalysis / 0.055f))
 
-        timbre.feed(magnitudes)
+        // The timbre is a display reading only, so the song scan skips it.
+        if (onScan == null) timbre.feed(magnitudes)
         tempo.feed(if (ready) beatDetector.novelty else 0f, if (ready) beatDetector.strength else 0f, secondsPerAnalysis)
         moodTracker.feed(
             fastEnergy = drivers.overall.fast,
@@ -364,6 +375,21 @@ public class SpectrumAnalyzer(
             availableMicros = availableMicros,
         )
         val key = keyTracker.key
+        onScan?.let { scan ->
+            scanReading.ptsMicros = windowPts ?: -1L
+            scanReading.hasTimestamp = windowPts != null
+            scanReading.programmeReady = programme.supported && programme.ready
+            scanReading.programmeReferenceMicros = if (!programme.ready) null else startMicros?.let {
+                it + (samplesSeen - programme.windowSamples / 2) * 1_000_000L / sampleRate
+            }
+            scanReading.meanSquare = programme.meanSquare
+            scanReading.digitalSilence = programme.digitalSilence
+            scanReading.structure = structure
+            scanReading.key = key
+            scanReading.chroma = keyTracker.chroma
+            scan(scanReading)
+            return
+        }
         val monoStart = triggerStart(scopePoints)
         val stereoStart = triggerStart(stereoLength)
         val frame = SpectrumFrame(
@@ -535,4 +561,22 @@ internal fun transientFftSize(sampleRate: Int): Int {
     var size = 4
     while (size <= maximum / 2) size *= 2
     return size
+}
+
+/**
+ * What the song scan reads of one analysis, and nothing else (#657). One instance is reused for
+ * every hop, so a reader copies what it keeps; [chroma] is the key tracker's own array.
+ */
+internal class ScanReading {
+    var ptsMicros: Long = -1L
+    var hasTimestamp: Boolean = false
+    /** True when the programme loudness was read, as `ProgrammeLoudness.availability` is Ready. */
+    var programmeReady: Boolean = false
+    /** The centre of the programme loudness window, as `AnalysisWindow.referenceMicros` gives it. */
+    var programmeReferenceMicros: Long? = null
+    var meanSquare: Double? = null
+    var digitalSilence: Boolean = false
+    var structure: AudioDetections? = null
+    var key: KeyEstimate? = null
+    var chroma: FloatArray = FloatArray(0)
 }

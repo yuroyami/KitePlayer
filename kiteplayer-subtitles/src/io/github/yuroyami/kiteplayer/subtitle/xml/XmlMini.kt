@@ -77,6 +77,8 @@ public object XmlMini {
     /** How many elements one document may hold. */
     public const val MAX_ELEMENTS: Int = 256 * 1024
 
+    private const val BYTE_ORDER_MARK: Char = '\uFEFF'
+
     /** The ceilings one parse runs under. The defaults are the constants above; tests pass smaller ones. */
     public class Limits(
         public val maxLength: Int = MAX_LENGTH,
@@ -88,15 +90,19 @@ public object XmlMini {
     )
 
     /**
-     * Parses one document and returns its root element. Every step moves forward through [text],
-     * so the time a parse takes grows with the length of the document and nothing else. A document
-     * past one of [limits] is refused with [XmlSyntaxException].
+     * Parses one document and returns its root element. One leading byte order mark is skipped,
+     * and offsets still count it. Every step moves forward through [text], so the time a parse
+     * takes grows with the length of the document and nothing else. A document past one of
+     * [limits] is refused with [XmlSyntaxException].
      */
     public fun parse(text: CharSequence, limits: Limits = Limits()): XmlElement {
         if (text.length > limits.maxLength) {
             throw XmlSyntaxException("the document is longer than ${limits.maxLength} characters", limits.maxLength)
         }
         val parser = Parser(text, limits)
+        // XML 1.0 lets a UTF-8 entity begin with a byte order mark (section 4.3.3, appendix F), and
+        // `decodeToString` keeps it as U+FEFF, which is not whitespace on any Kotlin target (#617).
+        if (text.isNotEmpty() && text[0] == BYTE_ORDER_MARK) parser.at = 1
         parser.skipProlog()
         val root = parser.parseElement()
         parser.skipMisc()

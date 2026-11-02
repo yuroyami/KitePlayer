@@ -5,6 +5,7 @@ package io.github.yuroyami.kiteplayer.build.kitert
 import io.github.yuroyami.kiteplayer.build.BuildFailure
 import io.github.yuroyami.kiteplayer.build.CompileKiteRt
 import io.github.yuroyami.kiteplayer.build.konanDataDir
+import io.github.yuroyami.kiteplayer.build.defPath
 import io.github.yuroyami.kiteplayer.build.defWithProperties
 import io.github.yuroyami.kiteplayer.build.sha256
 import io.github.yuroyami.kiteplayer.build.writeIfChanged
@@ -49,8 +50,8 @@ fun compileKiteRt(
             defTemplate.readText(),
             listOf(
                 "# Added by the kitert-c plugin for $konanTarget.",
-                "libraryPaths = ${archiveDir.toAbsolutePath()}",
-                "compilerOpts = -I${includeDir.toAbsolutePath()}",
+                "libraryPaths = ${defPath(archiveDir.toFile())}",
+                "compilerOpts = -I${defPath(includeDir.toFile())}",
                 "# ${CompileKiteRt.ARCHIVE_NAME} sha256 ${sha256(archive)}",
             ),
         ),

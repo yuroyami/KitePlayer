@@ -73,6 +73,7 @@ internal class ListedStreamIo(private val stream: MediaIo) : MediaIo {
     override suspend fun read(into: ByteArray, offset: Int, length: Int): Int = stream.read(into, offset, length)
     override suspend fun seek(position: Long) = stream.seek(position)
     override suspend fun openRelated(uri: String): MediaIo? = stream.openRelated(uri)
+    override suspend fun openRelated(uri: String, offset: Long, length: Long?): MediaIo? = stream.openRelated(uri, offset, length)
     override fun setWarningSink(sink: (io.github.yuroyami.kiteplayer.PlaybackWarning) -> Unit) = stream.setWarningSink(sink)
     override fun networkBitsPerSecond(): Long? = stream.networkBitsPerSecond()
     override fun takeTags(): Map<String, String>? = stream.takeTags()

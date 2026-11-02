@@ -30,10 +30,14 @@ import kotlinx.cinterop.value
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import platform.AVFoundation.AVQueuedSampleBufferRenderingStatusFailed
 import platform.AVFoundation.AVSampleBufferDisplayLayer
 import platform.AVFoundation.AVSampleBufferVideoRenderer
 import platform.AVFoundation.enqueueSampleBuffer
+import platform.AVFoundation.error
+import platform.AVFoundation.flush
 import platform.AVFoundation.flushAndRemoveImage
+import platform.AVFoundation.status
 import platform.AVFoundation.sampleBufferRenderer
 import platform.CoreFoundation.CFArrayGetValueAtIndex
 import platform.CoreFoundation.CFDictionaryCreateMutable
@@ -155,6 +159,9 @@ public class SampleBufferVideoRenderer internal constructor(
     /** True from a clear until the next frame, while the layer shows the text on black or nothing. */
     private var pictureCleared = false
 
+    /** True from a failed layer's flush until a frame finds it rendering again (#597). Guarded by [lock]. */
+    private var layerLost = false
+
     /** The viewer's framing, of which this renderer draws the turn and mirror. Guarded by [lock]. */
     private var viewerTransform = io.github.yuroyami.kiteplayer.VideoTransform.Identity
 
@@ -205,6 +212,9 @@ public class SampleBufferVideoRenderer internal constructor(
     }
 
     override fun vsyncIntervalNanos(): Long? = null
+
+    /** The layer shows the decoded picture as it is, so the engine warns when picture controls are set (#610). */
+    override val appliesAdjustments: Boolean get() = false
 
     /** The layer's bounds and gravity belong to whoever owns it, as with the Core Graphics path. */
     override fun setViewport(width: Int, height: Int, scale: Float): Unit = Unit
@@ -298,9 +308,35 @@ public class SampleBufferVideoRenderer internal constructor(
         burned?.let { CVPixelBufferRelease(it) }
         if (sample == null) return false
         markDisplayImmediately(sample)
+        val failure = recoverIfFailed()
         sink.enqueue(sample)
         showingText = burned != null && text != null
-        return true
+        // A frame that met a failed layer is not counted as shown: the layer had dropped what it
+        // had, and only the next frame tells whether it renders again.
+        return failure == null
+    }
+
+    /**
+     * Flushes the layer when it has failed, as an interruption or a media services reset leaves
+     * it, since a failed layer shows nothing more until it is flushed (#597), and says so once
+     * with the layer's error. A layer found rendering after that says it is back. The reason, or
+     * null when the layer had not failed. Called under [lock].
+     */
+    private fun recoverIfFailed(): String? {
+        val failure = sink.failure()
+        if (failure == null) {
+            if (layerLost) {
+                layerLost = false
+                eventFlow.tryEmit(RendererEvent.SurfaceAvailable)
+            }
+            return null
+        }
+        sink.flush()
+        if (!layerLost) {
+            layerLost = true
+            eventFlow.tryEmit(RendererEvent.SurfaceLost("the sample buffer layer failed: $failure"))
+        }
+        return failure
     }
 
     /**
@@ -320,6 +356,7 @@ public class SampleBufferVideoRenderer internal constructor(
             return
         }
         markDisplayImmediately(sample)
+        recoverIfFailed()
         sink.enqueue(sample)
         showingText = true
     }
@@ -435,6 +472,15 @@ internal interface SampleSink {
 
     /** Drops what is queued and takes the last picture off the layer. */
     fun flushAndRemoveImage()
+
+    /**
+     * Why the layer cannot render until it is flushed, or null when it can (#597). A layer fails
+     * after an interruption or a media services reset, and then shows nothing more.
+     */
+    fun failure(): String? = null
+
+    /** Drops what is queued and resets a failed layer, keeping the picture on screen. */
+    fun flush() {}
 }
 
 /** The layer's own video renderer, which may be fed from any thread. */
@@ -446,6 +492,19 @@ internal class VideoRendererSink(private val renderer: AVSampleBufferVideoRender
 
     override fun flushAndRemoveImage() {
         renderer.flushWithRemovalOfDisplayedImage(true, null)
+    }
+
+    // The renderer also asks for a flush, with no failure, when its decoder lost its state, as
+    // after the app went to the background (iOS 17, macOS 14).
+    override fun failure(): String? = when {
+        renderer.status == AVQueuedSampleBufferRenderingStatusFailed ->
+            renderer.error?.localizedDescription ?: "no error given"
+        renderer.requiresFlushToResumeDecoding -> "it needs a flush to decode again"
+        else -> null
+    }
+
+    override fun flush() {
+        renderer.flush()
     }
 }
 
@@ -463,6 +522,14 @@ internal class LayerSink(
 
     override fun flushAndRemoveImage() {
         onMain { layer.flushAndRemoveImage() }
+    }
+
+    override fun failure(): String? =
+        if (layer.status == AVQueuedSampleBufferRenderingStatusFailed) layer.error?.localizedDescription ?: "no error given" else null
+
+    // On the main queue before the enqueue that follows it, which goes there too.
+    override fun flush() {
+        onMain { layer.flush() }
     }
 }
 

@@ -220,6 +220,8 @@ class ChannelMixerTest {
         LayoutCase(MixLayout.Stereo, listOf(1f to 0f, 0f to 1f)),
         // FL FR LFE
         LayoutCase(MixLayout.Surround21, listOf(1f to 0f, 0f to 1f, M to M)),
+        // FL FR FC BC: the back centre enters each front speaker at M * M, as in FFmpeg
+        LayoutCase(MixLayout.Surround40, listOf(1f to 0f, 0f to 1f, M to M, M * M to M * M)),
         // FL FR BL BR
         LayoutCase(MixLayout.Quad, listOf(1f to 0f, 0f to 1f, M to 0f, 0f to M)),
         // FL FR FC BL BR
@@ -426,6 +428,42 @@ class ChannelMixerTest {
             warnings.single().message.contains("5.1 side"),
             "the message must say what was assumed: ${warnings.single().message}",
         )
+    }
+
+    /**
+     * A stream with no mask is guessed as FFmpeg's `av_channel_layout_default` guesses it (#664): four
+     * channels are 4.0, so `ffmpeg -ac 2` puts the third in both speakers at -3 dB and the fourth in
+     * both at -6 dB, where the old quad guess put them on one side each.
+     */
+    @Test
+    fun fourChannelsWithNoMaskMixAsFfmpegsFourPointZero() {
+        val warnings = mutableListOf<PlaybackWarning>()
+        val mixer = ChannelMixer(source = format(4, mask = null), target = stereoDevice, onWarning = { warnings += it })
+        val expected = listOf(1f to 0f, 0f to 1f, M to M, M * M to M * M)
+        for (channel in 0 until 4) {
+            val input = FloatArray(4).also { it[channel] = 1f }
+            val output = FloatArray(2)
+            mixer.mix(input, output, frames = 1)
+            assertEquals(expected[channel].first, output[0], TOLERANCE, "channel $channel into left")
+            assertEquals(expected[channel].second, output[1], TOLERANCE, "channel $channel into right")
+        }
+        assertTrue(warnings.single().message.contains("4.0"), "the guess is named: ${warnings.single().message}")
+    }
+
+    /** Three channels with no mask are 2.1, as in FFmpeg, so the third is an LFE that stereo leaves out by default. */
+    @Test
+    fun threeChannelsWithNoMaskAreTwoPointOneAsInFfmpeg() {
+        val mixer = ChannelMixer(source = format(3, mask = null), target = stereoDevice)
+        val output = FloatArray(2)
+        mixer.mix(floatArrayOf(0f, 0f, 1f), output, frames = 1)
+        assertEquals(listOf(0f, 0f), output.toList(), "the LFE is left out of a stereo mix by default")
+    }
+
+    /** A four channel DEVICE with no mask is still four corner speakers: only a stream's guess follows FFmpeg. */
+    @Test
+    fun aFourChannelDeviceWithNoMaskIsStillQuad() {
+        assertEquals(MixLayout.Quad, MixLayout.forChannelCount(4))
+        assertEquals(MixLayout.Surround40, MixLayout.forUnmaskedSource(4))
     }
 
     @Test

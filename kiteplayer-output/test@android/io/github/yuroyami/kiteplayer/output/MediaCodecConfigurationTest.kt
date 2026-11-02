@@ -147,12 +147,19 @@ class MediaCodecConfigurationTest {
             ),
             "a conventional SDR guess is exact for standard/transfer even when range was absent",
         )
-        val sdGuess = ColorSpaceInfo.guessFor(576)
-        val hdGuess = ColorSpaceInfo.guessFor(1080)
+        val sdGuess = ColorSpaceInfo.guessFor(720, 576)
+        val hdGuess = ColorSpaceInfo.guessFor(1920, 1080)
         assertFalse(sdGuess.rangeSpecified)
         assertFalse(hdGuess.rangeSpecified)
         assertNull(mediaCodecColorHints(sdGuess).range)
         assertNull(mediaCodecColorHints(hdGuess).range)
+        // A guessed matrix and primaries are no declaration, so they name no standard (#606).
+        assertNull(mediaCodecColorHints(sdGuess).standard)
+        assertNull(mediaCodecColorHints(hdGuess).standard)
+        assertEquals(
+            MediaFormat.COLOR_STANDARD_BT709,
+            mediaCodecColorHints(ColorSpaceInfo(ColorMatrix.Bt709, ColorPrimaries.Bt709, ColorTransfer.Bt709)).standard,
+        )
     }
 
     @Test
@@ -727,7 +734,7 @@ class MediaCodecConfigurationTest {
         assertNull(preserved.requestedColorTransfer)
         assertFalse(preserved.requireExplicitOutputColor)
 
-        val guessedSd = requirement.copy(colorSpace = ColorSpaceInfo.guessFor(576))
+        val guessedSd = requirement.copy(colorSpace = ColorSpaceInfo.guessFor(720, 576))
         val guessedContract = requireNotNull(composeMediaCodecOutputContract(guessedSd, sdkInt = 31))
         assertEquals(MediaFormat.COLOR_TRANSFER_SDR_VIDEO, guessedContract.requestedColorTransfer)
         assertTrue(guessedContract.requireExplicitOutputColor)

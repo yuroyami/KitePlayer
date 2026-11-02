@@ -82,6 +82,11 @@ internal class HlsMediaPlaylist(
     val ended: Boolean,
     /** The playlist with every segment at an address of the switch, see [HlsVariantSwitch]. */
     val served: String,
+    /**
+     * True when the playlist went on past what the switch understands, a second `EXT-X-MAP` or one
+     * after a segment, and this holds only the segments before it (#621).
+     */
+    val truncated: Boolean = false,
 ) {
     fun at(sequence: Long): HlsSegment? {
         val first = segments.firstOrNull()?.sequence ?: return null
@@ -94,12 +99,13 @@ internal class HlsMediaPlaylist(
  * it is no media playlist or uses something the switch does not serve: variables (`EXT-X-DEFINE`
  * or a `{$name}`), more than one `EXT-X-MAP`, a segment before the `EXT-X-MAP`, or a key method other than
  * AES-128. Such a playlist reaches FFmpeg as the server sent it, and a variant change opens the
- * stream again.
+ * stream again. With [keepUpToAMap], a playlist that only goes on past a second `EXT-X-MAP` is read
+ * up to it instead, and marked [HlsMediaPlaylist.truncated].
  *
  * The served text of a playlist with an `EXT-X-MAP` names no key: the switch decrypts those
  * segments itself, because it must hold their plain bytes to write them again (#565).
  */
-internal fun readSwitchablePlaylist(text: String, base: String): HlsMediaPlaylist? {
+internal fun readSwitchablePlaylist(text: String, base: String, keepUpToAMap: Boolean = false): HlsMediaPlaylist? {
     // A variable may come from the master or the address, which only FFmpeg puts in.
     if ("{$" in text) return null
     var started = false
@@ -119,6 +125,7 @@ internal fun readSwitchablePlaylist(text: String, base: String): HlsMediaPlaylis
     val rangeEnds = HashMap<String, Long>()
     val segments = ArrayList<HlsSegment>()
     val served = StringBuilder(text.length + 256)
+    var truncated = false
     for (raw in text.removePrefix("﻿").lineSequence()) {
         val line = raw.trim()
         if (!started) {
@@ -150,6 +157,8 @@ internal fun readSwitchablePlaylist(text: String, base: String): HlsMediaPlaylis
                 val attributes = parseHlsAttributes(line.substringAfter(':'))
                 val method = attributes["METHOD"]
                 if (method != "NONE" && method != "AES-128") return null
+                // A key of another format is for a DRM system, which reaches FFmpeg as written, to be refused (#624).
+                if (method != "NONE" && !(attributes["KEYFORMAT"] ?: "identity").equals("identity", ignoreCase = true)) return null
                 val uri = attributes["URI"]?.let { Playlists.resolve(base, it) }
                 key = if (method == "NONE") "" else (attributes - "URI").entries.joinToString(",") { "${it.key}=${it.value}" } + ",URI=$uri"
                 keyAddress = uri.takeIf { method != "NONE" }
@@ -158,7 +167,13 @@ internal fun readSwitchablePlaylist(text: String, base: String): HlsMediaPlaylis
                 served.append(KEY_MARK).append(if (uri == null) line else withUri(line, uri)).append('\n')
             }
             line.startsWith("#EXT-X-MAP:") -> {
-                if (init != null || segments.isNotEmpty()) return null
+                if (init != null || segments.isNotEmpty()) {
+                    // A reload with a second map, as an inserted advertisement brings (#621): the
+                    // segments before it are what the switch can still serve.
+                    if (!keepUpToAMap || segments.isEmpty()) return null
+                    truncated = true
+                    break
+                }
                 val attributes = parseHlsAttributes(line.substringAfter(':'))
                 val address = Playlists.resolve(base, attributes["URI"] ?: return null)
                 val bytes = attributes["BYTERANGE"]?.let { parseByteRange(it) ?: return null }
@@ -199,7 +214,7 @@ internal fun readSwitchablePlaylist(text: String, base: String): HlsMediaPlaylis
     } else {
         text.lineSequence().filter { !it.startsWith(KEY_MARK) }.joinToString("\n")
     }
-    return HlsMediaPlaylist(segments, init, ended, shown)
+    return HlsMediaPlaylist(segments, init, if (truncated) false else ended, shown, truncated)
 }
 
 /** Starts an `EXT-X-KEY` line while a playlist is read. No playlist line holds it. */
@@ -271,6 +286,14 @@ private const val SEGMENT_TOLERANCE_MICROS = 50_000L
  * Serves one variant of a master playlist to FFmpeg at addresses of its own, and moves the stream
  * to another variant between two segments. See the note at the top of this file.
  *
+ * A live playlist is read again at every reload. A reload that gains what the switch does not
+ * serve, above all a second `EXT-X-MAP` after a discontinuity, as an inserted advertisement or an
+ * encoder restart writes it, is served up to that map, and the stream holds its variant, refusing
+ * every [request], until a reload reads whole again (#621). Failing the reload instead made FFmpeg
+ * drop the playlist for good. The segments past the map are not served: FFmpeg's MP4 reader keeps
+ * the first `moov` it reads and skips every later one, so it would not decode them with their own
+ * initialization anyway.
+ *
  * [addresses] are the variants' playlists, resolved, in the master's order, and [traits] their
  * `EXT-X-STREAM-INF` tags. [choose] answers the variant the player would open by itself.
  * [openAddress] opens an address the stream names.
@@ -281,12 +304,22 @@ internal class HlsVariantSwitch(
     initial: Int,
     private val choose: () -> Int,
     private val openAddress: suspend (String) -> MediaIo?,
+    /**
+     * [openAddress] at a byte offset, positioned there, whose first request may carry the range
+     * (#619). The default opens and seeks, which costs a byte range segment two requests.
+     */
+    private val openAddressAt: suspend (String, Long, Long?) -> MediaIo? = { address, offset, _ ->
+        openAddress(address)?.also { opened -> if (offset != 0L) seekOrClose(opened, offset) }
+    },
 ) {
     private val lock = Mutex()
     private val target = atomic(initial)
 
     /** True when the first playlist was not understood, so FFmpeg read it as the server sent it. */
     private var passedThrough = false
+
+    /** True while the playlist FFmpeg reads goes past what the switch serves, so no move is made (#621). */
+    private var frozen = false
 
     /** The newest playlist read of each variant. */
     private val loaded = arrayOfNulls<Loaded>(addresses.size)
@@ -341,6 +374,13 @@ internal class HlsVariantSwitch(
         else -> null
     }
 
+    /** A window of [length] bytes from [offset] of [address], or all of it, opened at its range (#619). */
+    private suspend fun sliceOf(address: String, offset: Long, length: Long?): MediaIo? {
+        if (offset == 0L && length == null) return openAddress(address)
+        val upstream = openAddressAt(address, offset, length) ?: return null
+        return SliceMediaIo(upstream, offset, length)
+    }
+
     /**
      * The address of the stream that [address], one of this switch's own, stands for now, for a
      * message a person reads. [address] itself when it stands for nothing.
@@ -364,7 +404,7 @@ internal class HlsVariantSwitch(
      */
     suspend fun request(index: Int?): Boolean = lock.withLock {
         val current = listed ?: return false
-        if (passedThrough) return false
+        if (passedThrough || frozen) return false
         val wanted = index ?: choose()
         if (wanted !in addresses.indices) return false
         if (wanted == target.value) return true
@@ -425,7 +465,7 @@ internal class HlsVariantSwitch(
 
     /** A reader of the initialization [of], in plain bytes. */
     private suspend fun opened(of: HlsInit): MediaIo? {
-        val reader = slice(openAddress(of.address), of.offset, of.length) ?: return null
+        val reader = sliceOf(of.address, of.offset, of.length) ?: return null
         if (of.key.isEmpty()) return reader
         val bytes = try {
             readWhole(reader, MAX_INIT_BYTES, of.address)
@@ -475,7 +515,9 @@ internal class HlsVariantSwitch(
         } finally {
             reader.close()
         }
-        val playlist = readSwitchablePlaylist(bytes.decodeToString(), location)
+        // A reload FFmpeg reads from this switch once it holds its addresses: one that gained a
+        // second map is served up to it, so the stream plays on rather than fail its reload (#621).
+        val playlist = readSwitchablePlaylist(bytes.decodeToString(), location, keepUpToAMap = listed != null)
         if (playlist == null) {
             // FFmpeg holds addresses of this switch once it read one playlist from it.
             check(listed == null) { "the playlist at $address changed into one the variant switch cannot serve" }
@@ -486,6 +528,9 @@ internal class HlsVariantSwitch(
         loaded[variant] = read
         listed = read
         if (init == null) init = playlist.init
+        // Moves wait while the playlist goes past a map the switch cannot serve, and resume once
+        // a reload reads whole again, the map gone from the window.
+        frozen = playlist.truncated
         BytesMediaIo(playlist.served.encodeToByteArray(), PLAYLIST)
     }
 
@@ -529,7 +574,7 @@ internal class HlsVariantSwitch(
             encrypted = init != null && found.second.key.isNotEmpty()
             found.second
         }
-        val reader = slice(openAddress(segment.address), segment.offset, segment.length) ?: return null
+        val reader = sliceOf(segment.address, segment.offset, segment.length) ?: return null
         val plans = plan
         val renumbered = numbers
         if (plans == null && renumbered == null && !encrypted) return reader
@@ -651,15 +696,13 @@ private suspend fun readWhole(reader: MediaIo, limit: Long, name: String): ByteA
 }
 
 /** [upstream] from [offset] on for [length] bytes, or all of it. Null stays null. */
-private suspend fun slice(upstream: MediaIo?, offset: Long, length: Long?): MediaIo? {
-    if (upstream == null || (offset == 0L && length == null)) return upstream
+private suspend fun seekOrClose(opened: MediaIo, offset: Long) {
     try {
-        if (offset != 0L) upstream.seek(offset)
+        opened.seek(offset)
     } catch (failure: Throwable) {
-        upstream.close()
+        opened.close()
         throw failure
     }
-    return SliceMediaIo(upstream, offset, length)
 }
 
 /** A window of [upstream], already at [offset]. Closing it closes [upstream]. */

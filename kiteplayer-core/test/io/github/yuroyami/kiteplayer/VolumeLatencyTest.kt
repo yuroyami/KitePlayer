@@ -98,6 +98,7 @@ class VolumeLatencyTest {
     private class PullableSink(
         override val deviceBufferFrames: Int = 512,
         private val takesGain: Boolean = false,
+        override val deviceGainHeadroom: Float = 1f,
     ) : AudioSink {
         private var render: AudioRenderCallback? = null
         var buffer: CapturingBuffer? = null
@@ -308,6 +309,40 @@ class VolumeLatencyTest {
         assertEquals(0f, sink.deviceGains.last())
         assertTrue(abs(heard.last() - QUIET) < TOLERANCE, "mute belongs to the device here, so the ring plays on, was ${heard.last()}")
         audio.close()
+    }
+
+    /**
+     * A sink that turns the sound down after the ring leaves the ring room up to its headroom
+     * (#612). On Android the ring kept the gain at 1 and limited every volume as full volume, so a
+     * downmix peak of 1.6 at half volume was squeezed, though the track would have halved it to 0.8.
+     */
+    @Test
+    fun aVolumeAfterTheRingLetsLoudPeaksThroughUpToTheSinksHeadroom() = runTest {
+        val loud = FloatArray(1_024 * format.channels) { if (it % 2 == 0) 1.3f else -1.3f }
+
+        val roomy = PullableSink(takesGain = true, deviceGainHeadroom = 1.4125f)
+        val audio = AudioPlayback(roomy, TestClock())
+        audio.volume = 0.5f
+        audio.open(format)
+        audio.play()
+        audio.submitDecoded(pts = null, interleaved = loud, frames = 1_024, sourceFormat = format) { false }
+        roomy.pumpOnce()
+        assertEquals(0.5f, roomy.deviceGains.last())
+        assertTrue(abs(abs(roomy.buffer!!.heard.last()) - 1.3f) < TOLERANCE, "a peak under the headroom must pass, was ${roomy.buffer!!.heard.last()}")
+        assertEquals(0L, audio.limitedFrames, "nothing would clip after the device's volume")
+        audio.close()
+
+        // A 16-bit device clips at full scale before its volume, so it keeps the limit at 1.
+        val tight = PullableSink(takesGain = true, deviceGainHeadroom = 1f)
+        val strict = AudioPlayback(tight, TestClock())
+        strict.volume = 0.5f
+        strict.open(format)
+        strict.play()
+        strict.submitDecoded(pts = null, interleaved = loud, frames = 1_024, sourceFormat = format) { false }
+        tight.pumpOnce()
+        assertTrue(tight.buffer!!.heard.maxOf { abs(it) } <= 1f, "a device with no headroom must get nothing past full scale")
+        assertTrue(strict.limitedFrames > 0)
+        strict.close()
     }
 
     private companion object {

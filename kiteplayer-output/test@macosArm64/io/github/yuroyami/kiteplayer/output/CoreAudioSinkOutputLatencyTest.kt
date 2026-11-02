@@ -18,6 +18,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.fail
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -44,7 +45,7 @@ class CoreAudioSinkOutputLatencyTest {
             assertEquals(LatencyQuality.Exact, sink.latencyQuality, "the system described the route")
             sink.start()
             awaitDevice { sink.callbacks > 0 }
-            if (sink.callbacks == 0L) return@runBlocking println("skipped: this machine's output never called back")
+            if (sink.callbacks == 0L) fail("this Mac's output never called back, so nothing here was measured")
             val latency = sink.latencyNanos()
             assertTrue(latency >= BLUETOOTH - SLACK, "the route's 180 ms must be in the figure, was $latency ns")
             assertTrue(latency < BLUETOOTH + ONE_BUFFER, "and nothing but a device buffer beside it, was $latency ns")
@@ -62,7 +63,7 @@ class CoreAudioSinkOutputLatencyTest {
         try {
             sink.start()
             awaitDevice { sink.callbacks > 0 }
-            if (sink.callbacks == 0L) return@runBlocking println("skipped: this machine's output never called back")
+            if (sink.callbacks == 0L) fail("this Mac's output never called back, so nothing here was measured")
 
             // The headphones leave and the speaker reports 4 ms.
             devices.reported = SPEAKER
@@ -148,7 +149,7 @@ class CoreAudioSinkOutputLatencyTest {
 
     @Test
     fun thisMacSaysWhatItsDefaultOutputIs() {
-        if (MacOutputDevices.defaultOutputDevice() == 0u) return println("skipped: this Mac has no default output")
+        if (MacOutputDevices.defaultOutputDevice() == 0u) fail("this Mac reports no default output, so the device under test is missing")
         val route = MacOutputDevices.outputRoute(0u)
         println("the default output is ${route.name}, taken for ${route.kind}")
         assertNotNull(route.name, "a default output has a name")
@@ -156,7 +157,7 @@ class CoreAudioSinkOutputLatencyTest {
 
     @Test
     fun thisMacReportsALatencyForItsDefaultOutput() {
-        if (MacOutputDevices.defaultOutputDevice() == 0u) return println("skipped: this Mac has no default output")
+        if (MacOutputDevices.defaultOutputDevice() == 0u) fail("this Mac reports no default output, so the device under test is missing")
         val latency = assertNotNull(MacOutputDevices.outputLatencyNanos(0u), "the default output must answer its latency")
         println("the default output reports $latency ns from the device to the ear")
         assertTrue(latency in 0..10_000_000_000L, "was $latency ns")
@@ -164,7 +165,7 @@ class CoreAudioSinkOutputLatencyTest {
 
     @Test
     fun thePlatformLatencyWatchRegistersAndCloseReleasesIt() {
-        if (MacOutputDevices.defaultOutputDevice() == 0u) return println("skipped: this Mac has no default output")
+        if (MacOutputDevices.defaultOutputDevice() == 0u) fail("this Mac reports no default output, so the device under test is missing")
         val before = HardwareListener.liveCount
         val watch = assertNotNull(MacOutputDevices.watchRoute(0u) { })
         assertTrue(HardwareListener.liveCount > before + 1, "the default output and its device are both watched")

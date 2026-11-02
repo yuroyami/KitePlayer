@@ -42,6 +42,13 @@ internal class HlsTtmlMediaIo(
     /** The address each segment of a rendition is named under, so a reload names it the same. */
     private val addresses = HashMap<Segment, String>()
 
+    /**
+     * The number in the next new address. It only goes up: numbered by the size of [addresses],
+     * which eviction holds still, a new segment took the address of one still listed, and FFmpeg
+     * read its cues in place of the older one's (#618).
+     */
+    private var nextAddress = 0L
+
     /** The initializations read, by address and range. */
     private val inits = HashMap<String, ByteArray>()
 
@@ -69,6 +76,8 @@ internal class HlsTtmlMediaIo(
         var range: Pair<Long, Long?>? = null
         // Where the next byte range of each file starts when the tag leaves its offset out.
         val nextOffset = HashMap<String, Long>()
+        // The addresses this playlist names.
+        val listed = HashSet<String>()
         lock.withLock {
             for (raw in text.removePrefix("﻿").split('\n')) {
                 val line = raw.removeSuffix("\r")
@@ -92,17 +101,23 @@ internal class HlsTtmlMediaIo(
                         }
                         wanted?.let { nextOffset[url] = it.last + 1 }
                         val segment = Segment(url, wanted, init?.first, init?.second)
-                        val address = addresses.getOrPut(segment) { "https://$HOST/${addresses.size}.vtt" }
+                        val address = addresses.getOrPut(segment) { "https://$HOST/${nextAddress++}.vtt" }
                         segments[address] = segment
+                        listed += address
                         out.append(address).append('\n')
                         range = null
                     }
                     else -> out.append(line).append('\n')
                 }
             }
-            while (segments.size > MAX_SEGMENTS) {
-                val oldest = segments.keys.first()
-                addresses.remove(segments.remove(oldest))
+            // The oldest segments go first, and never one this playlist names: nothing reloads a
+            // playlist that has ended, so a long one would lose the addresses of its first segments.
+            val named = segments.entries.iterator()
+            while (segments.size > MAX_SEGMENTS && named.hasNext()) {
+                val (address, segment) = named.next()
+                if (address in listed) continue
+                named.remove()
+                addresses.remove(segment)
             }
         }
         return MemoryReader(out.toString().encodeToByteArray(), base, HLS_TYPE)
@@ -134,12 +149,13 @@ internal class HlsTtmlMediaIo(
 
     /** The bytes of [url], or of its [range] of it, at most [limit] of them. */
     private suspend fun read(url: String, range: LongRange?, limit: Long): ByteArray {
-        val io = upstream.openRelated(url) ?: throw IllegalStateException("${shownUri(url)} could not be opened")
+        val wanted = range?.let { it.last - it.first + 1 }
+        if (wanted != null && wanted > limit) throw IllegalStateException("${shownUri(url)} asks for $wanted bytes, and the ceiling is $limit")
+        // A ranged segment asks for its range with its first request (#619).
+        val opened = if (range == null) upstream.openRelated(url) else upstream.openRelated(url, range.first, wanted)
+        val io = opened ?: throw IllegalStateException("${shownUri(url)} could not be opened")
         try {
-            if (range == null) return readAllBounded(io, limit, "the subtitle segment at ${shownUri(url)}")
-            val wanted = range.last - range.first + 1
-            if (wanted > limit) throw IllegalStateException("${shownUri(url)} asks for $wanted bytes, and the ceiling is $limit")
-            if (range.first > 0) io.seek(range.first)
+            if (range == null || wanted == null) return readAllBounded(io, limit, "the subtitle segment at ${shownUri(url)}")
             val out = ByteArray(wanted.toInt())
             var filled = 0
             while (filled < out.size) {
@@ -186,7 +202,8 @@ internal class HlsTtmlMediaIo(
         private const val WEBVTT_TYPE = "text/vtt"
         private const val MAX_PLAYLIST_BYTES = 4L * 1024 * 1024
         private const val MAX_SEGMENT_BYTES = 4L * 1024 * 1024
-        private const val MAX_SEGMENTS = 8192
+        /** How many segments the reader keeps named beyond those the last playlist it served names. */
+        const val MAX_SEGMENTS: Int = 8192
         private const val MAX_INITS = 64
 
         /** The most bytes of a master playlist read to decide, which any master fits. */

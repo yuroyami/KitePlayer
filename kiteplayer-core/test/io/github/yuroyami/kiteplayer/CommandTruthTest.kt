@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -434,6 +435,32 @@ class CommandTruthTest {
         // Let the wedge go, so the release finishes and nothing is left parked.
         faults.stopHangs = false
         harness.run(2.seconds)
+        harness.stopDevice()
+    }
+
+    /**
+     * The same contract when the release that wedges is a stop's, not the close's own (#590). The
+     * stop released its session inline on the actor with no deadline, so the actor never read its
+     * mailbox again and a later close waited for ever.
+     */
+    @Test
+    fun `a release that wedges during a stop still lets a close report a compromised runtime`() = runTest {
+        val faults = FaultPlan()
+        val harness = CoreHarness(this, faults = faults)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(200.milliseconds)
+
+        faults.stopHangs = true
+        val stopping = launch { runCatching { harness.core.stop() } }
+        harness.run(100.milliseconds)
+        val failure = withTimeout(30.seconds) { assertFailsWith<PlaybackException> { harness.core.closeAndAwait() } }
+        val error = assertIs<PlaybackError.RuntimeCompromised>(failure.error, "the close must say the runtime is compromised")
+        assertTrue(error.detail.contains("STILL RUNNING"), "the detail was: ${error.detail}")
+
+        faults.stopHangs = false
+        harness.run(2.seconds)
+        stopping.join()
         harness.stopDevice()
     }
 

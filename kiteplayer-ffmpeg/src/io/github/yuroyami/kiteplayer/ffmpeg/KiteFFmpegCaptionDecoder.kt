@@ -16,7 +16,9 @@ import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
  * The text formats FFmpeg decodes into ASS events: closed captions stored as a track of their own,
  * such as a MOV `c608` track, whose CEA-608 byte pairs FFmpeg's caption decoder turns into timed
  * text, and SAMI, MicroDVD, SubViewer, MPL2, JACOsub, VPlayer, PJS, RealText and Spruce STL tracks
- * (#492). Captions carried inside the video stream decode through [InVideoCaptionDecoder] (#236).
+ * (#492). Captions carried inside the video stream decode through [InVideoCaptionDecoder] (#236),
+ * their CC1 only; the CEA-708 services beside it are tracks of their own, which
+ * [io.github.yuroyami.kiteplayer.subtitle.Cea708DecoderFactory] decodes (#678).
  */
 internal class KiteFFmpegCaptionDecoderFactory(
     private val source: KiteFFmpegSource,

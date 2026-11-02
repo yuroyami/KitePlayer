@@ -92,6 +92,8 @@ internal class SyncHttpMediaIo(
     private val meter: SyncDownloadMeter = SyncDownloadMeter(),
     /** Called with the address asked for and the address that answered, when a redirect made them differ. */
     private val redirected: ((asked: String, answered: String) -> Unit)? = null,
+    /** Shared with the readers that [openRelated] makes, so a segment's refusal reaches the engine through the item's reader. */
+    private val refusals: SyncRefusals = SyncRefusals(),
 ) : MediaIo {
 
     private val state: JsAny = xhrState(headers.toJsObject(), timeout.inWholeMilliseconds.toDouble())
@@ -187,7 +189,7 @@ internal class SyncHttpMediaIo(
         val scheme = uri.substringBefore(':', missingDelimiterValue = "").lowercase()
         if (scheme != "http" && scheme != "https" && scheme != "blob") return null
         val own = originOf(uri) == originOf(url)
-        val related = SyncHttpMediaIo(uri, if (own) headers else emptyMap(), timeout, meter, rule)
+        val related = SyncHttpMediaIo(uri, if (own) headers else emptyMap(), timeout, meter, rule, refusals)
         try {
             if (eager) related.start()
         } catch (failure: Throwable) {
@@ -198,6 +200,13 @@ internal class SyncHttpMediaIo(
     }
 
     override fun networkBitsPerSecond(): Long? = meter.bitsPerSecond()
+
+    /**
+     * The newest 401 or 403 that this reader or one it opened was answered (#453, #546), as the
+     * player's other network reader keeps it, so the engine opens the item again for a fresh
+     * address when a signed one expires during playback.
+     */
+    override fun takeRefusal(): SourceRefusal? = refusals.take()
 
     override fun close() {
         if (closed) return
@@ -224,6 +233,11 @@ internal class SyncHttpMediaIo(
                 }
             }
             416 -> Unit
+            401, 403 -> {
+                // A refusal a fresh address may cure, as a signed address that expired is refused.
+                refusals.latest = SourceRefusal(url, status)
+                throw PlaybackException(PlaybackError.SourceUnavailable(url, null, "HTTP $status"))
+            }
             TIMED_OUT -> throw PlaybackException(PlaybackError.SourceStalled(url, timeout))
             0 -> throw PlaybackException(PlaybackError.SourceUnavailable(url, null, xhrError(state) ?: "the request failed"))
             else -> throw PlaybackException(PlaybackError.SourceUnavailable(url, null, "HTTP $status"))
@@ -237,6 +251,16 @@ internal class SyncHttpMediaIo(
         /** What [xhrFetch] answers when the request ran out of time. */
         const val TIMED_OUT = -1
     }
+}
+
+/**
+ * The newest refusal of a reader and the readers it opened, until it is taken. A worker has one
+ * thread, so nothing here is shared between two.
+ */
+internal class SyncRefusals {
+    var latest: SourceRefusal? = null
+
+    fun take(): SourceRefusal? = latest.also { latest = null }
 }
 
 /** The scheme, host and port of [address], which a browser resolves against the worker's own. */

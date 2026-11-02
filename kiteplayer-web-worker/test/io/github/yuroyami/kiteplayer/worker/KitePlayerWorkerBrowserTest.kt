@@ -32,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.js.JsAny
 import kotlin.js.JsNumber
 import kotlin.js.JsString
@@ -125,7 +126,8 @@ class KitePlayerWorkerBrowserTest {
      * module asks for while it reads. `hls/ts.m3u8` has a 320x180 and a 640x360 variant in MPEG-TS
      * segments of two seconds, twelve seconds long.
      *
-     * With the related opens taken out of the web backend, the open fails and this test with it.
+     * With the related opens taken out of the web backend, the open fails and this test with it. The
+     * page's output carries the segments' tone, so the sound that plays is not silence.
      */
     @Test
     fun anHlsStreamPlaysSeeksAndChangesVariantInTheWorker() = runTest(timeout = 3.minutes) {
@@ -137,6 +139,7 @@ class KitePlayerWorkerBrowserTest {
         val (workerUrl, codecUrl, media) = setup
         withContext(Dispatchers.Default) {
             val canvas = pageCanvas(320, 180)
+            val ear = listenToAudio()
             val player = KitePlayerWorker.start(canvas, workerUrl, codecUrl)
             val events = Channel<PlayerEvent>(Channel.UNLIMITED)
             val subscribed = CompletableDeferred<Unit>()
@@ -158,6 +161,7 @@ class KitePlayerWorkerBrowserTest {
                     while (events.receive() !is PlayerEvent.FirstFrameRendered) Unit
                 }
                 withTimeout(60.seconds) { player.progress.first { it.position >= 1.seconds } }
+                assertHeard(ear, "the 440 Hz tone of the stream's segments")
 
                 val other = opened.tracks.variants.first { it.index != opened.tracks.selectedVariant }.index
                 player.selectVariant(other)
@@ -170,6 +174,7 @@ class KitePlayerWorkerBrowserTest {
             } finally {
                 collector.cancel()
                 player.closeAndAwait()
+                stopListening(ear)
             }
         }
     }
@@ -228,7 +233,8 @@ class KitePlayerWorkerBrowserTest {
      *
      * The seek goes to the last ten seconds, which is segment 31 of 35, and the test server's list
      * of requests shows that no segment between the start and the target was read. The page's
-     * frame loop runs through all of it under the bound of the first test, 50 ms.
+     * frame loop runs through all of it under the bound of the first test, 50 ms, and the page's
+     * output carries the tone of the sound's own set, so the sound is not silence.
      */
     @Test
     fun aDashPresentationWithSeparateSoundPlaysAndSeeksInTheWorker() = runTest(timeout = 3.minutes) {
@@ -239,6 +245,7 @@ class KitePlayerWorkerBrowserTest {
         }
         val (workerUrl, codecUrl, media) = setup
         withContext(Dispatchers.Default) {
+            val ear = listenToAudio()
             val player = KitePlayerWorker.start(pageCanvas(320, 180), workerUrl, codecUrl)
             val heartbeat = heartbeatStart()
             val events = Channel<PlayerEvent>(Channel.UNLIMITED)
@@ -263,6 +270,7 @@ class KitePlayerWorkerBrowserTest {
                     while (events.receive() !is PlayerEvent.FirstFrameRendered) Unit
                 }
                 withTimeout(60.seconds) { player.progress.first { it.position >= 1.seconds } }
+                assertHeard(ear, "the 440 Hz tone of the sound's own adaptation set")
 
                 val probe = probeOf(media)
                 fetchText("$probe/reset").await<JsString>()
@@ -278,6 +286,7 @@ class KitePlayerWorkerBrowserTest {
             } finally {
                 collector.cancel()
                 player.closeAndAwait()
+                stopListening(ear)
             }
             // The page draws on while the worker waits for each request of the presentation.
             val frames = heartbeatFrames(heartbeat)
@@ -504,6 +513,67 @@ class KitePlayerWorkerBrowserTest {
                 assertEquals(listOf("moved/dash/separate.mpd"), clips.filter { it.startsWith("moved/") }.distinct(), "only the manifest was asked for at the address that moved")
                 assertTrue(clips.any { it.startsWith("dash/separate-") && it.endsWith(".m4s") }, "the segments came from beside the manifest: $clips")
                 assertNull(player.state.value.error)
+            }
+        }
+    }
+
+    /**
+     * A segment whose signed address the server refuses while the stream plays, as a CDN refuses a
+     * token that expired, gets the answer of the other targets (#546, #453): the worker's reader
+     * hands the 403 over, and the player warns [PlaybackWarning.AddressRenewed] with the segment's
+     * file and no token, and opens the item again for a fresh address. The test server's
+     * `expiring.m3u8` names six segments of `hls/ts-0` behind `/kite-probe/signed/`, and refuses
+     * every one with 403 once the test calls its `expire`. The worker reads the whole stream ahead
+     * while it opens, so the addresses expire after the open and a seek asks for a segment again.
+     */
+    @Test
+    fun aSegmentTheServerRefusesIsRenewedAsOnTheOtherTargets() = runTest(timeout = 3.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n")
+        if (setup == null) {
+            println("skipped: the worker player runs only in the browser half, where karma serves the worker")
+            return@runTest
+        }
+        val (workerUrl, codecUrl, media) = setup
+        val probe = probeOf(media)
+        withContext(Dispatchers.Default) {
+            val player = KitePlayerWorker.start(pageCanvas(320, 180), workerUrl, codecUrl)
+            val events = Channel<PlayerEvent>(Channel.UNLIMITED)
+            val subscribed = CompletableDeferred<Unit>()
+            val collector = launch {
+                player.events.onSubscription { subscribed.complete(Unit) }.collect { events.send(it) }
+            }
+            try {
+                subscribed.await()
+                fetchText("$probe/reset").await<JsString>()
+                player.setViewport(320, 180, 1f)
+                player.open(MediaItem("$probe/expiring.m3u8"))
+                player.play()
+                withTimeout(60.seconds) { player.progress.first { it.position >= 1.seconds } }
+                fetchText("$probe/expire").await<JsString>()
+                val before = asked(probe).requests.size
+                player.seek(0.seconds)
+                val seen = mutableListOf<PlayerEvent>()
+                val renewed = withTimeoutOrNull(60.seconds) {
+                    while (true) {
+                        val event = events.receive()
+                        seen += event
+                        val warning = (event as? PlayerEvent.Warning)?.warning
+                        if (warning is PlaybackWarning.AddressRenewed) return@withTimeoutOrNull warning
+                    }
+                    @Suppress("UNREACHABLE_CODE") error("unreachable")
+                }
+                assertNotNull(
+                    renewed,
+                    "no renewal; asked after the expiry: ${asked(probe).requests.drop(before)}; " +
+                        "state ${player.state.value.status} ${player.state.value.error}; events ${seen.takeLast(12)}",
+                )
+                assertEquals(403, renewed.status, "the server's answer travels with the warning")
+                assertTrue(Regex("ts-0-\\d\\.ts").matches(renewed.uri), "the refused segment, named without its token: ${renewed.uri}")
+                val signed = asked(probe).requests.map { it.clip }.filter { it.startsWith("signed/") }
+                assertTrue("signed/ts-0-0.ts" in signed, "the segments were asked for at their signed addresses: $signed")
+            } finally {
+                collector.cancel()
+                player.closeAndAwait()
             }
         }
     }
@@ -796,6 +866,43 @@ class KitePlayerWorkerBrowserTest {
         assertIs<PlaybackError.Internal>(assertIs<PlaybackException>(failure).error)
     }
 
+    // A start that failed before the worker answered left the page's audio context and its worklet
+    // running, with no player for the application to close (#686).
+    @Test
+    fun aStartThatCannotTakeTheCanvasClosesTheAudioItOpened() = runTest(timeout = 1.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n") ?: return@runTest
+        val counter = countAudioContexts()
+        try {
+            val canvas = pageCanvas(32, 32)
+            // A canvas that already has a 2D context cannot pass its drawing to a worker.
+            takeCanvas2d(canvas)
+            val failure = withContext(Dispatchers.Default) {
+                runCatching { KitePlayerWorker.start(canvas, setup[0], setup[1]) }
+            }.exceptionOrNull()
+            assertNotNull(failure, "a canvas with a 2D context passed to the worker")
+            assertTrue(audioContextsOpened(counter) > 0, "the start opened no audio context, so it proves nothing")
+            assertEquals(audioContextsOpened(counter), audioContextsClosed(counter), "the failed start left its audio open")
+        } finally {
+            stopCountingAudioContexts(counter)
+        }
+    }
+
+    @Test
+    fun aWorkerAddressTheBrowserRefusesClosesTheAudioItOpened() = runTest(timeout = 1.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n") ?: return@runTest
+        val counter = countAudioContexts()
+        try {
+            val failure = withContext(Dispatchers.Default) {
+                runCatching { KitePlayerWorker.start(null, "http://[not an address", setup[1]) }
+            }.exceptionOrNull()
+            assertNotNull(failure, "the browser took a worker address it cannot read")
+            assertTrue(audioContextsOpened(counter) > 0, "the start opened no audio context, so it proves nothing")
+            assertEquals(audioContextsOpened(counter), audioContextsClosed(counter), "the failed start left its audio open")
+        } finally {
+            stopCountingAudioContexts(counter)
+        }
+    }
+
     @Test
     fun aCodecModuleThatCannotLoadFailsTheStart() = runTest(timeout = 1.minutes) {
         val setup = karmaWorkerConfig()?.split("\n") ?: return@runTest
@@ -914,3 +1021,94 @@ private external fun heartbeatFrames(heartbeat: JsAny): Int
 /** Stops the loop and answers the longest gap in milliseconds, counting the one still open. */
 @JsFun("(h) => { h.on = false; return Math.max(h.worst, performance.now() - h.last); }")
 private external fun heartbeatStop(heartbeat: JsAny): Double
+
+/**
+ * Puts a counting `AudioContext` in place of the page's own, so a test can tell how many the
+ * player opened and how many it closed (#686). The count lives on the returned object.
+ */
+@JsFun(
+    """() => {
+        const Real = globalThis.AudioContext;
+        const counter = { opened: 0, closed: 0, Real: Real };
+        if (!Real) return counter;
+        class Counting extends Real {
+            constructor(...args) { super(...args); counter.opened += 1; }
+            close() { counter.closed += 1; return super.close(); }
+        }
+        globalThis.AudioContext = Counting;
+        return counter;
+    }""",
+)
+private external fun countAudioContexts(): JsAny
+
+@JsFun("(counter) => { if (counter.Real) globalThis.AudioContext = counter.Real; }")
+private external fun stopCountingAudioContexts(counter: JsAny)
+
+@JsFun("(counter) => counter.opened")
+private external fun audioContextsOpened(counter: JsAny): Int
+
+@JsFun("(counter) => counter.closed")
+private external fun audioContextsClosed(counter: JsAny): Int
+
+@JsFun("(canvas) => { canvas.getContext('2d'); }")
+private external fun takeCanvas2d(canvas: JsAny)
+
+/**
+ * Waits up to five seconds for [ear] to hear a sample louder than a tenth of the tone the clips
+ * carry, `sine` at its default eighth of full scale, so the sound that reaches the page's output is
+ * proven not to be silence (#546). A frame drawn and a clock that runs prove nothing of it: the
+ * clock runs on frames consumed, and silence is consumed as well as a tone.
+ */
+private suspend fun assertHeard(ear: JsAny, what: String) {
+    val heard = withTimeoutOrNull(5.seconds) {
+        while (loudestHeard(ear) < 0.0125) delay(20)
+        true
+    } ?: false
+    assertTrue(audioNodesHeard(ear) > 0, "the player made no audio node on the page for $what")
+    assertTrue(heard, "the page's output carried only silence, loudest ${loudestHeard(ear)}, where it should carry $what")
+}
+
+/**
+ * Puts a listening `AudioWorkletNode` in place of the page's own (#546): each node the player makes
+ * feeds an analyser as well as its output, and the loudest sample heard since is kept on the
+ * returned object, read every 20 ms.
+ */
+@JsFun(
+    """() => {
+        const Real = globalThis.AudioWorkletNode;
+        const ear = { loudest: 0, nodes: 0, on: true, Real: Real };
+        if (!Real) return ear;
+        class Listening extends Real {
+            constructor(context, name, options) {
+                super(context, name, options);
+                ear.nodes += 1;
+                const analyser = context.createAnalyser();
+                analyser.fftSize = 2048;
+                this.connect(analyser);
+                const samples = new Float32Array(analyser.fftSize);
+                const listen = () => {
+                    if (!ear.on) return;
+                    analyser.getFloatTimeDomainData(samples);
+                    for (let i = 0; i < samples.length; i++) {
+                        const level = Math.abs(samples[i]);
+                        if (level > ear.loudest) ear.loudest = level;
+                    }
+                    setTimeout(listen, 20);
+                };
+                listen();
+            }
+        }
+        globalThis.AudioWorkletNode = Listening;
+        return ear;
+    }""",
+)
+private external fun listenToAudio(): JsAny
+
+@JsFun("(ear) => { ear.on = false; if (ear.Real) globalThis.AudioWorkletNode = ear.Real; }")
+private external fun stopListening(ear: JsAny)
+
+@JsFun("(ear) => ear.loudest")
+private external fun loudestHeard(ear: JsAny): Double
+
+@JsFun("(ear) => ear.nodes")
+private external fun audioNodesHeard(ear: JsAny): Int

@@ -465,7 +465,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
      * drawn: the renderer is closed, or the Surface is gone. The frame is closed either way.
      */
     override suspend fun present(frame: VideoFrame, targetNanos: Long): Boolean {
-        matchFrameRate(frame.pts.micros)
+        matchFrameRate(frame.pts.micros, targetNanos / 1_000L, frame.generation.value)
         if (closed.value) {
             frame.close()
             failed.incrementAndGet()
@@ -632,6 +632,8 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         }
         // Taking the picture off starts the flash guard's history afresh.
         flashGuardForgets.value = true
+        // And leaves the display free to choose its own rate until a picture comes back (#598).
+        clearFrameRate()
         signal.trySend(Unit)
     }
 
@@ -928,18 +930,29 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     /**
      * The OS's own frame-rate matching (API 30+): the display can switch to the video's cadence.
      * The rate comes from the frames themselves, because the renderer is handed frames and no track
-     * metadata. It is asked for once per Surface, and a new Surface starts a new request.
+     * metadata. It is the rate frames reach the screen, so it follows a new stream and a new speed
+     * on the same Surface (#598); a new Surface starts a new request, and taking the picture off
+     * withdraws it.
      */
     @Volatile private var matchedSurface: Surface? = null
     @Volatile private var frameRateRequest = SurfaceFrameRateRequest()
 
-    private fun matchFrameRate(ptsUs: Long) {
+    private fun matchFrameRate(ptsUs: Long, targetUs: Long, generation: Long) {
         if (android.os.Build.VERSION.SDK_INT < 30) return
         val surface = matchedSurface ?: return
-        val fps = frameRateRequest.offer(ptsUs) ?: return
+        val fps = frameRateRequest.offer(ptsUs, targetUs, generation) ?: return
         runCatching {
             surface.setFrameRate(fps, Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE)
         }
+    }
+
+    /** Withdraws the rate asked for: zero is no preference. The next frames measure again. */
+    private fun clearFrameRate() {
+        if (android.os.Build.VERSION.SDK_INT < 30) return
+        // A fresh object, not a reset, as in setSurface: present may be inside the old one.
+        frameRateRequest = SurfaceFrameRateRequest()
+        val surface = matchedSurface ?: return
+        runCatching { surface.setFrameRate(0f, Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE) }
     }
 
     public fun setDisplayRefreshRate(hz: Float) {

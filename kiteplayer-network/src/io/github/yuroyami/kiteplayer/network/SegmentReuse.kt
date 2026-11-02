@@ -166,10 +166,36 @@ internal class StorePlan(
     /** The request header that asks the server whether the stored resource changed, or null. */
     fun condition(): Pair<String, String>? = record?.condition()
 
-    /** The server answered 304 to [condition]: the spans stay, and the record is fresh again. */
+    /**
+     * The server answered 304 to [condition]: the spans stay, and the record is fresh again.
+     *
+     * The 304's own headers decide what is kept, as a full answer's do (#547). One that forbids
+     * storing with `no-store`, says `Vary: *`, or varies by other request headers than the entry was
+     * stored under, still lets this reader serve the bytes it has just confirmed, but the entry is
+     * removed, so no later request reads it: the reader keeps what it holds until it closes. A
+     * changed `Vary` also moves the resource's list of varied headers, so a later request looks for
+     * an entry under its own values. A 304 with no `Vary` header leaves the variation as it was.
+     */
     fun revalidated(facts: ResponseFacts, requestSeconds: Long): StoredResponse? {
         val renewed = record?.revalidated(facts, requestSeconds, reuse.nowSeconds()) ?: return null
-        guarded(Unit) { entry?.putRecord(renewed.encode()) }
+        val forbidden = cacheDirectives(facts.cacheControl).noStore
+        val vary = if (facts.vary.isEmpty()) null else varyNames(facts.vary)
+        val retire = guarded(true) {
+            val pointer = reuse.varyName(uri)
+            val known = reuse.store.open(pointer).use { it.record?.let(SegmentReuse::decodeVary) }.orEmpty()
+            val varyChanged = facts.vary.isNotEmpty() && vary != known
+            if (varyChanged && vary != null) {
+                if (vary.isEmpty()) {
+                    reuse.store.remove(pointer)
+                } else {
+                    reuse.store.open(pointer).use { it.putRecord(SegmentReuse.encodeVary(vary)) }
+                }
+            }
+            val retire = forbidden || varyChanged
+            if (retire) reuse.store.remove(name) else entry?.putRecord(renewed.encode())
+            retire
+        }
+        // A removed entry still serves this reader; what it writes goes with the entry at its close.
         record = renewed
         return renewed
     }

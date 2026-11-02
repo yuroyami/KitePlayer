@@ -10,22 +10,23 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalAccessibilityManager
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.LoopMode
 import io.github.yuroyami.kiteplayer.SeekMode
 import io.github.yuroyami.kiteplayer.StreamThumbnail
 import io.github.yuroyami.kiteplayer.TrackId
 import io.github.yuroyami.kiteplayer.TrackKind
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.cbrt
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Play and pause, and the moves through a queue, for a play button and its neighbours.
@@ -169,15 +170,22 @@ public class SeekBarState internal constructor(
 
     /** Jumps [delta] from the position, or from the scrub target while a scrub runs. */
     public fun stepBy(delta: Duration) {
+        step(delta)
+    }
+
+    /** [stepBy], answering false when the step moved nothing because it stood at an end already. */
+    internal fun step(delta: Duration): Boolean {
         val total = duration
-        if (!seekable || total == null) return
+        if (!seekable || total == null) return false
         val from = scrubTarget ?: source.target.position()
         val to = (from + delta).coerceIn(Duration.ZERO, total)
+        if (to == from) return false
         if (scrubStart != null) {
             moveTarget(fractionOf(to, total))
         } else {
             seek(to)
         }
+        return true
     }
 
     private fun moveTarget(fraction: Float) {
@@ -405,7 +413,8 @@ internal fun rememberVolumeState(source: ControlsSource): VolumeState = remember
 
 /**
  * Whether the controls of [player] show. They hide [timeout] after the last interaction, and only
- * while the player plays; a paused player keeps them up.
+ * while the player plays; a paused player keeps them up. A screen reader or another accessibility
+ * service can ask for longer, the time to take action the user set, and then gets it (#653).
  */
 @Composable
 public fun rememberControlsVisibility(player: KitePlayer?, timeout: Duration = 3.seconds): ControlsVisibility {
@@ -417,9 +426,18 @@ public fun rememberControlsVisibility(player: KitePlayer?, timeout: Duration = 3
 
 @Composable
 internal fun ControlsTimeout(visibility: ControlsVisibility, playing: Boolean, timeout: Duration) {
-    LaunchedEffect(visibility, visibility.visible, visibility.interactions, visibility.held, playing, timeout) {
+    // The time the user needs, as the platform's accessibility settings give it: under a screen
+    // reader the controls hid while it was still reading them out, and the focused one left the tree.
+    val accessibility = LocalAccessibilityManager.current
+    val wait = accessibility?.calculateRecommendedTimeoutMillis(
+        timeout.inWholeMilliseconds,
+        containsIcons = true,
+        containsText = false,
+        containsControls = true,
+    )?.milliseconds ?: timeout
+    LaunchedEffect(visibility, visibility.visible, visibility.interactions, visibility.held, playing, wait) {
         if (visibility.visible && playing && !visibility.held) {
-            delay(timeout)
+            delay(wait)
             visibility.hide()
         }
     }

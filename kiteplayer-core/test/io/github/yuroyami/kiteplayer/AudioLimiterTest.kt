@@ -209,6 +209,28 @@ class AudioLimiterTest {
         assertEquals(limited, ring.limitedFrames)
     }
 
+    /** A ceiling of 2, a sink that halves the sound after the ring, lets a burst at 1.6 through untouched (#612). */
+    @Test
+    fun aCeilingOfTwoLetsABurstAtOnePointSixThroughUntouched() {
+        val input = burst(1.6)
+        val ring = KotlinAudioRing(format, CAPACITY)
+        ring.setCeiling(2f)
+        assertContentEquals(input, playAll(ring, input))
+        assertEquals(0L, ring.limitedFrames)
+    }
+
+    /** A ceiling under the burst holds it at the ceiling, not at full scale (#612). */
+    @Test
+    fun aCeilingUnderTheBurstHoldsItAtTheCeiling() {
+        val ring = KotlinAudioRing(format, CAPACITY)
+        ring.setCeiling(1.25f)
+        val output = playAll(ring, burst(1.6))
+        val largest = output.maxOf { abs(it) }
+        assertTrue(largest <= 1.25f, "a sample left at $largest")
+        assertTrue(largest > 1.2f, "the loudest sample was $largest, turned down past the ceiling")
+        assertTrue(ring.limitedFrames > 0)
+    }
+
     private companion object {
         const val RATE = 48_000
         const val CAPACITY = 32_768

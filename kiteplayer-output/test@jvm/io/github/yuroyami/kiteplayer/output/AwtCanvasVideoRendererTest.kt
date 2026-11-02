@@ -1038,7 +1038,9 @@ class AwtCanvasVideoRendererTest {
                 "a ${canvasWidth}x$canvasHeight canvas draws the view at ${width}x$height: " +
                     "a turn and its picture ${turns[10] / 1_000_000.0} ms, a picture ${draws[10] / 1_000_000.0} ms (medians)",
             )
-            assertTrue(draws[10] < turns[10], "a draw through the map must cost less than building it")
+            // The times are for the record, and a busy runner moves them; what is checked is that
+            // only a turn builds the map: 20 warm-up turns, 20 measured ones, and one for the draws.
+            assertEquals(41, remap.builds, "a picture of a view already drawn read the map again")
         }
     }
 }

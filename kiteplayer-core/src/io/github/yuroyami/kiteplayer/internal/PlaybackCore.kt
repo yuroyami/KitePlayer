@@ -7863,6 +7863,19 @@ internal class PlaybackCore(
         if (status == PlaybackStatus.Playing || status == PlaybackStatus.Buffering) {
             setStatus(PlaybackStatus.Paused)
         }
+        // A capture armed while playing waits for the next presented frame, which a parked schedule
+        // never presents, so it moves to the paused path: the frame is presented again by a precise
+        // seek, or the capture is refused where the source cannot seek (#797).
+        session.video?.let { video ->
+            if (video.captureRequest.value == null) return@let
+            if (session.source.seekable) {
+                if (pendingSeek == null) queueSeek(SeekRequest(SeekTarget.Absolute(currentPosition()), SeekMode.Precise), null)
+            } else {
+                video.captureRequest.getAndSet(null)?.completeExceptionally(
+                    UnsupportedOperationException("the player paused before a frame was captured, and this source cannot seek to draw it again"),
+                )
+            }
+        }
     }
 
     /** Withdraws the seek mask, unless an accepted request still owns it. */
@@ -11589,6 +11602,11 @@ internal class PlaybackCore(
                 reply.completeExceptionally(IllegalStateException("captureFrame needs an open media item with video"))
             active.videoStream == null ->
                 reply.completeExceptionally(UnsupportedOperationException("captureFrame needs a selected video track"))
+            // A parked video lane throws every packet away, so no frame would ever come (#797).
+            !videoEnabled ->
+                reply.completeExceptionally(
+                    IllegalStateException("the picture is turned off with setVideoEnabled(false), so no frame is drawn to capture"),
+                )
             // Neither branch below can present a frame here: a precise seek to the end lands past
             // the last frame, and a playing schedule has nothing left to present (#197).
             status == PlaybackStatus.Ended ->

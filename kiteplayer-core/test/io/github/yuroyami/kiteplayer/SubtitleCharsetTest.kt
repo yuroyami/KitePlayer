@@ -1096,4 +1096,57 @@ class SubtitleCharsetTest {
             "EUC-KR" to "\u8CAB\uB01D",
         )
     }
+
+    /** A Russian UTF-8 file whose download stopped inside its last letter is still UTF-8 (#888). */
+    @Test
+    fun aUtf8FileCutInsideItsLastLetterIsStillUtf8() {
+        val text = "1\n00:00:01,000 --> 00:00:02,000\nПривет, как дела?\n\n2\n00:00:03,000 --> 00:00:04,000\nВсё хорошо"
+        val bytes = text.encodeToByteArray()
+        val cut = bytes.copyOf(bytes.size - 1)
+        val decoded = decodeSubtitleBytes(cut)
+        assertEquals("UTF-8", decoded.charset)
+        assertTrue(decoded.text.startsWith(text.dropLast(1)), decoded.text)
+    }
+
+    /** One byte from another encoding in a UTF-8 file costs that byte, not every line (#888). */
+    @Test
+    fun aUtf8FileWithOneStrayByteStaysUtf8AndSaysItIsUnsure() {
+        val line = "Привет, как дела? Всё хорошо, спасибо.\n"
+        val bytes = (line.repeat(10) + "\u00ff").encodeToByteArray().toMutableList()
+        bytes[bytes.size - 2] = 0xFF.toByte()
+        bytes.removeAt(bytes.size - 1)
+        val decoded = decodeSubtitleBytes(bytes.toByteArray())
+        assertEquals("UTF-8", decoded.charset)
+        assertFalse(decoded.confident)
+        assertTrue(decoded.text.startsWith(line.repeat(10)), decoded.text)
+        assertTrue('\uFFFD' in decoded.text)
+    }
+
+    /** A UTF-16 SubRip file saved without a byte order mark reads as UTF-16, in either order (#887). */
+    @Test
+    fun aUtf16FileWithoutAMarkReadsAsUtf16() {
+        val text = "1\n00:00:01,000 --> 00:00:02,000\nHello there\n\n2\n00:00:03,000 --> 00:00:04,000\nGoodbye\n"
+        for (littleEndian in listOf(true, false)) {
+            val bytes = ByteArray(text.length * 2)
+            text.forEachIndexed { i, c ->
+                val lo = (c.code and 0xFF).toByte()
+                val hi = (c.code shr 8).toByte()
+                bytes[2 * i] = if (littleEndian) lo else hi
+                bytes[2 * i + 1] = if (littleEndian) hi else lo
+            }
+            val decoded = decodeSubtitleBytes(bytes)
+            assertEquals(if (littleEndian) "UTF-16LE" else "UTF-16BE", decoded.charset)
+            assertEquals(text, decoded.text)
+            assertFalse(decoded.confident)
+        }
+    }
+
+    /** Plain UTF-8 with no zero byte is never taken for UTF-16. */
+    @Test
+    fun plainUtf8IsNotTakenForUtf16() {
+        val text = "1\n00:00:01,000 --> 00:00:02,000\nHello there, this is fine\n"
+        val decoded = decodeSubtitleBytes(text.encodeToByteArray())
+        assertEquals("UTF-8", decoded.charset)
+        assertTrue(decoded.confident)
+    }
 }

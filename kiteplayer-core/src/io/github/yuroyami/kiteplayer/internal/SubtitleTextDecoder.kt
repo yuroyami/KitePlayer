@@ -212,12 +212,19 @@ internal fun decodeSubtitleBytes(
     eastAsian: ((ByteArray, String) -> String?)? = null,
 ): DecodedSubtitleText {
     bom(bytes)?.let { return it }
-    if (isValidUtf8(bytes)) {
+    unmarkedUtf16(bytes)?.let { return it }
+    val utf8 = utf8Sequences(bytes)
+    if (utf8.invalid == 0) {
         return DecodedSubtitleText(bytes.decodeToString(), "UTF-8", confident = true)
     }
     // The application's own choice for a file that says nothing about itself, as VLC's default
     // encoding and mpv's sub-codepage are. Nothing is guessed, so nothing is warned (#515).
     if (fallback != null) decodeSubtitleBytesAs(bytes, fallback, eastAsian)?.let { return it }
+    // Almost all valid UTF-8: one byte from another encoding, or a damaged stretch, is no reason
+    // to read every other line as a legacy encoding. The bad bytes become U+FFFD (#888).
+    if (utf8.valid > 0 && utf8.invalid * UTF8_DAMAGE_RATIO <= utf8.valid) {
+        return DecodedSubtitleText(bytes.decodeToString(), "UTF-8", confident = false)
+    }
     // Not UTF-8 and no mark. Anything from here is inference, and an unsure reading is what an
     // honest failure looks like rather than an exception: a subtitle track that shows imperfect
     // text beats one that does not load.
@@ -376,8 +383,20 @@ private fun decodeUtf16(bytes: ByteArray, littleEndian: Boolean, from: Int = 2):
     }
 }
 
-/** Strict: overlongs, surrogates, out-of-range and truncated tails all fail. */
-private fun isValidUtf8(bytes: ByteArray): Boolean {
+/** How many valid multi-byte sequences a damaged one must be outnumbered by to read as UTF-8. */
+private const val UTF8_DAMAGE_RATIO = 50
+
+/** The multi-byte UTF-8 sequences of a file: those that are valid, and those that are not. */
+private class Utf8Sequences(val valid: Int, val invalid: Int)
+
+/**
+ * Strict: overlongs, surrogates and out-of-range values are invalid, each counted once, and the
+ * count moves on one byte. A sequence cut by the end of the file after valid UTF-8 is neither: a
+ * download that stopped inside its last letter is still UTF-8 (#888).
+ */
+private fun utf8Sequences(bytes: ByteArray): Utf8Sequences {
+    var valid = 0
+    var invalid = 0
     var i = 0
     while (i < bytes.size) {
         val b = bytes[i].toInt() and 0xFF
@@ -389,20 +408,64 @@ private fun isValidUtf8(bytes: ByteArray): Boolean {
             b in 0xE0..0xEF -> { extra = 2; code = b and 0x0F }
             b in 0xF0..0xF4 -> { extra = 3; code = b and 0x07 }
             // 0xC0/0xC1 are overlong two-byte leads and 0x80..0xBF cannot lead at all.
-            else -> return false
+            else -> { invalid++; i++; continue }
         }
-        if (i + extra >= bytes.size) return false
-        for (k in 1..extra) {
+        var k = 1
+        var broken = false
+        while (k <= extra && i + k < bytes.size) {
             val c = bytes[i + k].toInt() and 0xFF
-            if (c !in 0x80..0xBF) return false
+            if (c !in 0x80..0xBF) { broken = true; break }
             code = (code shl 6) or (c and 0x3F)
+            k++
+        }
+        if (!broken && i + k >= bytes.size && k <= extra) {
+            // Cut by the end of the file. With UTF-8 before it that is a truncated download; with
+            // nothing before it, a file of one broken sequence is not evidence of UTF-8.
+            if (valid == 0) invalid++
+            break
         }
         val overlong = (extra == 2 && code < 0x800) || (extra == 3 && code < 0x10000)
-        if (overlong || code in 0xD800..0xDFFF || code > 0x10FFFF) return false
+        if (broken || overlong || code in 0xD800..0xDFFF || code > 0x10FFFF) {
+            invalid++
+            i++
+            continue
+        }
+        valid++
         i += extra + 1
     }
-    return true
+    return Utf8Sequences(valid, invalid)
 }
+
+/**
+ * A UTF-16 file without a byte-order mark, told by where its zero bytes fall in the first few
+ * kilobytes: Latin text in UTF-16LE puts a zero in every odd byte and almost never in an even one.
+ * Text in any 8-bit encoding has no zero bytes at all, so such a file passed the UTF-8 check with
+ * a NUL between every two letters, and no reader found a timing line in it (#887).
+ */
+private fun unmarkedUtf16(bytes: ByteArray): DecodedSubtitleText? {
+    val sample = minOf(bytes.size, UTF16_SAMPLE) and 1.inv()
+    val units = sample / 2
+    if (units < UTF16_MIN_UNITS) return null
+    var evenZeros = 0
+    var oddZeros = 0
+    for (i in 0 until sample) {
+        if (bytes[i].toInt() != 0) continue
+        if (i % 2 == 0) evenZeros++ else oddZeros++
+    }
+    fun many(zeros: Int) = zeros * 10 >= units * 3
+    fun few(zeros: Int) = zeros * 50 <= units
+    return when {
+        many(oddZeros) && few(evenZeros) ->
+            DecodedSubtitleText(decodeUtf16(bytes, littleEndian = true, from = 0), "UTF-16LE", confident = false)
+        many(evenZeros) && few(oddZeros) ->
+            DecodedSubtitleText(decodeUtf16(bytes, littleEndian = false, from = 0), "UTF-16BE", confident = false)
+        else -> null
+    }
+}
+
+/** How many bytes [unmarkedUtf16] looks at, and the fewest code units it decides on. */
+private const val UTF16_SAMPLE = 4096
+private const val UTF16_MIN_UNITS = 8
 
 /**
  * Names the multi-byte East Asian encodings the bytes could be in, likeliest first, from their

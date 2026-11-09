@@ -13127,11 +13127,13 @@ internal class PlaybackCore(
             // What changed is that the failures are COLLECTED rather than dropped: a decoder or a
             // device that refused to close used to leave no trace anywhere.
             val releaseFailures = mutableListOf<String>()
+            // A CancellationException is recorded like any other failure: under NonCancellable it
+            // cannot be this release's own, so it came from a step, a renderer's own withTimeout
+            // for one, and rethrowing it skipped every step after it, the decoder and backend
+            // closes among them (#710).
             suspend fun release(what: String, block: suspend () -> Unit) {
                 try {
                     block()
-                } catch (cancellation: CancellationException) {
-                    throw cancellation
                 } catch (failure: Throwable) {
                     releaseFailures += "$what: ${failure.message ?: failure::class.simpleName}"
                 }

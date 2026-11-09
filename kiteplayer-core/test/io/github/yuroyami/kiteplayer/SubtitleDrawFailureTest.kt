@@ -123,4 +123,27 @@ class SubtitleDrawFailureTest {
         checkNotNull(harness.renderer).withdrawalFailure = null
         harness.close()
     }
+
+    /**
+     * A renderer's own withTimeout throws a CancellationException, and under the release's
+     * NonCancellable it is no cancellation of the release: it is recorded and every later step
+     * still runs (#710).
+     */
+    @Test
+    fun aWithdrawalThatThrowsACancellationStillLetsStopReleaseTheSession() = runTest {
+        val harness = CoreHarness(this, script = script)
+        harness.firstLineOnARendererThatCannotWithdraw()
+        checkNotNull(harness.renderer).withdrawalFailure = kotlinx.coroutines.CancellationException("the renderer's own timeout")
+        val session = harness.session
+        harness.core.stop()
+        harness.run(100.milliseconds)
+        assertEquals(1, session.closeCount, "the backend session was never closed")
+        assertEquals(0, harness.ledger.liveCount, "a packet or a frame of the stopped session leaked")
+        assertTrue(
+            harness.notReleasedWarnings().any { "the renderer's own timeout" in it },
+            "the refused withdrawal left no trace: ${harness.notReleasedWarnings()}",
+        )
+        checkNotNull(harness.renderer).withdrawalFailure = null
+        harness.close()
+    }
 }

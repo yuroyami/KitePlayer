@@ -806,16 +806,48 @@ internal class KotlinAudioRing(
      * Read by the core to anchor the audio clock. Null before the device has played anything, and
      * after a flush.
      */
+    /**
+     * The anchor the callback last published. Bounded as kprt_ring_anchor is: at most
+     * [ANCHOR_READ_ATTEMPTS] tries, then the last good reading, counted in [anchorGiveups]. An
+     * unbounded spin held the caller, and every thread waiting on its lock, for as long as the
+     * device thread was preempted between its two sequence stores (#827).
+     */
     override fun anchor(): AudioAnchor? {
-        while (true) {
+        repeat(ANCHOR_READ_ATTEMPTS) {
             val seq = anchorSeq.value
-            if (seq % 2L != 0L) continue
-            if (!anchorValid.value) return null
+            if (seq % 2L != 0L) return@repeat
+            val valid = anchorValid.value
             val pts = anchorPtsUs.value
             val nanos = anchorNanos.value
-            if (anchorSeq.value != seq) continue
-            return AudioAnchor(Pts(pts), nanos)
+            if (anchorSeq.value != seq) return@repeat
+            readerValid.value = valid
+            readerPtsUs.value = pts
+            readerNanos.value = nanos
+            return if (valid) AudioAnchor(Pts(pts), nanos) else null
         }
+        anchorGiveupCount.incrementAndGet()
+        return if (readerValid.value) AudioAnchor(Pts(readerPtsUs.value), readerNanos.value) else null
+    }
+
+    // The last anchor read whole, which a read that runs out of attempts answers with.
+    private val readerValid = atomic(false)
+    private val readerPtsUs = atomic(0L)
+    private val readerNanos = atomic(0L)
+    private val anchorGiveupCount = atomic(0L)
+
+    /** Anchor reads that ran out of attempts and answered with the last good reading. */
+    val anchorGiveups: Long get() = anchorGiveupCount.value
+
+    /**
+     * Holds the anchor's counter odd, the state a device thread preempted between its two stores
+     * leaves, until [endAnchorWriteForTest]. Tests only.
+     */
+    internal fun beginAnchorWriteForTest() {
+        anchorSeq.incrementAndGet()
+    }
+
+    internal fun endAnchorWriteForTest() {
+        anchorSeq.incrementAndGet()
     }
 
     /** Tells the ring that the feeder has finished, so trailing silence is not an underrun. */
@@ -859,6 +891,9 @@ internal class KotlinAudioRing(
          * between two device callbacks is not a file anyone can play.
          */
         const val MAX_SEGMENTS: Int = 4
+
+        /** The anchor read's budget, KPRT_ANCHOR_READ_ATTEMPTS of the C ring. */
+        const val ANCHOR_READ_ATTEMPTS: Int = 64
 
         /**
          * The saturator the gain walk folds through above unity.

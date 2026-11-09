@@ -55,4 +55,27 @@ class AudioRingBoundedTest {
         assertEquals(1_025_000L, assertNotNull(ring.anchor()).pts.micros)
         assertEquals(2L, ring.segmentGiveups, "a released slot is read again")
     }
+
+    /**
+     * The core's anchor read never waits for the device thread either (#827). The read runs on the
+     * thread that holds the counter odd, so a read that spun would never return.
+     */
+    @Test
+    fun anAnchorHeldOddAnswersTheLastGoodReadingAndCountsTheGiveUp() {
+        val ring = KotlinAudioRing(format, 4_800)
+        assertNull(ring.anchor())
+        ring.write(FloatArray(960 * 2), 0, 960, Pts(1_000_000))
+        ring.render(NullBuffer(format), 480, 0L)
+        assertEquals(1_010_000L, assertNotNull(ring.anchor()).pts.micros)
+        assertEquals(0L, ring.anchorGiveups, "a read that is not interrupted gives up nothing")
+
+        ring.beginAnchorWriteForTest()
+        assertEquals(1_010_000L, assertNotNull(ring.anchor()).pts.micros, "the last good reading")
+        assertEquals(1L, ring.anchorGiveups)
+        ring.endAnchorWriteForTest()
+
+        ring.render(NullBuffer(format), 240, 0L)
+        assertEquals(1_015_000L, assertNotNull(ring.anchor()).pts.micros)
+        assertEquals(1L, ring.anchorGiveups)
+    }
 }

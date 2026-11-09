@@ -335,7 +335,7 @@ class AudioPlaybackTest {
         audio.open(format(2))
         audio.submitDecoded(pts(0), FloatArray(4800 * 2) { 0.1f }, 4800, format(2))
         val started = testScheduler.currentTime
-        audio.drain()
+        assertFailsWith<IllegalStateException> { audio.drain() }
         val waited = testScheduler.currentTime - started
         assertTrue(waited in 2_000L..3_000L, "drain gave up after $waited ms of a device that took nothing")
     }

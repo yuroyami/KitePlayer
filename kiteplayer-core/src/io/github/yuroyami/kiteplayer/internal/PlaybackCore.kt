@@ -9222,7 +9222,12 @@ internal class PlaybackCore(
                 return
             }
             if (audio != null) {
-                val finished = withTimeoutOrNull(DRAIN_DEADLINE) { audio.drain() } != null
+                // drain bounds its own wait now and throws when the device stopped taking audio (#831).
+                val finished = try {
+                    withTimeoutOrNull(DRAIN_DEADLINE) { audio.drain() } != null
+                } catch (stopped: IllegalStateException) {
+                    false
+                }
                 if (!finished) {
                     endOfStream.drainFailed = true
                     warn(

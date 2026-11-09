@@ -954,12 +954,15 @@ public class AudioPlayback(
      *
      * The wait is bounded (#831). When the device takes nothing from the ring for
      * [DRAIN_STALL_LIMIT], as when its writer stopped after a lost device or a browser's audio
-     * context was never resumed, this returns with the rest unplayed rather than waiting for ever,
-     * and the device's own drain gets the same limit past its buffer. Either way the device counts
-     * as stopped afterwards.
+     * context was never resumed, or when its own drain does not finish within its buffer and the
+     * same limit, this throws [IllegalStateException] with the rest unplayed rather than waiting
+     * for ever. Either way the device counts as stopped afterwards.
+     *
+     * @throws IllegalStateException when the device stopped taking audio before it was all played.
      *
      * Belongs to the session owner.
      */
+    @Throws(IllegalStateException::class, kotlin.coroutines.cancellation.CancellationException::class)
     public suspend fun drain() {
         val ring = ring ?: return
         ring.markEnding()
@@ -975,12 +978,19 @@ public class AudioPlayback(
             if (now < left) stalled = Duration.ZERO else stalled += wait
             left = now
         }
-        if (left <= 0) {
+        val drained = left <= 0 && run {
             val rate = format?.sampleRate ?: 0
             val deviceBuffer = if (rate > 0) (sink.deviceBufferFrames.toLong() * 1_000_000L / rate).microseconds else Duration.ZERO
-            withTimeoutOrNull(deviceBuffer + DRAIN_STALL_LIMIT) { sink.drain() }
+            withTimeoutOrNull(deviceBuffer + DRAIN_STALL_LIMIT) { sink.drain() } != null
         }
         deviceRunning = false
+        check(drained) {
+            if (left > 0) {
+                "the device took no audio for $DRAIN_STALL_LIMIT, so $left frames were left unplayed"
+            } else {
+                "the device did not finish its own drain within its buffer and $DRAIN_STALL_LIMIT"
+            }
+        }
     }
 
     /**

@@ -12079,14 +12079,6 @@ internal class PlaybackCore(
                 if (target > origin) KeyframeChoice.After else KeyframeChoice.Before
             else -> request.keyframe
         }
-        if (request.redraw) {
-            // The position the viewer sees stays where it is while the picture is decoded again.
-            if (session.heldPositionUs == NO_POSITION) session.heldPositionUs = publishedPositionMicros.value
-        } else {
-            session.pictureHoldsPosition = false
-            session.heldPositionUs = NO_POSITION
-        }
-
         // 1
         val previousEpoch = requestedEpoch
         requestedEpoch = requestedEpoch.next()
@@ -12097,9 +12089,6 @@ internal class PlaybackCore(
         // read the old unconditional Buffering as a momentary unpause. A seek that starts at
         // Ended keeps Ended until the landing below proves the position moved.
         if (playRequested && status != PlaybackStatus.Ended) setStatus(PlaybackStatus.Buffering)
-        endOfStream.reset()
-        stillImageFinished = false
-        stillImageShownSinceNanos = 0
 
         // 2
         session.schedulerMode.value = SCHEDULER_IDLE
@@ -12126,6 +12115,18 @@ internal class PlaybackCore(
             if (!playRequested && status != PlaybackStatus.Ended) setStatus(PlaybackStatus.Paused)
             return
         }
+        // Only once every worker parked, so a seek refused above changed none of this, as Rejected
+        // promises: the frame-step hold, the end of stream and the still image all stood (#788).
+        if (request.redraw) {
+            // The position the viewer sees stays where it is while the picture is decoded again.
+            if (session.heldPositionUs == NO_POSITION) session.heldPositionUs = publishedPositionMicros.value
+        } else {
+            session.pictureHoldsPosition = false
+            session.heldPositionUs = NO_POSITION
+        }
+        endOfStream.reset()
+        stillImageFinished = false
+        stillImageShownSinceNanos = 0
         // A target in another run of the ordered edition: the session plays that run from here on,
         // with every lane parked, and the reads stop at its end (#501).
         if (targetRun != null && targetRun != session.run) moveToRun(session, targetRun)

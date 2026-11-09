@@ -181,16 +181,23 @@ internal object PlaylistText {
         return inner.ifEmpty { null }
     }
 
-    /** `mm:ss:ff`, in microseconds, or null for anything else. */
+    /**
+     * `mm:ss:ff`, in microseconds, or null for anything else. Minutes past [MAX_CUE_MINUTES] are
+     * refused too: unchecked, a long run of digits overflowed into a start the clip refuses, and
+     * the whole parse threw instead of skipping one track (#874).
+     */
     private fun cueTime(text: String): Long? {
         val parts = text.split(':')
         if (parts.size != 3) return null
         val minutes = parts[0].toLongOrNull() ?: return null
         val seconds = parts[1].toLongOrNull() ?: return null
         val frames = parts[2].toLongOrNull() ?: return null
-        if (minutes < 0 || seconds !in 0..59 || frames !in 0..74) return null
+        if (minutes !in 0..MAX_CUE_MINUTES || seconds !in 0..59 || frames !in 0..74) return null
         return (minutes * 60 + seconds) * 1_000_000 + frames * 1_000_000 / 75
     }
+
+    /** About 69 days: far past any disc, and far below what a microsecond count can hold. */
+    private const val MAX_CUE_MINUTES = 100_000L
 }
 
 /**

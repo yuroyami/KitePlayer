@@ -199,6 +199,17 @@ class PlaylistsTest {
         assertEquals(listOf(MediaClip(2.seconds, second), MediaClip(second, null)), clips)
     }
 
+    /** A time too long to be a disc skips its track and keeps the rest of the sheet (#874). */
+    @Test
+    fun aCueTimeWithTooManyMinutesSkipsItsTrack() {
+        for (minutes in listOf("10000000000000", "153722867280913", "100001")) {
+            val cue = "FILE a.flac WAVE\nTRACK 01 AUDIO\nINDEX 01 00:00:00\nTRACK 02 AUDIO\nINDEX 01 $minutes:00:00\n" +
+                "TRACK 03 AUDIO\nINDEX 01 03:00:00\n"
+            val clips = Playlists.parse(cue, "/m/a.cue").orEmpty().map { it.clip }
+            assertEquals(listOf(MediaClip(0.seconds, 180.seconds), MediaClip(180.seconds, null)), clips, minutes)
+        }
+    }
+
     @Test
     fun aCueSheetOfSeveralFilesEndsEachFilesLastTrackAtItsEnd() {
         val cue = "FILE disc1.wav WAVE\nTRACK 01 AUDIO\nINDEX 01 00:00:00\nTRACK 02 AUDIO\nINDEX 01 03:00:00\n" +

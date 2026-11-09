@@ -106,23 +106,29 @@ public object Fmp4 {
         val long = u8(init, elst.dataStart) == 1
         val count = u32(init, elst.dataStart + 4)
         val entry = if (long) 20 else 12
-        if (count > 2 || elst.dataStart + 8 + count * entry > elst.end) return 0L
+        if (elst.dataStart + 8 + count * entry > elst.end) return 0L
+        // As FFmpeg's mov_build_index takes it, whatever the list's length (#755): an empty edit
+        // first gives the empty duration, the edit after it the start when it lies in the media,
+        // and FFmpeg only warns of the entries after those.
         var empty = 0L
         var start = 0L
-        var first = 0L
+        var startIndex = 0L
         for (i in 0 until count) {
             val at = elst.dataStart + 8 + i.toInt() * entry
             val duration = if (long) u64(init, at) else u32(init, at)
             val time = if (long) u64(init, at + 8) else s32(init, at + 4)
             when {
-                i == 0L && time == -1L -> { empty = duration; first = 1 }
-                i == first && time >= 0 -> start = time
-                else -> return 0L
+                i == 0L && time == -1L -> { empty = duration; startIndex = 1 }
+                i == startIndex && time >= 0 -> start = time
             }
         }
-        if (movieTimescale <= 0) return 0L
-        return start - (empty / movieTimescale * timescale + empty % movieTimescale * timescale / movieTimescale)
+        if (movieTimescale <= 0 || (empty == 0L && start == 0L)) return 0L
+        return start - rescaleNearest(empty, timescale, movieTimescale)
     }
+
+    /** [value] × [to] / [from], rounded to the nearest as FFmpeg's av_rescale rounds, without overflow. */
+    private fun rescaleNearest(value: Long, to: Long, from: Long): Long =
+        value / from * to + (value % from * to + from / 2) / from
 
     /** The samples of [track] in the media segment [segment], in decode order. */
     public fun samples(segment: ByteArray, track: Track, maxSamples: Long = MAX_SAMPLES_PER_SEGMENT): List<Sample> =

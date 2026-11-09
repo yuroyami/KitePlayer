@@ -164,10 +164,14 @@ class Fmp4Test {
             Fmp4.tracks(Mp4Bytes.init(1, 15_360, "vide", "avc1", edits = edits.toList(), movieTimescale = movieTimescale)).single().timeOffset
         assertEquals(0L, offset(), "no edit list")
         assertEquals(1024L, offset(0L to 1024L), "one edit that starts two frames into the media")
-        // An empty edit of 66 ms of the movie is 1013 ticks of the media, which count the other way.
-        assertEquals(11L, offset(66L to -1L, 0L to 1024L))
-        assertEquals(-1013L, offset(66L to -1L, 0L to 0L))
-        assertEquals(0L, offset(0L to 1024L, 0L to 4096L), "FFmpeg applies no offset for a list of more edits")
+        // An empty edit of 66 ms of the movie is 1013.76 ticks of the media, which FFmpeg's
+        // av_rescale rounds to 1014, and which count the other way (#755).
+        assertEquals(10L, offset(66L to -1L, 0L to 1024L))
+        assertEquals(-1014L, offset(66L to -1L, 0L to 0L))
+        // FFmpeg's mov_build_index takes the start of the first edit in the media whatever follows
+        // it, and only warns of the rest (#755).
+        assertEquals(1024L, offset(0L to 1024L, 0L to 4096L), "a list of more edits still starts where its first does")
+        assertEquals(10L, offset(66L to -1L, 0L to 1024L, 100L to 9_000L), "a third edit changes nothing")
         assertEquals(0L, offset(66L to -1L, 0L to 1024L, movieTimescale = 0), "nor without a movie timescale")
     }
 }

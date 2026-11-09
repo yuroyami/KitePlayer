@@ -1322,7 +1322,13 @@ private class KiteFFmpegVideoDecoder(
             val info = raw.info
             val input = listOf(info.width, info.height, info.pixelFormat, info.sampleAspectRatio)
             if (filterGraph != null && input != graphInput) {
-                retireGraph { out -> filteredPending.addLast(DecodedPicture(out.copy(), scenePeakOf(out))) }
+                // The old graph's flush can throw, and the new picture is still this lane's (#717).
+                try {
+                    retireGraph { out -> filteredPending.addLast(DecodedPicture(out.copy(), scenePeakOf(out))) }
+                } catch (failure: Throwable) {
+                    raw.close()
+                    throw failure
+                }
             }
             val graph = filterGraph ?: try {
                 io.github.yuroyami.kiteffmpeg.FilterGraph.buildVideo(
@@ -1700,7 +1706,13 @@ private class KiteFFmpegAudioDecoder(
             if (filterGraph != null && input != graphInput) {
                 // The decoder changed its format mid-stream, and a graph takes one input format. The
                 // old graph's tail, such as the window a tempo filter holds, comes out first (#484).
-                retireGraph { out -> filteredPending.addLast(out.copy()) }
+                // The old graph's flush can throw, and the new frame is still this lane's (#717).
+                try {
+                    retireGraph { out -> filteredPending.addLast(out.copy()) }
+                } catch (failure: Throwable) {
+                    raw.close()
+                    throw failure
+                }
             }
             val graph = filterGraph ?: try {
                 io.github.yuroyami.kiteffmpeg.FilterGraph.buildAudio(

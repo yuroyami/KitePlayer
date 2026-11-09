@@ -74,30 +74,40 @@ public object Thumbnails {
                     val decoded = source.extractFrame(position.inWholeMicroseconds, stream)
                     val software = if (decoded.info.isHardware) decoded.use { it.downloadFromHardware() } else decoded
                     val info = software.info
-                    val shown = shownGeometry(
-                        info.width, info.height, info.sampleAspectRatio.num, info.sampleAspectRatio.den,
-                        crop, stream.rotationDegrees, stream.mirrored, maxWidth,
-                    )
-                    val filter = shown.filter
-                    if (filter == null) {
-                        return@map software.use { Thumbnail(position, info.width, info.height, it.encodeImage(codec), format) }
+                    // The picture is this loop's until the graph takes it, so a geometry or a build
+                    // that throws in between closes it: a 4K 10-bit picture is 25 MB (#717).
+                    fun <T> closingOnFailure(block: () -> T): T = try {
+                        block()
+                    } catch (failure: Throwable) {
+                        software.close()
+                        throw failure
                     }
-                    val key = listOf(filter, info.width, info.height, info.pixelFormat)
-                    if (graph == null || graphFor != key) {
-                        graph?.close()
-                        graph = null
-                        graph = FilterGraph.buildVideo(
-                            description = filter,
-                            width = info.width,
-                            height = info.height,
-                            pixelFormat = info.pixelFormat,
-                            timeBase = info.timeBase,
-                            frameRate = frameRate,
-                            sampleAspectRatio = info.sampleAspectRatio,
+                    val shown = closingOnFailure {
+                        shownGeometry(
+                            info.width, info.height, info.sampleAspectRatio.num, info.sampleAspectRatio.den,
+                            crop, stream.rotationDegrees, stream.mirrored, maxWidth,
                         )
-                        graphFor = key
                     }
-                    val current = checkNotNull(graph)
+                    val filter = shown.filter
+                        ?: return@map software.use { Thumbnail(position, info.width, info.height, it.encodeImage(codec), format) }
+                    val current = closingOnFailure {
+                        val key = listOf(filter, info.width, info.height, info.pixelFormat)
+                        if (graph == null || graphFor != key) {
+                            graph?.close()
+                            graph = null
+                            graph = FilterGraph.buildVideo(
+                                description = filter,
+                                width = info.width,
+                                height = info.height,
+                                pixelFormat = info.pixelFormat,
+                                timeBase = info.timeBase,
+                                frameRate = frameRate,
+                                sampleAspectRatio = info.sampleAspectRatio,
+                            )
+                            graphFor = key
+                        }
+                        checkNotNull(graph)
+                    }
                     var image: Thumbnail? = null
                     val take: (Frame) -> Unit = { out ->
                         if (image == null) {

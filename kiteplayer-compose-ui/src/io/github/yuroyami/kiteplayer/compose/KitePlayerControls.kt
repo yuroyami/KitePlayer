@@ -193,10 +193,26 @@ internal fun Controls(
     var barHeight by remember { mutableIntStateOf(0) }
     val focusManager = LocalFocusManager.current
 
+    // Whether each menu's button is shown. A menu's focus requester is attached only while its
+    // button is, so focus may return only to a shown one: asking a requester that is not attached
+    // for focus throws, and a menu outlived its button when its tracks went away (#934).
+    fun buttonShown(menu: ControlsMenu): Boolean = when (menu) {
+        ControlsMenu.Audio -> audio.options.size > 1
+        ControlsMenu.Subtitles -> subtitles.options.isNotEmpty()
+        ControlsMenu.Quality -> quality.options.size > 2
+        ControlsMenu.Speed -> speed.options.isNotEmpty()
+    }
+
     fun closeMenu() {
         val closing = openMenu ?: return
         openMenu = null
-        if (menuByKey) returnFocusTo = closing
+        if (menuByKey && buttonShown(closing)) returnFocusTo = closing
+    }
+
+    // A menu whose button went away closes with it.
+    val openMenuShown = openMenu?.let(::buttonShown) ?: true
+    LaunchedEffect(openMenuShown) {
+        if (!openMenuShown) openMenu = null
     }
 
     // A scrub or an open menu holds the controls up; the timeout starts again when it lets go.
@@ -214,7 +230,7 @@ internal fun Controls(
     LaunchedEffect(returnFocusTo) {
         val menu = returnFocusTo ?: return@LaunchedEffect
         returnFocusTo = null
-        menuButtons.getValue(menu).requestFocus()
+        if (buttonShown(menu)) menuButtons.getValue(menu).requestFocus()
     }
 
     val lift = remember(source) { SubtitleLift() }
@@ -297,20 +313,20 @@ internal fun Controls(
                         )
                         if (wide) VolumeSlider(volume, visibility, style, labels)
                         Spacer(Modifier.weight(1f))
-                        MenuButton(ControlsMenu.Audio, audio.options.size > 1, ControlIcons.Audio, labels.audio, menuButtons, style, visibility) {
+                        MenuButton(ControlsMenu.Audio, buttonShown(ControlsMenu.Audio), ControlIcons.Audio, labels.audio, menuButtons, style, visibility) {
                             menuByKey = it
                             openMenu = if (openMenu == ControlsMenu.Audio) null else ControlsMenu.Audio
                         }
-                        MenuButton(ControlsMenu.Subtitles, subtitles.options.isNotEmpty(), ControlIcons.Subtitles, labels.subtitles, menuButtons, style, visibility) {
+                        MenuButton(ControlsMenu.Subtitles, buttonShown(ControlsMenu.Subtitles), ControlIcons.Subtitles, labels.subtitles, menuButtons, style, visibility) {
                             menuByKey = it
                             openMenu = if (openMenu == ControlsMenu.Subtitles) null else ControlsMenu.Subtitles
                         }
                         // The automatic option and one variant leave nothing to choose.
-                        MenuButton(ControlsMenu.Quality, quality.options.size > 2, ControlIcons.Quality, labels.quality, menuButtons, style, visibility) {
+                        MenuButton(ControlsMenu.Quality, buttonShown(ControlsMenu.Quality), ControlIcons.Quality, labels.quality, menuButtons, style, visibility) {
                             menuByKey = it
                             openMenu = if (openMenu == ControlsMenu.Quality) null else ControlsMenu.Quality
                         }
-                        MenuButton(ControlsMenu.Speed, speed.options.isNotEmpty(), ControlIcons.Speed, labels.speed, menuButtons, style, visibility) {
+                        MenuButton(ControlsMenu.Speed, buttonShown(ControlsMenu.Speed), ControlIcons.Speed, labels.speed, menuButtons, style, visibility) {
                             menuByKey = it
                             openMenu = if (openMenu == ControlsMenu.Speed) null else ControlsMenu.Speed
                         }

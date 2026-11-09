@@ -22,6 +22,7 @@ import androidx.compose.ui.test.click
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
@@ -292,6 +293,26 @@ class ControlsUiTest {
         onNodeWithText("720p").assertExists()
         onNodeWithContentDescription("Quality").performClick()
         onNodeWithText("Automatic").assertDoesNotExist()
+    }
+
+    /** A menu whose button went away closes, and Escape after it does not crash (#934). */
+    @Test
+    fun aMenuWhoseButtonVanishedClosesWithoutACrash() = runComposeUiTest {
+        val target = ScriptedTarget(everything)
+        showControls(target)
+        onNodeWithContentDescription("Audio").requestFocus().assert(isFocused())
+        onNode(isFocused()).performKeyInput { pressKey(Key.Enter) }
+        onNodeWithText("ja").assertExists()
+        // A new item with one audio track: the Audio button hides while its menu is open.
+        val tracks = everything.tracks
+        target.snapshot.value = everything.copy(
+            tracks = tracks.copy(all = tracks.all.filterNot { it.id == TrackId(2) }),
+        )
+        waitForIdle()
+        onNodeWithContentDescription("Audio").assertDoesNotExist()
+        onNodeWithText("ja").assertDoesNotExist()
+        onRoot().performKeyInput { pressKey(Key.Escape) }
+        waitForIdle()
     }
 
     @Test

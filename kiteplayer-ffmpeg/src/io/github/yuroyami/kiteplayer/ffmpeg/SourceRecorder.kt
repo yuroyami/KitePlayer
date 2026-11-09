@@ -32,7 +32,8 @@ internal class SourceRecorder(
 
     val path: String? get() = synchronized(lock) { recording?.path }
 
-    fun start(path: String, streams: List<StreamInfo>) {
+    /** [known] is every stream index the source had when the recording started, the left out ones included. */
+    fun start(path: String, streams: List<StreamInfo>, known: Set<Int>) {
         synchronized(lock) {
             recording?.let { error("a recording to ${it.path} already runs; stop it first") }
             // The muxer opens its file only at the first packet, so a bad path would otherwise fail
@@ -45,7 +46,7 @@ internal class SourceRecorder(
             } catch (refusal: FFmpegException) {
                 throw refusal.asRecordingRefusal(path)
             }
-            recording = Recording(path, sink, streams.filter(::matroskaHolds))
+            recording = Recording(path, sink, streams.filter(::matroskaHolds), known)
         }
     }
 
@@ -69,6 +70,8 @@ internal class SourceRecorder(
         runCatching { ended.sink.close() }
         val why = if (failure is SetupRefused) {
             "the file could not be set up: ${(failure.cause ?: failure).describe()}"
+        } else if (failure is LateStream) {
+            "stream ${failure.index} appeared after the recording started, and a Matroska file takes no new track once it has begun"
         } else {
             "a packet could not be written: ${failure.describe()}"
         }
@@ -98,7 +101,12 @@ internal class SourceRecorder(
         warn(PlaybackWarning.RecordingStopped(ended.path, why))
     }
 
-    private class Recording(val path: String, val sink: MediaSink, private val streams: List<StreamInfo>) {
+    private class Recording(
+        val path: String,
+        val sink: MediaSink,
+        private val streams: List<StreamInfo>,
+        private val known: Set<Int>,
+    ) {
         private var copies: Map<Int, CopyStream>? = null
 
         /** The stream whose keyframe starts the file, or null when the file has no picture. */
@@ -108,7 +116,13 @@ internal class SourceRecorder(
 
         fun copy(packet: Packet, source: MediaSource) {
             val copies = this.copies ?: declare(source).also { this.copies = it }
-            val copy = copies[packet.streamIndex] ?: return
+            val copy = copies[packet.streamIndex] ?: run {
+                // A stream left out on purpose is not copied. One that appeared after the start
+                // cannot join a Matroska file that has begun, and dropping its packets in silence
+                // left a file with the picture only (#868).
+                if (packet.streamIndex !in known) throw LateStream(packet.streamIndex)
+                return
+            }
             // The muxer refuses a packet with no time at all.
             val at = packet.ptsMicros ?: packet.dtsMicros ?: return
             val start = startMicros ?: run {
@@ -135,6 +149,9 @@ internal class SourceRecorder(
 
     /** A recording the sink would not set up, as opposed to a packet it could not write. */
     private class SetupRefused(cause: Exception) : Exception(cause)
+
+    /** A stream that appeared after the recording started, which the file cannot take. */
+    private class LateStream(val index: Int) : Exception("stream $index appeared after the recording started")
 }
 
 /**

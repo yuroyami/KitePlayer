@@ -448,12 +448,17 @@ public class KiteFFmpegSource internal constructor(
     override val recordingPath: String? get() = recorder.path
 
     /**
-     * Records every stream this source reads, except cover art, which is one picture the file
+     * Records the streams this source reads, except cover art, which is one picture the file
      * would never show again, and a subtitle format Matroska cannot hold.
+     *
+     * Every stream the source has is declared when the file starts, because Matroska takes no
+     * new track once it has begun, so a track selected during the recording is in the file too;
+     * one never read stays empty. A stream that appears later, which a transport stream may
+     * announce after the open, ends the recording with a warning that names it (#868).
      */
     override fun startRecording(path: String) {
         check(readStreams.isNotEmpty()) { "streams must be selected before a recording starts" }
-        recorder.start(path, readStreams.filterNot { it.disposition.attachedPicture })
+        recorder.start(path, source.streams.filterNot { it.disposition.attachedPicture }, known = source.streams.map { it.index }.toSet())
     }
 
     override fun stopRecording() {

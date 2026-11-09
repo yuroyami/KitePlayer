@@ -74,6 +74,40 @@ class SourceRecordingTest {
         }
     }
 
+    /**
+     * A track selected while the recording runs is in the file. The copy streams were declared
+     * from the streams selected at the start, and every packet of a later one was dropped (#868).
+     */
+    @Test
+    fun aTrackSelectedDuringTheRecordingIsInTheFile() = runBlocking {
+        val mediaDir = formatMatrixMediaDir() ?: return@runBlocking
+        val path = recordingScratchPath("kiteplayer-recording-late-track.mkv")
+        val source = openSource("$mediaDir/multitrack.mkv")
+        val audio = source.streams.filter { it.kind == TrackKind.Audio }
+        val video = source.streams.first { it.kind == TrackKind.Video }
+        try {
+            source.selectStreams(setOf(video.index, audio[0].index))
+            source.startRecording(path)
+            source.readUntil(1_000_000)
+            source.selectStreams(setOf(video.index, audio[0].index, audio[1].index))
+            source.readUntil(2_500_000)
+            source.stopRecording()
+        } finally {
+            source.close()
+        }
+
+        val recorded = openSource(path)
+        try {
+            val second = recorded.streams.filter { it.kind == TrackKind.Audio }.getOrNull(1)
+            assertNotNull(second, "the second sound track is not in the file: ${recorded.streams.map { it.codec }}")
+            recorded.selectStreams(setOf(second.index))
+            val packet = assertNotNull(recorded.readPacket(), "the second sound track holds no packet")
+            packet.close()
+        } finally {
+            recorded.close()
+        }
+    }
+
     @Test
     fun aSubtitleFormatMatroskaCannotHoldIsLeftOut() = runBlocking {
         val mediaDir = formatMatrixMediaDir() ?: return@runBlocking

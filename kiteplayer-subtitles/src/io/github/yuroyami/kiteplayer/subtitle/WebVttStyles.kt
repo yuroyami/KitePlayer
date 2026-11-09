@@ -436,7 +436,8 @@ internal fun vttSpans(body: CharSequence, sheet: VttStyleSheet, id: String?): Li
     }
     if (reading) buffer.append(')')
     flush()
-    return spans.decodeSpanEntities()
+    // WebVTT keeps a no-break space unbreakable and decodes every reference (#764).
+    return spans.decodeSpanEntities(nbsp = '\u00A0')
 }
 
 /** The longest tag read as one, in characters between its brackets. Anything longer stays text. */

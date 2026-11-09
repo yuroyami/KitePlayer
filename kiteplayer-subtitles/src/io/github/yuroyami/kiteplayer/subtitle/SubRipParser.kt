@@ -121,14 +121,67 @@ public object SubRipParser {
  * after markup parsing: decoding first turns escaped markup into real tags. An author's
  * literal `&amp;lt;` would double-decode.
  */
-internal fun List<StyledSpan>.decodeSpanEntities(): List<StyledSpan> = map { span ->
-    val decoded = span.text
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&nbsp;", " ")
-        .replace("&amp;", "&")
+internal fun List<StyledSpan>.decodeSpanEntities(nbsp: Char = ' '): List<StyledSpan> = map { span ->
+    val decoded = decodeCharacterReferences(span.text, nbsp)
     if (decoded == span.text) span else span.copy(text = decoded)
 }
+
+/**
+ * [text] with its character references decoded in one linear pass: the named ones a subtitle file
+ * uses (`amp`, `lt`, `gt`, `nbsp`, `quot`, `apos`, and the direction marks `lrm` and `rlm` that
+ * Hebrew and Arabic files write), and decimal and hexadecimal numeric ones. An unknown or broken
+ * reference stays as it was typed. `&nbsp;` becomes [nbsp]: a plain space for SubRip, as FFmpeg
+ * shows it, and U+00A0 for WebVTT, whose rules keep a line from breaking there (#764).
+ */
+internal fun decodeCharacterReferences(text: String, nbsp: Char = ' '): String {
+    if ('&' !in text) return text
+    val out = StringBuilder(text.length)
+    var at = 0
+    while (at < text.length) {
+        val char = text[at]
+        if (char == '&') {
+            var end = at + 1
+            while (end < text.length && end - at <= MAX_REFERENCE_LENGTH &&
+                (text[end].isLetterOrDigit() || text[end] == '#')
+            ) end++
+            if (end < text.length && text[end] == ';') {
+                val name = text.substring(at + 1, end)
+                val decoded: String? = when {
+                    name == "amp" -> "&"
+                    name == "lt" -> "<"
+                    name == "gt" -> ">"
+                    name == "nbsp" -> nbsp.toString()
+                    name == "quot" -> "\""
+                    name == "apos" -> "'"
+                    name == "lrm" -> "\u200E"
+                    name == "rlm" -> "\u200F"
+                    name.startsWith("#x") || name.startsWith("#X") -> codePointText(name.drop(2).toIntOrNull(16))
+                    name.startsWith("#") -> codePointText(name.drop(1).toIntOrNull())
+                    else -> null
+                }
+                if (decoded != null) {
+                    out.append(decoded)
+                    at = end + 1
+                    continue
+                }
+            }
+        }
+        out.append(char)
+        at++
+    }
+    return out.toString()
+}
+
+/** A code point as text, or null for one that is not a character. */
+private fun codePointText(code: Int?): String? {
+    if (code == null || code <= 0 || code > 0x10FFFF || code in 0xD800..0xDFFF) return null
+    if (code < 0x10000) return code.toChar().toString()
+    val offset = code - 0x10000
+    return charArrayOf((0xD800 + (offset shr 10)).toChar(), (0xDC00 + (offset and 0x3FF)).toChar()).concatToString()
+}
+
+/** Longer than any reference a subtitle uses: `#x10FFFF` is 8. */
+private const val MAX_REFERENCE_LENGTH = 16
 
 private fun looksLikeIndex(line: String): Boolean =
         line.trim().let { it.isNotEmpty() && it.all { c -> c.isDigit() } }

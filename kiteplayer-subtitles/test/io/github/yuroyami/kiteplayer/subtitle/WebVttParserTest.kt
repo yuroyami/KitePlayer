@@ -6,6 +6,15 @@ import kotlin.test.assertTrue
 
 class WebVttParserTest {
 
+    /** Named and numeric character references decode; an unknown one stays as typed (#764). */
+    @Test
+    fun characterReferencesDecodeInCueText() {
+        val cues = WebVttParser.parse(
+            "WEBVTT\n\n00:00:00.500 --> 00:00:03.000\n&rlm;A &quot;B&quot; C&#8217;s &#x1F600;&nbsp;x &apos;&lrm;&bogus; &amp;lt;\n",
+        )
+        assertEquals("\u200FA \"B\" C\u2019s \uD83D\uDE00\u00A0x '\u200E&bogus; &lt;", cues.single().plainText)
+    }
+
     @Test
     fun aPlainFileParsesWithTimesInMicroseconds() {
         val cues = WebVttParser.parse(

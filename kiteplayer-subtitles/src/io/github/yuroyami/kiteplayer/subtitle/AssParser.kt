@@ -260,9 +260,11 @@ private fun parseOverrideText(
     while (i < text.length) {
         val ch = text[i]
         when {
+            // A brace with no closing brace after it is text, as libass draws it; ending the line
+            // there dropped every word after it (#763).
+            ch == '{' && text.indexOf('}', i + 1) < 0 -> { if (!drawing) current.append(ch); i++ }
             ch == '{' -> {
                 val close = text.indexOf('}', i + 1)
-                if (close < 0) { i = text.length; break }
                 val block = text.substring(i + 1, close)
                 // Only blocks that carry override tags are consumed; a plain {note} is shown
                 // by every player as nothing, so it is dropped the same way here.

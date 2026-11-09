@@ -48,6 +48,20 @@ class AssParserTest {
         assertEquals(ScriptColorMatrix.Bt709Tv, cue.layout.scriptColorMatrix)
     }
 
+    /** A brace that never closes is text, and the words after it stay (#763). */
+    @Test
+    fun anUnclosedBraceIsShownWithTheTextAfterIt() {
+        fun textOf(body: String): String {
+            val text = header + "\n\n[Events]\n" +
+                "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n" +
+                "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,$body"
+            return (AssParser.parse(text).single() as SubtitleCue.Text).plainText
+        }
+        assertEquals("He said {smile and left", textOf("He said {smile and left"))
+        assertEquals("Bold then {open", textOf("{\\b1}Bold then {open"))
+        assertEquals("Hidden note gone", textOf("Hidden {note}note gone"))
+    }
+
     @Test
     fun collisionsReverseReachesTheCue() {
         fun stackingOf(scriptInfo: String): CueStacking {

@@ -36,11 +36,13 @@ import kotlin.time.Duration
  * owned here: opening media, playing, seeking and closing stay the caller's, exactly like
  * [KitePlayerSurface].
  *
- * [onRendererAttached] fires once this composable's video output is attached to [player]: the
- * native view attaches as soon as the player is set, the Compose canvas one frame after
- * composition. Media does not have to wait for it: a player that opened before its output existed
- * moves to the renderer's own decoder when the renderer arrives. It fires again after each path
- * swap, so a one-shot caller must latch it.
+ * [onRendererAttached] fires once this composable has handed its video output to [player]. On the
+ * Compose canvas path that is one frame after composition, once the attach returned without an
+ * exception. On the native view path it means only that the player was handed to the view: the
+ * view's own binding then attaches, and a player the view refuses, such as a closed one, or a view
+ * with no renderer for this platform, still reports here. Media does not have to wait for it: a
+ * player that opened before its output existed moves to the renderer's own decoder when the
+ * renderer arrives. It fires again after each path swap, so a one-shot caller must latch it.
  *
  * [keepDisplayAwake] keeps the display from dimming and locking while [player] plays video and
  * this composable is on screen. True by default. A paused or ended player, or one that plays

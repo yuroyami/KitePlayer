@@ -150,7 +150,9 @@ public object TtmlParser {
                     out += SubtitleCue.Text(begin, end, emptyList(), CueLayout(region = region, regionOrder = -1), def.layer)
                 }
             }
-            return out.sortedBy { it.startMicros }
+            // A paragraph with an indefinite end shows until the next cue starts, or for SubRip's
+            // documented default when none follows (#759).
+            return out.sortedBy { it.startMicros }.closingOpenEnds(SubRipParser.OPEN_CUE_DEFAULT_MICROS)
         }
 
         /**
@@ -204,15 +206,26 @@ public object TtmlParser {
 
         private fun paragraph(element: XmlElement, begin: Long, end: Long?, chain: List<Effect>, regionId: String?, preserve: Boolean) {
             paragraphs++
-            if (end == null || end <= begin) return
+            // A paragraph that nothing gives an end was dropped (#759). It now ends with its latest
+            // timed span, its implicit duration in TTML 1 (10.4), and otherwise its end is
+            // indefinite, which closes at the next cue's start, as an open SubRip cue does.
+            val until = end ?: INDEFINITE
+            if (until <= begin) return
             val def = regionId?.let(regions::get)
             var look = Look.DEFAULT.with(def?.effect, space)
             for (effect in chain) look = look.with(effect, space)
             val runs = ArrayList<Run>()
-            runs(element, look, ownBackground(chain.last()), preserve, begin, end, runs)
+            runs(element, look, ownBackground(chain.last()), preserve, begin, until, runs)
+            var paragraphEnd = until
+            if (end == null) {
+                val latest = runs.maxOfOrNull { it.end }
+                if (latest != null && latest < INDEFINITE) paragraphEnd = latest
+            }
+            if (paragraphEnd <= begin) return
             // A span with times of its own shows only then, so the paragraph is a cue for each
             // stretch in which the same spans show (#492): it used to show every span throughout.
-            val edges = (listOf(begin, end) + runs.flatMap { listOf(it.begin, it.end) }).filter { it in begin..end }.distinct().sorted()
+            val edges = (listOf(begin, paragraphEnd) + runs.flatMap { listOf(it.begin, it.end) })
+                .filter { it in begin..paragraphEnd }.distinct().sorted()
             for (index in 0 until edges.lastIndex) {
                 val from = edges[index]
                 val until = edges[index + 1]
@@ -223,14 +236,15 @@ public object TtmlParser {
         }
 
         private fun cueOf(begin: Long, end: Long, spans: List<StyledSpan>, runs: List<Run>, look: Look, def: RegionDef?) {
-            if (end > lastEnd) lastEnd = end
+            if (end != INDEFINITE && end > lastEnd) lastEnd = end
             val region = def?.region
             // TTML starts a line at its start edge, but a paragraph with no region and no alignment
             // of its own goes to the bottom like a SubRip line, and is centred like one.
             val horizontal = if (region == null && look.textAlign.isEmpty()) Horizontal.Center else look.horizontal()
             out += SubtitleCue.Text(
                 startMicros = begin,
-                endMicros = end,
+                // An indefinite end is left at the start, which the closing pass in cues() reads as open.
+                endMicros = if (end == INDEFINITE) begin else end,
                 spans = spans,
                 layout = CueLayout(
                     alignment = when (horizontal) {
@@ -915,6 +929,9 @@ internal class TtmlWork {
     var styleVisits: Int = 0
         internal set
 }
+
+/** The end of a paragraph whose end nothing gives, until the closing pass in cues() places it (#759). */
+private const val INDEFINITE: Long = Long.MAX_VALUE / 4
 
 /** The answer for a time expression a lenient reader cannot read, apart from every real time. */
 private const val UNREADABLE: Long = Long.MIN_VALUE

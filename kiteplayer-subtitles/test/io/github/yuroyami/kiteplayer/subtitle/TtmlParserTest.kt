@@ -338,4 +338,16 @@ class TtmlParserTest {
         val cues = TtmlParser.parse(tt("""<p begin="1s" dur="2s" end="10s">A</p><p begin="5s" dur="9s" end="7s">B</p>"""))
         assertEquals(listOf(Triple(1_000_000L, 3_000_000L, "A"), Triple(5_000_000L, 7_000_000L, "B")), timed(cues))
     }
+
+    /** A paragraph that nothing gives an end is kept, not dropped (#759). */
+    @Test
+    fun aParagraphWithNoEndIsKept() {
+        val open = TtmlParser.parse(tt("""<p begin="1s">A</p><p begin="3s">B</p>"""))
+        assertEquals(
+            listOf(Triple(1_000_000L, 3_000_000L, "A"), Triple(3_000_000L, 3_000_000L + SubRipParser.OPEN_CUE_DEFAULT_MICROS, "B")),
+            timed(open),
+        )
+        val spanned = TtmlParser.parse(tt("""<p><span begin="1s" end="2s">A</span></p>"""))
+        assertEquals(listOf(Triple(1_000_000L, 2_000_000L, "A")), timed(spanned))
+    }
 }

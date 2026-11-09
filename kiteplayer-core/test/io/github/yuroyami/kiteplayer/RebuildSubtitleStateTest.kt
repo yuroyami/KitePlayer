@@ -114,6 +114,31 @@ class RebuildSubtitleStateTest {
         harness.close()
     }
 
+    /**
+     * The subtitle delay is not coalesced, because a line query reads it: a query sent between
+     * two delay calls sees the first, not the newest that would otherwise apply at the first's
+     * place in the mailbox (#789).
+     */
+    @Test
+    fun aLineQuerySentBetweenTwoDelayCallsSeesTheFirst() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 30_000_000), config = config)
+        openWithExternal(harness)
+        assertIs<TrackChange.Applied>(harness.core.selectTrack(TrackKind.Subtitle, externalId(harness)))
+        harness.core.play()
+        harness.run(3.seconds)
+        harness.core.pause()
+        harness.run(200.milliseconds)
+        // All three before the actor runs, as they are while it is busy.
+        harness.core.post(io.github.yuroyami.kiteplayer.internal.CoreCommand.SetSubtitleDelay(1.seconds, kotlinx.coroutines.CompletableDeferred()))
+        val line = kotlinx.coroutines.CompletableDeferred<Long>()
+        harness.core.post(io.github.yuroyami.kiteplayer.internal.CoreCommand.SubtitleLine(0, false, line))
+        harness.core.post(io.github.yuroyami.kiteplayer.internal.CoreCommand.SetSubtitleDelay(5.seconds, kotlinx.coroutines.CompletableDeferred()))
+        harness.run(200.milliseconds)
+        assertEquals(2_000_000L, line.await(), "the line that starts at 1 s, read with the 1 s delay sent before the query")
+        assertEquals(5.seconds, harness.core.snapshots.value.subtitleDelay, "and the delay sent last applies")
+        harness.close()
+    }
+
     @Test
     fun anExternalPrimarySurvivesAVideoRebuild() = runTest {
         val harness = CoreHarness(this, script = MediaScript(durationUs = 6_000_000), config = config)

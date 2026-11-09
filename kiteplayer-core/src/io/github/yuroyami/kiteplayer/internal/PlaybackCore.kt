@@ -16962,7 +16962,10 @@ private data class TerminalCloseOutcome(
 /**
  * A setting whose newest value is all that applies, so a newer one of its kind takes an older one's
  * place while both wait in the mailbox (#483). Only a setting with a plain Unit reply, whose handler
- * sets a value and reads nothing a command of another kind changes, is one.
+ * sets a value and reads nothing a command of another kind changes, and whose value no command of
+ * another kind reads or writes, is one: the newest value applies at the first call's place, so a
+ * command sent between two calls would see the later value (#789). The subtitle delay, which
+ * SubtitleLine steps, and the loop mode, which QueueNext reads, are therefore not.
  */
 internal interface LatestValueSetting
 
@@ -17101,7 +17104,7 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     ) : CoreCommand("setSleepTimer", reply)
     class SetMuted(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setMuted", reply), LatestValueSetting
     class SetDuckLevel(val level: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setDuckLevel", reply), LatestValueSetting
-    class SetLoop(val mode: LoopMode, val reply: CompletableDeferred<Unit>) : CoreCommand("setLoop", reply), LatestValueSetting
+    class SetLoop(val mode: LoopMode, val reply: CompletableDeferred<Unit>) : CoreCommand("setLoop", reply)
     class SetAbLoop(val a: Duration?, val b: Duration?, val reply: CompletableDeferred<Unit>) : CoreCommand("setAbLoop", reply)
     class SetPreservePitch(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setPreservePitch", reply), LatestValueSetting
     class SetVideoScale(val mode: VideoScale, val reply: CompletableDeferred<Unit>) : CoreCommand("setVideoScale", reply), LatestValueSetting
@@ -17125,7 +17128,7 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
         CoreCommand("setVideoTransform", reply)
     class SetSphericalView(val value: SphericalView, val reply: CompletableDeferred<Unit>) :
         CoreCommand("setSphericalView", reply), LatestValueSetting
-    class SetSubtitleDelay(val value: Duration, val reply: CompletableDeferred<Unit>) : CoreCommand("setSubtitleDelay", reply), LatestValueSetting
+    class SetSubtitleDelay(val value: Duration, val reply: CompletableDeferred<Unit>) : CoreCommand("setSubtitleDelay", reply)
 
     /**
      * The subtitle line [offset] lines from now (#491): where it starts in the item's time, or with

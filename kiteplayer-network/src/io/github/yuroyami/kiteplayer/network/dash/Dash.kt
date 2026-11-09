@@ -210,7 +210,10 @@ public object Dash {
      * play as one [DashMediaIo] stream, which cannot seek. A representation with no segment
      * addressing is one file, and it is read through [KtorMediaIo] with range requests, so it is
      * seekable and never held in memory whole. [maxSegmentBytes] limits the segments of that
-     * stream; the HLS path reads segments as streams and holds none whole.
+     * stream. The HLS path of a single Period reads its segments as streams and holds none whole.
+     * A presentation of several Periods joined onto one timeline is different: each of its media
+     * segments is fetched whole, up to 64 MiB whatever [maxSegmentBytes] says, and rewritten into a
+     * second copy in memory, for the audio and the video alike.
      *
      * [policy] judges every URL the item asks for and every redirect of every request, as in
      * [manifest]. A segment or file behind a refused redirect fails its read with

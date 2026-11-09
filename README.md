@@ -45,14 +45,16 @@ device has one) a hardware decoder. Here is what each platform gives you today:
 | | Android | iOS | macOS | Desktop JVM | Web |
 | --- | :---: | :---: | :---: | :---: | :---: |
 | **Hardware decoding** | H.264, HEVC, VP9, AV1 | H.264, HEVC, AV1 | H.264, HEVC, AV1 | On a Mac, and Direct3D 11 on Windows | |
-| **HDR on an HDR screen** | In `KitePlayerView` | ✓ | ✓ | | |
+| **HDR on an HDR screen** | In `KitePlayerView` | In the native view | In the native view | | |
 | **HLS and DASH** | ✓ | ✓ | ✓ | ✓ | In a web worker |
 | **Video in** | Compose, `View` | Compose, `UIView` | AppKit | Compose, AWT | `<canvas>` |
 | **Background playback** | ✓ | ✓ | ✓ | ✓ | While the tab is open |
 | **Picture-in-picture** | ✓ | ✓ | ✓ | A floating window | ✓ |
 
 An empty cell means the player falls back to something else: software decoding, or HDR tone mapped
-for a standard screen. On Android, VP9 and AV1 decode in hardware through the view's direct
+for a standard screen. HDR shows as HDR only through the native view path, the Metal renderer on
+Apple platforms and the surface renderer on Android. `KiteRenderPath.ComposeCanvas` and the 360
+degree view tone map on every platform, so a 360 degree HDR video shows tone mapped. On Android, VP9 and AV1 decode in hardware through the view's direct
 MediaCodec path, and H.264 and HEVC through FFmpeg as well. The Direct3D 11 route on Windows is on
 by default but has not yet run on a real Windows GPU, which #101 tracks. The engine alone also builds for Linux and Windows native, tvOS and watchOS,
 where your app supplies the missing parts ([Platforms](#platforms) lists them).

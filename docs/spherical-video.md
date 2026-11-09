@@ -180,7 +180,8 @@ so whatever lies behind the video shows there.
 ### What applies and what does not
 
 - The picture controls, HDR tone mapping, the flash guard and the subtitles apply to the view as
-  they apply to a flat picture. The subtitles are drawn over the view, in the output's space, as
+  they apply to a flat picture. The view draws through the Compose canvas renderer, which tone maps
+  HDR for a standard screen on every platform, so a 360 degree HDR video is never shown as HDR. The subtitles are drawn over the view, in the output's space, as
   on every renderer.
 - The scale mode and every field of `VideoTransform` do not apply while the view is projected: the
   aspect, the zoom, the pan, the turn and the mirrors are a flat picture's. The field of view is

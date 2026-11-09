@@ -2000,6 +2000,34 @@ class PlaybackCoreTest {
     }
 
     /**
+     * A seek sent while a pass runs, after its drain and before its time handler, keeps the mask
+     * it set: that pass has not taken the request, so it must not clear the mask, or the position
+     * reads the old clock until the next pass (#786).
+     */
+    @Test
+    fun aSeekSentMidPassKeepsItsMaskThroughThatPass() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 60_000_000))
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(2.seconds)
+        var armed = true
+        var readAfterPass: Long? = null
+        harness.core.onHandlerRun = { name ->
+            if (armed && name == "handleVideoWrite") {
+                armed = false
+                harness.core.seekLater(Pts(40_000_000), SeekMode.Precise)
+            }
+            if (!armed && readAfterPass == null && name == "handleBuffering") {
+                readAfterPass = harness.core.position().inWholeMicroseconds
+            }
+        }
+        harness.run(100.milliseconds)
+        harness.core.onHandlerRun = null
+        assertEquals(40_000_000L, readAfterPass, "the pass the seek arrived in answered the old clock")
+        harness.close()
+    }
+
+    /**
      * close() marks the player closed before the Close command reaches the actor. A pass that
      * throws in that window ended the actor without tearing the session down, so the workers, the
      * decoders, the source and the device ran on with no owner (#708).

@@ -2098,10 +2098,12 @@ internal class PlaybackCore(
         val reply = CompletableDeferred<SeekResult>()
         // A closed player refuses the command in send, and must not answer the target as its
         // position meanwhile (#785).
-        if (!closedNow.value) maskedSeekTargetMicros.value = maskFor(to)
+        val write = if (!closedNow.value) writeSeekMask(to) else 0L
         // The caller names a position of the item, and the engine seeks in its file (#456).
         val target = Pts(fileTime(to.micros))
-        send(CoreCommand.Seek(SeekRequest(SeekTarget.Absolute(target, itemUs = to.micros), mode, keyframe = keyframeChoice.value), reply))
+        send(CoreCommand.Seek(SeekRequest(SeekTarget.Absolute(target, itemUs = to.micros), mode, keyframe = keyframeChoice.value), reply, write))
+        // A request the mailbox refused is handled, and its mask is no longer waited for.
+        if (reply.isCompleted && write != 0L) seekMaskHandled(write)
         return awaitReply(reply)
     }
 
@@ -2125,9 +2127,17 @@ internal class PlaybackCore(
         // The mask is set from this very call, not from the actor's next pass: a fire-and-forget
         // caller polls position() in the gap before the command is drained, and an absolute target
         // needs no session state to name it. A request the drain drops withdraws the mask there.
-        maskedSeekTargetMicros.value = maskFor(to)
+        val write = writeSeekMask(to)
         val target = Pts(fileTime(to.micros))
-        post(CoreCommand.SeekLater(SeekRequest(SeekTarget.Absolute(target, itemUs = to.micros), mode, keyframe = keyframeChoice.value)))
+        val command = CoreCommand.SeekLater(SeekRequest(SeekTarget.Absolute(target, itemUs = to.micros), mode, keyframe = keyframeChoice.value), write)
+        try {
+            post(command)
+        } catch (refused: Throwable) {
+            // A request the mailbox refused is handled, and its mask is no longer waited for.
+            seekMaskHandled(write)
+            throw refused
+        }
+        if (closedNow.value) seekMaskHandled(write)
     }
 
     /**
@@ -2950,6 +2960,12 @@ internal class PlaybackCore(
     }
 
     private suspend fun execute(command: CoreCommand) {
+        // The newest mask a caller wrote is the actor's to clear only once its request is here (#786).
+        when (command) {
+            is CoreCommand.Seek -> seekMaskHandled(command.maskWrite)
+            is CoreCommand.SeekLater -> seekMaskHandled(command.maskWrite)
+            else -> Unit
+        }
         rejectionFor(command)?.let {
             // The caller's thread set the mask before this refusal. With no session, no pass will
             // clear it, and position() would answer the refused target (#255).
@@ -7928,15 +7944,39 @@ internal class PlaybackCore(
 
     /** Withdraws the seek mask, unless an accepted request still owns it. */
     private fun clearSeekMaskUnlessPending() {
-        if (pendingSeek == null) maskedSeekTargetMicros.value = NO_SEEK_MASK
+        if (pendingSeek == null && seekMasksHandled()) maskedSeekTargetMicros.value = NO_SEEK_MASK
     }
+
+    /**
+     * The numbers of the seek masks callers wrote and of those whose requests the actor took. A
+     * caller writes the mask on its own thread and then sends, so a request sent while a pass runs
+     * has a mask the pass has not seen: cleared there, the position read the old clock until the
+     * next pass, which is the jump the mask exists to prevent (#255, #786).
+     */
+    private val seekMaskWrites = atomic(0L)
+    private val seekMaskTaken = atomic(0L)
+
+    /** Writes the mask for [to] and answers its number. */
+    private fun writeSeekMask(to: Pts): Long {
+        val write = seekMaskWrites.incrementAndGet()
+        maskedSeekTargetMicros.value = maskFor(to)
+        return write
+    }
+
+    /** The request of mask [write] was taken, or refused. */
+    private fun seekMaskHandled(write: Long) {
+        seekMaskTaken.update { maxOf(it, write) }
+    }
+
+    /** True when every mask a caller wrote belongs to a request the actor has taken. */
+    private fun seekMasksHandled(): Boolean = seekMaskTaken.value >= seekMaskWrites.value
 
     private fun handlePlaybackTime() {
         val session = session ?: return
         // The mask lives exactly as long as a request is queued or held. drainCommands runs before
         // this handler, so a newly accepted request re-arms the mask before this pass can clear it,
         // and the clock resumes publishing only once the machine has actually drained.
-        if (pendingSeek == null) {
+        if (pendingSeek == null && seekMasksHandled()) {
             maskedSeekTargetMicros.value = NO_SEEK_MASK
             publishedPositionMicros.value = currentPosition().micros
         }
@@ -12431,7 +12471,7 @@ internal class PlaybackCore(
         session.pictureHoldsPosition = landsBefore && landed != null
         // The landing is the position now. Left set, the mask answers the target until the next
         // pass, and a caller reads the position as soon as the reply below completes.
-        if (pendingSeek == null) maskedSeekTargetMicros.value = NO_SEEK_MASK
+        if (pendingSeek == null && seekMasksHandled()) maskedSeekTargetMicros.value = NO_SEEK_MASK
         // A landing that ran off the end of the stream has no frame to show by definition, so it
         // takes the silent form: warning there would fire on every seek to the end of a file.
         if (landed != null) reportFirstFrame(session, "seek") else presentFirstFrame(session)
@@ -17073,7 +17113,7 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class StopRecording(val reply: CompletableDeferred<Unit>) : CoreCommand("stopRecording", reply)
     class Play(val reply: CompletableDeferred<Unit>) : CoreCommand("play", reply)
     class Pause(val reply: CompletableDeferred<Unit>) : CoreCommand("pause", reply)
-    class Seek(val request: SeekRequest, val reply: CompletableDeferred<SeekResult>) : CoreCommand("seek", reply)
+    class Seek(val request: SeekRequest, val reply: CompletableDeferred<SeekResult>, val maskWrite: Long = 0) : CoreCommand("seek", reply)
     /**
      * Stops whatever is open, or, with an [owner], only the session the request that [owner] names
      * built. A cancelled open posts the second kind, so a cancel that arrives late cannot stop a
@@ -17226,7 +17266,7 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class DetachAudioTap(val tap: AudioTap, val reply: CompletableDeferred<Unit>) : CoreCommand("detachAudioTap", reply)
 
     /** Fire and forget by contract, so its reply is complete before it is sent. */
-    class SeekLater(val request: SeekRequest) : CoreCommand("seekLater", CompletableDeferred(Unit))
+    class SeekLater(val request: SeekRequest, val maskWrite: Long = 0) : CoreCommand("seekLater", CompletableDeferred(Unit))
 }
 
 /**

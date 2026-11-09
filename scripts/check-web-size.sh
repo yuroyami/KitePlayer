@@ -74,6 +74,12 @@
 # change to 891,876, 14,408 more and 587 over the budget before. The codec module kept its
 # 1,538,723 bytes.
 #
+# The worker budget is now 0.87 MiB. The issue sweep of 2026-11-09 fixed engine and reader issues
+# the worker links: the typeset lane's handover (#884), the segment store's entries, its spans and
+# its limit (#851, #852, #856), the Vary rule (#850) and the network meter (#861). The wasmJs job
+# measured the worker at 901,851 bytes, 76 over the budget of 901,775. The codec module kept its
+# 1,538,723 bytes.
+#
 # Both budgets are ratchets: a new KiteFFmpeg pin, or player code, that grows a module past its
 # budget fails here, and raising a budget is a decision made in the same commit, with both numbers
 # in its message. Each file's SHA-256 is printed beside its size, so a failure names the exact bytes
@@ -88,8 +94,8 @@ cd "$ROOT"
 
 # 1.47 MiB.
 BUDGET_BYTES=1541407
-# 0.86 MiB.
-WORKER_BUDGET_BYTES=901775
+# 0.87 MiB.
+WORKER_BUDGET_BYTES=912261
 
 # Measures the files after the label gzipped, prints a table, and fails when the sum is over the budget.
 measure() { # <label> <budget bytes> <file>...

@@ -141,12 +141,19 @@ public object Fmp4 {
         for (moof in boxes(segment, 0, segment.size).filter { it.type == "moof" }) {
             val out = ArrayList<Sample>()
             val sequence = children(segment, moof, "mfhd").firstOrNull()?.let { u32(segment, it.dataStart + 4) } ?: 0L
+            // ISO/IEC 14496-12, 8.8.7.1: with neither an explicit base nor default-base-is-moof, a
+            // track fragment after the first starts where the data of the one before it ends (#753).
+            var nextBase: Long? = moof.start.toLong()
             for (traf in children(segment, moof, "traf")) {
                 val tfhd = children(segment, traf, "tfhd").firstOrNull() ?: continue
                 val flags = u24(segment, tfhd.dataStart + 1)
-                if (u32(segment, tfhd.dataStart + 4) != track.id) continue
+                val implicitBase = if (flags and 0x020000 != 0) moof.start.toLong() else nextBase ?: moof.start.toLong()
+                if (u32(segment, tfhd.dataStart + 4) != track.id) {
+                    nextBase = if (flags and 0x1 != 0) null else otherTrackDataEnd(segment, traf, tfhd, flags, implicitBase)
+                    continue
+                }
                 var at = tfhd.dataStart + 8
-                var base = moof.start.toLong()
+                var base = implicitBase
                 if (flags and 0x1 != 0) { base = u64(segment, at); at += 8 }
                 if (flags and 0x2 != 0) at += 4
                 var defaultDuration = track.defaultDuration
@@ -205,10 +212,41 @@ public object Fmp4 {
                         time += duration
                     }
                 }
+                nextBase = dataAt
             }
             fragments += Fragment(sequence, out)
         }
         return fragments
+    }
+
+    /**
+     * Where the data of another track's fragment [traf] ends, from [base], for the base of the track
+     * fragment after it (#753). Null when its samples take their size from that track's own
+     * defaults, which the reader of one track does not have.
+     */
+    private fun otherTrackDataEnd(segment: ByteArray, traf: Box, tfhd: Box, flags: Int, base: Long): Long? {
+        var at = tfhd.dataStart + 8
+        if (flags and 0x2 != 0) at += 4
+        if (flags and 0x8 != 0) at += 4
+        val defaultSize = if (flags and 0x10 != 0) u32(segment, at) else null
+        var dataAt = base
+        for (trun in children(segment, traf, "trun")) {
+            val runFlags = u24(segment, trun.dataStart + 1)
+            val count = u32(segment, trun.dataStart + 4)
+            refuseUnless(count <= MAX_SAMPLES_PER_SEGMENT) { "a media segment asks for more than $MAX_SAMPLES_PER_SEGMENT samples" }
+            var field = trun.dataStart + 8
+            if (runFlags and 0x1 != 0) { dataAt = base + s32(segment, field); field += 4 }
+            if (runFlags and 0x4 != 0) field += 4
+            if (runFlags and 0x200 == 0) {
+                dataAt += count * (defaultSize ?: return null)
+                continue
+            }
+            val stride = 4 * (runFlags and 0xF00).countOneBits()
+            val sizeAt = 4 * (runFlags and 0x100).countOneBits()
+            refuseUnless(field + count * stride <= trun.end) { "a run's sample fields run past its box" }
+            for (i in 0 until count.toInt()) dataAt += u32(segment, field + i * stride + sizeAt)
+        }
+        return dataAt
     }
 
     /** One box: where it starts, where its data starts, where it ends, and its type. */

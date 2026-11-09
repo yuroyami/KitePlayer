@@ -95,6 +95,29 @@ class Fmp4Test {
         assertFailsWith<Fmp4UnsupportedException> { io.github.yuroyami.kiteplayer.mp4.Fmp4Rewrite.inBandParameterSets(bad, good) }
     }
 
+    /**
+     * In the older form of a multiplexed segment, with no base flag in either tfhd, the second
+     * track fragment's data starts where the first's ends, as ISO/IEC 14496-12, 8.8.7.1 says. The
+     * reader used to start it at the moof and so gave the second track the first one's bytes (#753).
+     */
+    @Test
+    fun aSecondTrackFragmentStartsWhereTheFirstOnesDataEnds() {
+        fun traf(id: Long, offset: Long?, sizes: List<Long>): ByteArray {
+            val runFlags = 0x200 or (if (offset != null) 0x1 else 0)
+            val fields = Mp4Bytes.u32(sizes.size.toLong()) + (offset?.let { Mp4Bytes.u32(it) } ?: ByteArray(0)) +
+                sizes.fold(ByteArray(0)) { acc, size -> acc + Mp4Bytes.u32(size) }
+            return Mp4Bytes.box("traf", Mp4Bytes.fullBox("tfhd", 0, 0, Mp4Bytes.u32(id)) + Mp4Bytes.fullBox("trun", 0, runFlags, fields))
+        }
+        fun moof(offset: Long) = Mp4Bytes.box("moof", Mp4Bytes.fullBox("mfhd", 0, 0, Mp4Bytes.u32(1)) + traf(1, offset, listOf(3, 2)) + traf(2, null, listOf(4)))
+        val payload = byteArrayOf(1, 1, 1, 2, 2, 9, 8, 7, 6)
+        val segment = moof(moof(0).size + 8L) + Mp4Bytes.box("mdat", payload)
+        val second = Fmp4.samples(segment, defaultsTrack().let { Fmp4.Track(2, it.timescale, it.handler, it.sampleEntry, it.defaultDuration, it.defaultSize, it.defaultFlags, null, 0) })
+        assertEquals(1, second.size)
+        assertContentEquals(byteArrayOf(9, 8, 7, 6), second.single().data, "the second track's sample")
+        val first = Fmp4.samples(segment, defaultsTrack().let { Fmp4.Track(1, it.timescale, it.handler, it.sampleEntry, it.defaultDuration, it.defaultSize, it.defaultFlags, null, 0) })
+        assertEquals(listOf(listOf<Byte>(1, 1, 1), listOf<Byte>(2, 2)), first.map { it.data.toList() })
+    }
+
     @Test
     fun aRunWhoseSampleFieldsRunPastItsBoxIsRefused() {
         // A run that says it lists the sizes of 1000 samples and lists two.

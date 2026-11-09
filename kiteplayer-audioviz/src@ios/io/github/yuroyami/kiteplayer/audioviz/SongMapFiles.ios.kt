@@ -34,7 +34,8 @@ internal actual object SongMapFiles {
         try {
             if (fseek(file, 0, SEEK_END) != 0) return null
             val size = ftell(file)
-            if (size <= 0 || size > Int.MAX_VALUE) return null
+            // A file past the size any map has is not read into memory at all (#955).
+            if (size <= 0 || size > MAX_SONG_MAP_BYTES) return null
             if (fseek(file, 0, SEEK_SET) != 0) return null
             val bytes = ByteArray(size.toInt())
             val read = bytes.usePinned { pinned -> fread(pinned.addressOf(0), 1u, size.toULong(), file) }

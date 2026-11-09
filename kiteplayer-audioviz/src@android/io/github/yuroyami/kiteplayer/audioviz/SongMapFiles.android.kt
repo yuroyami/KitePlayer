@@ -8,7 +8,8 @@ import java.nio.file.StandardCopyOption
 /** Song map files on Android. A write lands through a temporary file, so a crash leaves no half map. */
 internal actual object SongMapFiles {
     actual fun read(path: String): ByteArray? = runCatching {
-        File(path).takeIf { it.isFile }?.readBytes()
+        // A file past the size any map has is not read into memory at all (#955).
+        File(path).takeIf { it.isFile && it.length() <= MAX_SONG_MAP_BYTES }?.readBytes()
     }.getOrNull()
 
     actual fun write(path: String, bytes: ByteArray): Boolean {

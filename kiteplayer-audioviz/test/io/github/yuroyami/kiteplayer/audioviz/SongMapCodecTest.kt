@@ -168,4 +168,34 @@ class SongMapCodecTest {
         for (shift in 0 until 4) bytes[at + shift] = (Int.MAX_VALUE ushr (shift * 8)).toByte()
         assertNull(decodeSongMap(bytes), "a corrupt count was trusted")
     }
+
+    /**
+     * A count the bytes left cannot hold is a cache miss before anything is allocated: a file of
+     * 64 KiB cannot declare 65,536 structure events of 32 bytes each (#955).
+     */
+    @Test
+    fun aCountTheFileCannotHoldIsACacheMiss() {
+        val bytes = ByteArray(64 * 1024)
+        putInt(bytes, 0, 0x4B534D31)
+        putInt(bytes, 4, SongMap.VERSION)
+        putInt(bytes, COUNT_OFFSET, bytes.size)
+        assertNull(decodeSongMap(bytes))
+        // A real map still reads back.
+        assertNotNull(decodeSongMap(encodeSongMap(sample())))
+    }
+
+    @Test
+    fun aStoredMapPastTheSizeLimitIsACacheMiss() {
+        val bytes = encodeSongMap(sample()).copyOf(MAX_SONG_MAP_BYTES + 1)
+        assertNull(decodeSongMap(bytes))
+    }
+
+    private fun putInt(bytes: ByteArray, at: Int, value: Int) {
+        for (shift in 0 until 4) bytes[at + shift] = (value ushr (shift * 8)).toByte()
+    }
+
+    private companion object {
+        /** Where the structure count sits: magic, version, track, covered, two flags, reference. */
+        const val COUNT_OFFSET = 4 + 4 + 4 + 8 + 1 + 1 + 8
+    }
 }

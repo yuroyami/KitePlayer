@@ -146,7 +146,7 @@ internal fun encodeSongMap(map: SongMap): ByteArray {
 }
 
 /** The map [bytes] hold, or null when they are not a map this release can read. */
-internal fun decodeSongMap(bytes: ByteArray): SongMap? = try {
+internal fun decodeSongMap(bytes: ByteArray): SongMap? = if (bytes.size > MAX_SONG_MAP_BYTES) null else try {
     val input = ByteReader(bytes)
     if (input.int() != MAGIC) null else {
         val version = input.int()
@@ -157,17 +157,17 @@ internal fun decodeSongMap(bytes: ByteArray): SongMap? = try {
             val hasReference = input.byte().toInt() == 1
             val reference = Double.fromBits(input.long()).takeIf { hasReference }
             val kinds = AudioEventKind.entries
-            val structure = Array(input.count()) {
+            val structure = Array(input.count(STRUCTURE_RECORD_BYTES)) {
                 val kind = kinds[input.int()]
                 AudioDetection(kind, input.long(), input.long(),
                     Float.fromBits(input.int()), Float.fromBits(input.int()), Float.fromBits(input.int()))
             }
             val modes = KeyMode.entries
-            val keys = Array(input.count()) {
+            val keys = Array(input.count(KEY_RECORD_BYTES)) {
                 KeySegment(input.long(), input.long(), input.int(), modes[input.int()], Float.fromBits(input.int()))
             }
             val curveStart = input.long()
-            val curve = FloatArray(input.count()) { Float.fromBits(input.int()) }
+            val curve = FloatArray(input.count(CURVE_RECORD_BYTES)) { Float.fromBits(input.int()) }
             SongMap(version, track, coveredThrough, complete, reference, structure, keys, curve, curveStart)
                 .takeIf { it.usable() }
         }
@@ -253,10 +253,26 @@ private class ByteReader(private val data: ByteArray) {
         return value
     }
 
-    /** A length that a corrupt file cannot turn into an enormous allocation. */
-    fun count(): Int {
+    /**
+     * A count of records [width] bytes wide that a corrupt file cannot turn into an enormous
+     * allocation: the bytes left must hold that many records. Checked against the whole file, a
+     * 16 MiB file could declare 16 million 32-byte records and ask for 512 MiB (#955).
+     */
+    fun count(width: Int): Int {
         val value = int()
-        require(value >= 0 && value <= data.size) { "the map declares $value entries it cannot hold" }
+        val remaining = data.size - at
+        require(value >= 0 && value.toLong() * width <= remaining) { "the map declares $value entries it cannot hold" }
         return value
     }
 }
+
+/** The bytes one stored structure event, key segment and curve value take. */
+private const val STRUCTURE_RECORD_BYTES = 32
+private const val KEY_RECORD_BYTES = 28
+private const val CURVE_RECORD_BYTES = 4
+
+/**
+ * The largest stored map this release reads; a larger file is a cache miss. A day of audio is
+ * about 3.5 MB of curve, so this is far past any song and far below what a heap minds.
+ */
+internal const val MAX_SONG_MAP_BYTES: Int = 32 * 1024 * 1024

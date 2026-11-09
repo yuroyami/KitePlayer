@@ -195,6 +195,10 @@ internal class AudioVizFeed(
         if (active == null || handled !== current || nextFormat != format || jumped) {
             timeline.reset(current.generation)
             stats.resets.fetchAndAdd(1L)
+            // A map that is about to change belongs to the song before, so its fixed reference is
+            // let go before the reset, which then starts the causal reference again at 0.01. The
+            // old order kept it through the reset and handed its level to the next song (#956).
+            if (pendingMap.load() !== appliedMap) active?.setSongReferencePower(null)
             active = if (active != null && nextFormat == format) active.apply { reset() }
                 else newAnalyzer(nextFormat.sampleRate)
             val publication = timeline.publisher()
@@ -207,7 +211,9 @@ internal class AudioVizFeed(
                     if (publication.push(frame)) stats.analyses.fetchAndAdd(1L)
                 }
             }
-            // A new analyser starts from the causal reference unless a map is applied.
+            // The newest map first, then the reference of whatever map now applies: a new analyser
+            // starts from the causal reference unless a map is applied.
+            applyMap(active)
             active.setSongReferencePower(appliedMap?.map?.referencePower)
             analyzer = active
             format = nextFormat

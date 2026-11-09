@@ -96,4 +96,26 @@ class DisplayScaleTest {
             if (index >= 100) assertTrue(envelope.fast <= loud * 0.7, "quiet contrast at $index")
         }
     }
+
+    /**
+     * A map's reference let go right after a reset starts the causal reference at 0.01, not at the
+     * last song's level; let go mid-song it carries on from the map's level (#956).
+     */
+    @Test
+    fun aReferenceLetGoAfterAResetStartsFromTheQuietDefault() {
+        val scale = DisplayScale()
+        scale.setReference(0.16)
+        scale.advance(0.16, digitalSilence = false, seconds = 3.0)
+        assertEquals(1.0 / 0.16, scale.gain, 1e-9)
+        scale.reset()
+        scale.setReference(null)
+        assertEquals(0.01, scale.referencePower, 1e-12)
+        assertEquals(100.0, scale.gain, 1e-9)
+
+        val midSong = DisplayScale()
+        midSong.setReference(0.16)
+        midSong.advance(0.16, digitalSilence = false, seconds = 3.0)
+        midSong.setReference(null)
+        assertEquals(0.16, midSong.referencePower, 1e-9)
+    }
 }

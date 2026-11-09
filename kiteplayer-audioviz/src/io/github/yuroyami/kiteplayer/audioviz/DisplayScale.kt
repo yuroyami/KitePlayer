@@ -18,17 +18,32 @@ internal class DisplayScale {
     private var handoverSeconds = 2.0
     private var fromLogGain = ln(gain)
 
+    /** True from a [reset] until audio advances the scale: no level of this stretch is known yet. */
+    private var fresh = true
+
     fun setReference(power: Double?) {
         require(power == null || power.isFinite() && power > 0.0) { "reference power must be positive and finite" }
         if (power == fixedReference) return
         fixedReference = power
         fromLogGain = ln(gain)
         handoverSeconds = if (power == null) 2.0 else 0.0
-        if (power == null) referencePower = 1.0 / gain
+        if (power == null) {
+            // Within a song the causal reference carries on from the level the map gave. Right
+            // after a reset nothing of the new stretch was heard, so it starts at the quiet
+            // default instead of the last song's level (#956).
+            if (fresh) {
+                referencePower = 0.01
+                gain = 100.0
+                gainLimited = false
+            } else {
+                referencePower = 1.0 / gain
+            }
+        }
     }
 
     fun advance(momentaryPower: Double?, digitalSilence: Boolean, seconds: Double) {
         require(seconds.isFinite() && seconds >= 0)
+        if (seconds > 0.0) fresh = false
         val fixed = fixedReference
         if (fixed != null) {
             referencePower = fixed
@@ -46,6 +61,7 @@ internal class DisplayScale {
 
     /** Clear causal history at a gap, while retaining the supplied same-song fixed reference. */
     fun reset() {
+        fresh = true
         if (fixedReference == null) {
             referencePower = 0.01
             gain = 100.0

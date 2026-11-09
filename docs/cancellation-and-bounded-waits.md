@@ -50,11 +50,13 @@ What this promises, and what it does not:
   cancellation. The readers that wait for bytes, the HTTP reader and `PipedMediaIo`, suspend and
   resume at once. `MediaIo` now asks every reader to suspend cancellably. A reader that blocks its
   thread, such as `MediaIo.ofStream` over an `InputStream` that stops answering, cannot be reached.
-- An open through the URL fallback cannot be stopped yet. The fix needs an interrupt that exists
-  before the open returns, which is yuroyami/KiteFFmpeg#62. Until then a stop waits for such an
-  open to end, and the URL fallback's read timeout limits that wait.
-- FFmpeg's HLS demuxer does not copy the interrupt callback to two kinds of child context. Only a
-  patch in KiteFFmpeg can fix that, and yuroyami/KiteFFmpeg#62 records it.
+- An open through the URL fallback is stopped through KiteFFmpeg's `OpenInterrupt`, which the
+  player creates before the open. A stop or a cancelled open raises it, and FFmpeg sees it inside
+  its network protocols and during stream discovery. A wait anywhere else inside FFmpeg finishes
+  before the stop is seen, and the URL fallback's read timeout limits that wait.
+- FFmpeg's HLS demuxer does not copy the interrupt callback to two kinds of child context, those
+  of sample-AES segments and of subtitle renditions. Only a patch in KiteFFmpeg can fix that, and
+  yuroyami/KiteFFmpeg#275 records it.
 - The web build does not block. Its bridge refuses a reader that suspends, so an open there never
   waits for bytes.
 
@@ -254,7 +256,7 @@ then opens the URI with the protocols of the build: file, fd, pipe, data, http a
   in microseconds, unless the item sets `rw_timeout` in `MediaItem.openOptions`. FFmpeg limits the
   connection itself to 5 seconds.
 - The URL fallback has no https, because the build has no TLS. It does not reconnect, and it
-  reports no warning. It cannot be stopped during the open until yuroyami/KiteFFmpeg#62.
+  reports no warning. A stop during the open reaches FFmpeg's protocols through `OpenInterrupt`.
 - The HTTP reader of `kiteplayer-network` is the recommended road for http and https. Every
   standard entry point includes it, so the URL fallback carries http only when that module is
   absent or `NetworkConfig.autoResolve` is false.

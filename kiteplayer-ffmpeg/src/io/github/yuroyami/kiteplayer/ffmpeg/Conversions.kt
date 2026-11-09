@@ -498,8 +498,9 @@ internal class PackedCoefficients(
  * every sample of channel 1, and so on. A packed format interleaves them already. Both arrive
  * tightly packed with no padding, which is what KiteFFmpeg's copy guarantees.
  *
- * Integer formats are scaled by their full-scale value rather than by the next power of two, so a
- * full-scale input reaches exactly 1.0 and does not clip on the way back out.
+ * An integer is divided by 2 to the power of its bits minus 1, as FFmpeg's own conversion does, so
+ * its most negative value reads -1.0 and its most positive value reads just under 1.0. That scale
+ * is what lets the desktop sink write 16-bit audio back out bit for bit (#260).
  *
  * Audio is copied and video is not. That is not an inconsistency: one second of 48 kHz stereo float
  * is 384 KB, against 187 MB for one second of 1080p60 video, and the engine has to touch every audio

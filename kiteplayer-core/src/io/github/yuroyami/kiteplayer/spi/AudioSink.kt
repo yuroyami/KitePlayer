@@ -153,12 +153,14 @@ public interface AudioSink : AutoCloseable {
      * Device loss, underrun, format change. The sink reports; the engine decides what to do.
      *
      * **What the engine does with this today, per event, so a sink author is not guessing.** It
-     * collects the feed on the session lane. `DeviceLost` and `DeviceChanged` become a
-     * `PlaybackWarning.AudioDeviceChanged`. `Underrun` becomes an `AudioDeviceUnderrun` warning,
-     * once per session. `FormatChangeRequested` becomes an `AudioDeviceChanged` warning naming the
-     * request. `Failed` stops the session, and the player fails with the event's error. Nothing
-     * here rebuilds a sink or recovers a device yet: publish honestly, and expect a warning or a
-     * typed failure rather than a repair.
+     * collects the feed on the session lane. `FormatChangeRequested` opens a new sink from the same
+     * factory and plays on through it, as its own KDoc says (#563), and warns
+     * `PlaybackWarning.AudioDeviceChanged` only when no new sink opens. `DeviceLost` and
+     * `DeviceChanged` become an `AudioDeviceChanged` warning. `Underrun` becomes an
+     * `AudioDeviceUnderrun` warning, once per session. `BecameNoisy` becomes
+     * `PlayerEvent.AudioOutputBecameNoisy`. `Failed` stops the session, and the player fails with
+     * the event's error. A sink whose output wants another format therefore reports
+     * `FormatChangeRequested`, and the rebuild is the engine's.
      */
     public val events: Flow<AudioSinkEvent>
 }
@@ -201,11 +203,13 @@ public interface AudioSinkFactory {
  *
  * An earlier version of this note said the ring is read "with a try-lock, and on contention writes
  * silence". That was never true of any ring in this library: `KotlinAudioRing` takes no lock at all.
- * What it does instead is worse in one specific place: while publishing the
- * clock anchor, the real-time thread reads a sequence counter the feeder writes, and it retries with
- * no bound if it catches the feeder mid-update. That is a priority inversion on a real-time thread,
- * and it is why the shipped macOS path no longer goes through this interface at all: `CoreAudioSink`
- * owns a C callback over a C ring in which the real-time thread is the writer and never waits.
+ * It once had a worse flaw: while publishing the clock anchor, the real-time thread retried a
+ * sequence counter the feeder writes with no bound, a priority inversion on a real-time thread.
+ * Both rings now bound that walk: a slot the feeder is changing ends it, and the ring counts it in
+ * `segmentGiveups` (#221). The engine's own read of the anchor, off the real-time thread, is bounded
+ * the same way and counted in `anchorGiveups` (#827). The shipped macOS path still does not go
+ * through this interface: `CoreAudioSink` owns a C callback over a C ring in which the real-time
+ * thread is the writer and never waits.
  *
  * This interface remains the contract for every other sink, and `KotlinAudioRing` remains its
  * implementation, permanently: js and wasmJs can never contain C, and the Kotlin ring is the only

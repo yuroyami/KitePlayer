@@ -29,8 +29,10 @@ import kotlinx.coroutines.delay
  * short return leaves (nothing above the sink zeroes it, per the callback contract), and loops
  * `write(..., WRITE_BLOCKING)` until the block is fully submitted or a lifecycle signal lands.
  *
- * The sink accepts mono or stereo only and never converts: mixing and resampling remain in the
- * engine, where their latency is known and where they are testable in commonMain.
+ * The sink opens 1, 2, 6 or 8 channels, the counts AudioTrack has masks for, as the engine asks,
+ * and answers any other count with stereo, which the engine's mixer then produces. It never
+ * converts: mixing and resampling remain in the engine, where their latency is known and where
+ * they are testable in commonMain.
  *
  * The internal constructor takes the driver factory and the clock so the host suite drives every
  * lifecycle and arithmetic arm with a fake, and so production cannot accidentally pair

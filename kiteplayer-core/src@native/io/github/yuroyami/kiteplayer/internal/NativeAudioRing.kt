@@ -131,10 +131,10 @@ internal class NativeAudioRing private constructor(
      * How often the real-time segment walk read a torn slot and dated the anchor from its private
      * cache instead.
      *
-     * Zero on a healthy system, and it has no counterpart in [KotlinAudioRing] because the Kotlin
-     * ring answers the same situation by spinning without a bound. The oracle
-     * asserts it stays zero, which is what says the C ring's extra freedom was never needed in a
-     * single-threaded comparison and therefore cannot explain any agreement between the two.
+     * Zero on a healthy system. [KotlinAudioRing.segmentGiveups] counts the same thing, since the
+     * Kotlin ring's walk was bounded the same way (#221). The oracle asserts it stays zero, which is
+     * what says this freedom was never needed in a single-threaded comparison and therefore cannot
+     * explain any agreement between the two.
      */
     val segmentGiveups: Long get() = kprt_ring_segment_giveups(ring)
 

@@ -972,10 +972,11 @@ public class AudioPlayback(
      * [AudioConfig.volumeCeiling], which is 1 unless a consumer raised it: this class is reached
      * through the engine, and the engine refuses a boost the configuration did not allow.
      *
-     * Real, and applied by the pipeline's gain stage as one multiply per sample with a short ramp, so a
-     * change never clicks. It takes effect on the next buffer the feeder converts, which is why setting
-     * it is safe from any thread: this stores a value and the feeder reads it, rather than writing into
-     * a stage that has one owner.
+     * Applied as one multiply per sample as frames leave the ring, over a short ramp, so a change
+     * never clicks and is audible within one device period, not after the ring's depth. On a sink
+     * that takes a device gain, Android's among them, the part at or below unity is the device's own
+     * volume after its buffer, and the ring keeps only a boost (#14). Setting it is safe from any
+     * thread: this stores a value that the ring's reader and the sink pick up.
      *
      * With no audio path open the value is stored and applied when one opens.
      */

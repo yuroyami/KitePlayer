@@ -32,7 +32,9 @@ import kotlin.math.roundToInt
  * block is fully submitted or a lifecycle signal lands. This is `AudioTrackSink`'s proven writer
  * machine, because the audit rows it closed apply here word for word.
  *
- * The sink accepts mono or stereo and never converts: mixing and resampling stay in the engine.
+ * The sink keeps the engine's channel count when the line takes it, and answers a count above two
+ * that the line refuses with stereo, which the engine's mixer then produces. It never converts:
+ * mixing and resampling stay in the engine.
  * The one thing it does do is the packing the SPI explicitly allows, F32 to 16-bit signed
  * little-endian, because the JDK's own mixers refuse float lines (see [WIRE_BYTES_PER_SAMPLE]).
  *

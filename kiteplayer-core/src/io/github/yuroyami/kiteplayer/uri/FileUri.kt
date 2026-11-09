@@ -16,8 +16,10 @@ public object FileUri {
     /**
      * The path [uri] names: a `file:` address decoded, `file:///C:/x` and `file:/C:/x` as `C:/x`, a
      * bare or Windows path as it is, or null for an address of any other scheme and for an empty
-     * one. A single letter before the colon is a Windows drive, not a scheme. A `file://host/path`
-     * names `/path`, since the local host is the only one a player can read.
+     * one. A single letter before the colon is a Windows drive, not a scheme. A `file:///path` or
+     * `file://localhost/path` names `/path`. Any other host is a network share, which is how
+     * Windows writes `\\nas\films\a.mkv` as a URI, so `file://nas/films/a.mkv` names the share
+     * path `//nas/films/a.mkv`, which Windows file calls and FFmpeg's file reader open (#858).
      */
     public fun localPath(uri: String): String? {
         if (uri.startsWith("file:", ignoreCase = true)) return decodedPath(uri).ifEmpty { null }
@@ -32,7 +34,11 @@ public object FileUri {
         var rest = uri.substring("file:".length)
         if (rest.startsWith("//")) {
             rest = rest.substring(2)
-            if (!rest.startsWith("/")) rest = rest.substringAfter('/', "").let { "/$it" }
+            if (!rest.startsWith("/")) {
+                val host = rest.substringBefore('/')
+                val path = rest.substringAfter('/', "")
+                rest = if (host.equals("localhost", ignoreCase = true)) "/$path" else "//$host/$path"
+            }
         }
         val decoded = percentDecoded(rest.substringBefore('?').substringBefore('#'))
         val drive = decoded.length >= 3 && decoded[0] == '/' && decoded[1].isLetter() && decoded[2] == ':'

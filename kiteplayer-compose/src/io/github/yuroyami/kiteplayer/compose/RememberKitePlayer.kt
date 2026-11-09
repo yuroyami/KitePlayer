@@ -15,6 +15,8 @@ import io.github.yuroyami.kiteplayer.PlayerConfig
  * val player = rememberKitePlayer()
  * KitePlayerVideo(player, Modifier.fillMaxSize())
  * LaunchedEffect(url) {
+ *     // open is legal only from Idle, Ended and Failed, so a new url stops the item playing first.
+ *     player.stop()
  *     player.open(MediaItem(url))
  *     player.play()
  * }

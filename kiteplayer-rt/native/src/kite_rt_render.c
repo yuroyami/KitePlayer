@@ -66,7 +66,17 @@ int64_t kprt_frames_to_micros(int64_t frames, int32_t sample_rate)
         return INT64_MAX;
     if (whole < INT64_MIN / 1000000)
         return INT64_MIN;
-    return whole * 1000000 + rest * 1000000 / rate;
+    /* The remainder's part can still carry the sum past either end, so it saturates too (#817).
+     * whole and rest share a sign, so only one end can be reached. */
+    {
+        const int64_t base = whole * 1000000;
+        const int64_t part = rest * 1000000 / rate;
+        if (part > 0 && base > INT64_MAX - part)
+            return INT64_MAX;
+        if (part < 0 && base < INT64_MIN - part)
+            return INT64_MIN;
+        return base + part;
+    }
 }
 
 /* `a + b`, saturating at the ends of the range rather than overflowing.

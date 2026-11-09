@@ -58,6 +58,9 @@ static const rescale_row rows[] = {
      * The oracle carries the same two rows so the Kotlin ring is pinned to this answer too. */
     { "INT64_MAX frames at 1 Hz saturates",     INT64_MAX,                  1,           INT64_MAX, 1 },
     { "INT64_MIN frames at 1 Hz saturates",     INT64_MIN,                  1,           INT64_MIN, 1 },
+    /* The largest whole second count, whose remainder still carries the sum past the end (#817). */
+    { "the remainder past INT64_MAX saturates", INT64_C(442721857769035200), 48000,      INT64_MAX, 1 },
+    { "the remainder past INT64_MIN saturates", -INT64_C(442721857769035200), 48000,     INT64_MIN, 1 },
 
     /* The original report's own vectors. 1e13 frames at 48 kHz is about 6.6 years of audio, which is
      * not a session anybody plays; the point is that the arithmetic is wrong there rather than

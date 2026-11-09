@@ -183,7 +183,13 @@ internal fun framesToMicros(frames: Long, sampleRate: Int): Long {
     val rest = frames % rate
     if (whole > Long.MAX_VALUE / 1_000_000L) return Long.MAX_VALUE
     if (whole < Long.MIN_VALUE / 1_000_000L) return Long.MIN_VALUE
-    return whole * 1_000_000L + rest * 1_000_000L / rate
+    // The remainder's part can still carry the sum past either end, so it saturates too, as the C
+    // ring does (#817). whole and rest share a sign, so only one end can be reached.
+    val base = whole * 1_000_000L
+    val part = rest * 1_000_000L / rate
+    if (part > 0 && base > Long.MAX_VALUE - part) return Long.MAX_VALUE
+    if (part < 0 && base < Long.MIN_VALUE - part) return Long.MIN_VALUE
+    return base + part
 }
 
 /**

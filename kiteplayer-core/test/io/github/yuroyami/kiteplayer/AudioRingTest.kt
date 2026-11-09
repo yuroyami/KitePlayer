@@ -331,6 +331,9 @@ class AudioRingTest {
             Rescale(400_000_000_000_000_000L, 48_000, 8_333_333_333_333_333_333L, overflows = true),
             Rescale(-480L, 48_000, -10_000L, overflows = false),
             Rescale(-10_000_000_000_000L, 44_100, -226_757_369_614_512L, overflows = true),
+            // The largest whole second count, whose remainder still carries the sum past the end (#817).
+            Rescale(442_721_857_769_035_200L, 48_000, Long.MAX_VALUE, overflows = true),
+            Rescale(-442_721_857_769_035_200L, 48_000, Long.MIN_VALUE, overflows = true),
             // AudioFormat.durationOf answers zero for a zero rate, so this does too.
             Rescale(480L, 0, 0L, overflows = false),
         )

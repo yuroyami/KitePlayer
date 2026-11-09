@@ -9240,6 +9240,16 @@ internal class PlaybackCore(
         if (session.selectedQueues().any { it.count > 0 }) return
         if ((session.video?.queuedFrames ?: 0) > 0 && !stillImageFinished) return
 
+        // Paused, the device takes nothing, so the tail cannot reach it and the ring cannot drain,
+        // and the waits below counted the pause against their deadlines: after one the item was
+        // marked drained and the next play ended it with its last audio unheard (#801). They wait
+        // for play, and their deadlines start again from it.
+        if (!playRequested) {
+            endOfStream.tailRequestedNanos = 0
+            if (endOfStream.draining) endOfStream.drainStartedNanos = clock.nanos()
+            return
+        }
+
         // The audio lane's own end, which the four conditions above cannot see. A drained decoder
         // and an empty packet queue say demuxing and decoding finished; the decoded samples then
         // travel through a handoff channel, a conversion and the DSP stages before any device hears

@@ -253,4 +253,28 @@ class EarlyStreamEndTest {
         assertTrue(abs(shown - after) < 300_000, "the picture on screen is at $shown, the position at $after")
         harness.close()
     }
+
+    /**
+     * A pause just before the end used to let the end-of-stream deadlines run through it, so the
+     * next play ended the item at once with its last sound unheard (#801).
+     */
+    @Test
+    fun aLongPauseJustBeforeTheEndStillPlaysTheLastSound() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 5_000_000, hasVideo = false))
+        harness.open()
+        harness.core.play()
+        harness.run(4_850.milliseconds)
+        harness.core.pause()
+        harness.run(20.seconds)
+        assertTrue(PlaybackStatus.Ended !in harness.core.statusHistory, "the item ended while paused")
+        val heard = harness.heardFrames()
+        harness.core.play()
+        harness.run(200.milliseconds)
+        assertTrue(harness.core.snapshots.value.status != PlaybackStatus.Ended, "the play ended the item at once")
+        harness.run(2.seconds)
+        assertEquals(PlaybackStatus.Ended, harness.core.snapshots.value.status)
+        val tail = harness.heardFrames() - heard
+        assertTrue(tail > 48_000 / 10, "only $tail frames of the last sound were heard")
+        harness.close()
+    }
 }

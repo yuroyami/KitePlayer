@@ -67,6 +67,31 @@ class RebuildSubtitleStateTest {
     private fun externalId(harness: CoreHarness): TrackId =
         harness.core.snapshots.value.tracks.all.single { it.kind == TrackKind.Subtitle && it.id.value < 0 }.id
 
+    /**
+     * The renderer outlives each session and keeps an overlay's pictures by its number, so a new
+     * item's first line must never carry a number the last item used, or the old text shows (#891).
+     */
+    @Test
+    fun aNewItemsFirstOverlayCarriesANumberNoEarlierOverlayHad() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 6_000_000), config = config)
+        openWithExternal(harness)
+        assertIs<TrackChange.Applied>(harness.core.selectTrack(TrackKind.Subtitle, externalId(harness)))
+        harness.core.play()
+        harness.run(1500.milliseconds)
+        val firstItem = harness.renderer!!.overlays.filterNotNull().map { it.contentHash }
+        assertTrue(firstItem.isNotEmpty(), "the first item published no overlay")
+
+        harness.core.stop()
+        openWithExternal(harness)
+        assertIs<TrackChange.Applied>(harness.core.selectTrack(TrackKind.Subtitle, externalId(harness)))
+        harness.core.play()
+        harness.run(1500.milliseconds)
+        val secondItem = harness.renderer!!.overlays.filterNotNull().drop(firstItem.size).filter { it.images.isNotEmpty() }
+        assertTrue(secondItem.isNotEmpty(), "the second item drew no line")
+        assertTrue(secondItem.first().contentHash > firstItem.max(), "the new line reused ${secondItem.first().contentHash} of $firstItem")
+        harness.close()
+    }
+
     @Test
     fun anExternalPrimarySurvivesAVideoRebuild() = runTest {
         val harness = CoreHarness(this, script = MediaScript(durationUs = 6_000_000), config = config)

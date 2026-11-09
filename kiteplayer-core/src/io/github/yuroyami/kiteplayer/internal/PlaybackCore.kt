@@ -95,6 +95,7 @@ import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.subtitle.CueSelector
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
+import kotlinx.atomicfu.AtomicLong
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
@@ -1311,6 +1312,18 @@ internal class PlaybackCore(
      * the audio feeder, read by the actor when it builds the next audio path.
      */
     private val resamplerRefused = atomic(false)
+
+    /**
+     * Monotonic overlay identity, the contentHash of every subtitle overlay this player publishes.
+     * A hash of the cue content is collision-prone; a counter bumped on every real change can never
+     * claim two different overlays are the same. One counter for the whole player, because the
+     * renderer outlives each session and caches by this number: a counter per session started at
+     * zero again, so a new item's first line could carry the last item's number and draw its
+     * pictures (#891).
+     *
+     * Bumped on the actor, read by the raster lane's stale-work guard.
+     */
+    private val overlayGenerations = atomic(0L)
 
     /** The viewer's style override, seeded from config, applied at the next rasterisation. */
     private var subtitleStyle: io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride? = config.subtitles.style
@@ -4536,6 +4549,7 @@ internal class PlaybackCore(
                 relatedTraffic = watchedIo?.related,
                 stallWatch = stallWatch,
                 networkIo = suppliedIo,
+                overlayGeneration = overlayGenerations,
             ).also { built ->
                 built.applyClip(item)
                 built.edition = edition
@@ -15553,6 +15567,8 @@ internal class PlaybackCore(
          */
         val readStreams: Set<Int> = emptySet(),
         unreadSounds: Set<Int> = emptySet(),
+        /** The player's one overlay counter, which every session shares (#891). */
+        val overlayGeneration: AtomicLong,
     ) {
         /**
          * The sounds the source does not read, because each is a download of its own and nobody
@@ -16208,13 +16224,6 @@ internal class PlaybackCore(
         /** The surface size the published overlay was rasterised for, so a resize can redraw it. */
         var publishedCanvas: Pair<Int, Int>? = null
 
-        /**
-         * Monotonic overlay identity. A hash of the cue content is collision-prone; a counter
-         * bumped on every real change can never claim two different overlays are the same.
-         *
-         * Bumped on the actor, read by the raster lane's stale-work guard.
-         */
-        val overlayGeneration = atomic(0L)
 
         /** The typesetting lane drawing the selected ASS track, or null when the Kotlin tier does. */
         var typeset: TypesetLane? = null

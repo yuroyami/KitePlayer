@@ -87,6 +87,18 @@ internal interface StoreFiles {
     /** Reads up to [length] bytes of [path] from [position]. Returns how many, or -1 at its end. */
     fun read(path: String, position: Long, into: ByteArray, offset: Int, length: Int): Int
 
+    /**
+     * Opens [path] for reads at any position until the reader closes, so a run of reads in one
+     * span opens it once rather than once a read (#872). The store may still delete the file
+     * while it is open. This default opens it for each read, as [read] does.
+     */
+    fun openReader(path: String): StoreFileReader = object : StoreFileReader {
+        override fun read(position: Long, into: ByteArray, offset: Int, length: Int): Int =
+            this@StoreFiles.read(path, position, into, offset, length)
+
+        override fun close() = Unit
+    }
+
     /** Starts [path] as a new, empty file. */
     fun create(path: String): StoreFileSink
 
@@ -95,6 +107,14 @@ internal interface StoreFiles {
 
     /** Removes the file or the empty directory [path]. One that does not exist is left alone. */
     fun delete(path: String)
+}
+
+/** A file open for reading, as [StoreFiles.openReader] gives it. */
+internal interface StoreFileReader {
+    /** Reads up to [length] bytes from [position]. Returns how many, or -1 at the end. */
+    fun read(position: Long, into: ByteArray, offset: Int, length: Int): Int
+
+    fun close()
 }
 
 /** A file being written. [close] reports a write that did not reach the disk. */
@@ -363,9 +383,39 @@ internal class DirectorySegmentStore(
             } ?: return 0
             // The entry is held, so nothing removes this file while it is read.
             val count = minOf(length.toLong(), span.end - position).toInt()
-            val read = files.read("${resource.directory}/${span.file}", position - span.start, into, offset, count)
+            val read = spanReader("${resource.directory}/${span.file}").read(position - span.start, into, offset, count)
             check(read > 0) { "a stored span ended before its length" }
             return read
+        }
+
+        /**
+         * The span file this handle last read, kept open while the reads stay in it (#872). Under
+         * [readerLock], because a reader's close can come from another thread than its reads; the
+         * read itself runs outside it, so a close never waits for one.
+         */
+        private var openPath: String? = null
+        private var openReader: StoreFileReader? = null
+        private val readerLock = SynchronizedObject()
+
+        /** The reader of [path], the open one when the last read was in the same span. */
+        private fun spanReader(path: String): StoreFileReader = synchronized(readerLock) {
+            check(!released.load()) { "the stored entry is closed" }
+            openReader?.let { reader -> if (openPath == path) return@synchronized reader }
+            openReader?.let { runCatching { it.close() } }
+            files.openReader(path).also {
+                openReader = it
+                openPath = path
+            }
+        }
+
+        private fun closeSpanReader() {
+            val reader = synchronized(readerLock) {
+                openReader.also {
+                    openReader = null
+                    openPath = null
+                }
+            } ?: return
+            runCatching { reader.close() }
         }
 
         override fun write(position: Long): SegmentStoreWriter {
@@ -374,7 +424,10 @@ internal class DirectorySegmentStore(
         }
 
         override fun close() {
-            if (released.compareAndSet(expectedValue = false, newValue = true)) release(resource)
+            if (released.compareAndSet(expectedValue = false, newValue = true)) {
+                closeSpanReader()
+                release(resource)
+            }
         }
     }
 

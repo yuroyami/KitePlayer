@@ -3,6 +3,9 @@ package io.github.yuroyami.kiteplayer.network
 import java.io.File
 import java.io.FileOutputStream
 import java.io.RandomAccessFile
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
+import java.nio.file.StandardOpenOption
 import java.nio.channels.OverlappingFileLockException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -40,6 +43,18 @@ private object JavaStoreFiles : StoreFiles {
             file.seek(position)
             file.read(into, offset, length)
         }
+
+    // A channel, not a RandomAccessFile: Windows lets a file opened this way be deleted while it
+    // is open, and the store deletes a span another span covers while a handle may hold it (#872).
+    override fun openReader(path: String): StoreFileReader {
+        val channel = FileChannel.open(File(path).toPath(), StandardOpenOption.READ)
+        return object : StoreFileReader {
+            override fun read(position: Long, into: ByteArray, offset: Int, length: Int): Int =
+                channel.read(ByteBuffer.wrap(into, offset, length), position)
+
+            override fun close() = channel.close()
+        }
+    }
 
     override fun create(path: String): StoreFileSink {
         val out = FileOutputStream(path)

@@ -39,6 +39,24 @@ class DirectorySegmentStoreTest {
         into
     }
 
+    /** A run of reads in one span opens its file once, not once a read, and the close lets it go (#872). */
+    @Test
+    fun readsInOneSpanOpenItsFileOnce() {
+        val store = store(maxBytes = 10_000)
+        store.put("a", 0, bytes(4_000))
+        store.put("a", 4_000, bytes(1_000, seed = 7))
+        store.open("a").use { entry ->
+            val into = ByteArray(250)
+            for (at in 0 until 4_000 step 250) assertEquals(250, entry.read(at.toLong(), into, 0, 250))
+            assertEquals(1, files.readersOpened, "sixteen reads in one span")
+            assertEquals(250, entry.read(4_000, into, 0, 250))
+            assertContentEquals(bytes(250, seed = 7), into)
+            assertEquals(2, files.readersOpened, "a read in the next span opens that one")
+            assertEquals(1, files.readersOpen, "and lets the first go")
+        }
+        assertEquals(0, files.readersOpen, "the close lets the last one go")
+    }
+
     @Test
     fun aSpanIsReadOnlyAfterItIsPublished() {
         val store = store()

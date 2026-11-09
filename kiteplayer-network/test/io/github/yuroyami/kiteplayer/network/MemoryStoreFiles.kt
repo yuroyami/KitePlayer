@@ -52,6 +52,29 @@ internal class MemoryStoreFiles : StoreFiles {
         return count
     }
 
+    /** How many readers [openReader] opened, and how many are open now. */
+    var readersOpened = 0
+    var readersOpen = 0
+
+    override fun openReader(path: String): StoreFileReader {
+        check()
+        readersOpened++
+        readersOpen++
+        return object : StoreFileReader {
+            private var closed = false
+
+            override fun read(position: Long, into: ByteArray, offset: Int, length: Int): Int {
+                kotlin.check(!closed) { "the reader of $path is closed" }
+                return this@MemoryStoreFiles.read(path, position, into, offset, length)
+            }
+
+            override fun close() {
+                if (!closed) readersOpen--
+                closed = true
+            }
+        }
+    }
+
     override fun create(path: String): StoreFileSink {
         check()
         files[path] = ByteArray(0)

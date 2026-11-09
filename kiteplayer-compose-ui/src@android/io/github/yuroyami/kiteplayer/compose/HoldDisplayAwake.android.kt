@@ -17,24 +17,19 @@ internal actual fun HoldDisplayAwake() {
 
 /**
  * Counts the holds on each Compose view's `keepScreenOn`, because two videos in one window share
- * the view and one of them pausing must not let the display sleep under the other. Main thread only.
+ * the view and one of them pausing must not let the display sleep under the other. The last
+ * release puts back the value the app had set (#932). Main thread only.
  */
 private object ScreenOnHolds {
-    private val holds = WeakHashMap<View, Int>()
+    private val holds = WeakHashMap<View, FlagHolds>()
 
     fun acquire(view: View) {
-        val count = (holds[view] ?: 0) + 1
-        holds[view] = count
-        if (count == 1) view.keepScreenOn = true
+        holds.getOrPut(view) { FlagHolds(read = { view.keepScreenOn }, write = { view.keepScreenOn = it }) }.acquire()
     }
 
     fun release(view: View) {
-        val count = (holds[view] ?: return) - 1
-        if (count > 0) {
-            holds[view] = count
-        } else {
-            holds.remove(view)
-            view.keepScreenOn = false
-        }
+        val flag = holds[view] ?: return
+        flag.release()
+        if (flag.holds == 0) holds.remove(view)
     }
 }

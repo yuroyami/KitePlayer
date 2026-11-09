@@ -9,11 +9,15 @@ class IdleTimerHoldsTest {
 
     private val flags = mutableListOf<Boolean>()
     private var original: (Boolean) -> Unit = {}
+    private var originalRead: () -> Boolean = { false }
+    private var appFlag = false
 
     @BeforeTest
     fun start() {
         original = IdleTimerHolds.setIdleTimerDisabled
-        IdleTimerHolds.setIdleTimerDisabled = { flags += it }
+        originalRead = IdleTimerHolds.isIdleTimerDisabled
+        IdleTimerHolds.setIdleTimerDisabled = { flags += it; appFlag = it }
+        IdleTimerHolds.isIdleTimerDisabled = { appFlag }
         repeat(IdleTimerHolds.count()) { IdleTimerHolds.release() }
         flags.clear()
     }
@@ -22,6 +26,19 @@ class IdleTimerHoldsTest {
     fun finish() {
         repeat(IdleTimerHolds.count()) { IdleTimerHolds.release() }
         IdleTimerHolds.setIdleTimerDisabled = original
+        IdleTimerHolds.isIdleTimerDisabled = originalRead
+    }
+
+    /** A timer the app had turned off itself stays off after the last hold (#932). */
+    @Test
+    fun theAppsOwnSettingSurvivesTheLastRelease() {
+        appFlag = true
+        IdleTimerHolds.acquire()
+        IdleTimerHolds.acquire()
+        IdleTimerHolds.release()
+        IdleTimerHolds.release()
+        assertEquals(emptyList(), flags, "the player wrote over the app's own setting")
+        assertEquals(true, appFlag)
     }
 
     @Test

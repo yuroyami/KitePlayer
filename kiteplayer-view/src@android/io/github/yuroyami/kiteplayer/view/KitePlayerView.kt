@@ -258,7 +258,16 @@ public open class KitePlayerView @JvmOverloads constructor(
             displayAwake.enabled = value
         }
 
-    private val displayAwake = DisplayAwakeHolder(hold = { keepScreenOn = true }, release = { keepScreenOn = false })
+    /** The [keepScreenOn] the app had set before the hold, which the release puts back (#932). */
+    private var screenOnBefore = false
+
+    private val displayAwake = DisplayAwakeHolder(
+        hold = {
+            screenOnBefore = keepScreenOn
+            keepScreenOn = true
+        },
+        release = { keepScreenOn = screenOnBefore },
+    )
 
     /**
      * Follows the player's state for the display hold and for what a screen reader hears, only

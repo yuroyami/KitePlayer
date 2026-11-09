@@ -167,4 +167,23 @@ class EqualizerStageTest {
         assertFailsWith<IllegalArgumentException> { EqualizerStage(channels = 0, sampleRate = rate) }
         assertFailsWith<IllegalArgumentException> { EqualizerStage(channels = 2, sampleRate = 0) }
     }
+
+    /** Silence after sound leaves no subnormal value in the filters, which x86 multiplies slowly (#824). */
+    @Test
+    fun silenceAfterSoundComesOutAsTrueZero() {
+        val stage = EqualizerStage(channels = 1, sampleRate = rate)
+        stage.set(bandGains(0 to 12f, 9 to -6f))
+        val tone = sine(31f)
+        stage.apply(tone, tone.size)
+        var subnormal = 0
+        // The smallest normal float; below it, down to zero, are the subnormals.
+        val minNormal = 1.17549435e-38f
+        // The 31 Hz band of this setting falls below the normal floats about 2.4 s into silence.
+        repeat(4 * rate / 512) {
+            val block = FloatArray(512)
+            stage.apply(block, block.size)
+            subnormal += block.count { it != 0f && abs(it) < minNormal }
+        }
+        assertEquals(0, subnormal, "subnormal samples in four seconds of silence")
+    }
 }

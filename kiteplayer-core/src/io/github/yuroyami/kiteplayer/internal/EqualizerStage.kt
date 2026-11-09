@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.internal
 
 import io.github.yuroyami.kiteplayer.EqualizerSettings
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
@@ -128,9 +129,19 @@ internal class EqualizerStage(private val channels: Int, private val sampleRate:
             }
             base += channels
         }
+        // After sound turns to digital silence the history decays through the subnormal floats,
+        // a quarter of a second for the 31 Hz band, and on x86, where the JVM flushes nothing to
+        // zero, every multiply on them is slow. A value this small is far below any output's
+        // resolution, so it is snapped to zero once a block (#824).
+        for (i in history.indices) {
+            if (abs(history[i]) < DENORMAL_FLOOR) history[i] = 0f
+        }
     }
 
     private companion object {
+        /** Below this a filter's history is silence; well above the subnormal floats, near 1.2e-38. */
+        const val DENORMAL_FLOOR = 1e-15f
+
         /**
          * The bandwidth of each filter.
          *

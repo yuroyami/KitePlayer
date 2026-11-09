@@ -71,6 +71,8 @@ internal class NightStage(val channels: Int, sampleRate: Int) {
                 if (level > loudest) loudest = level
             }
             peak = if (loudest > peak) loudest else peak * peakFall
+            // A peak this low already reads -180 dB, and below it the fall turns subnormal (#824).
+            if (peak < PEAK_FLOOR) peak = 0f
             if (inBlock == 0) nextBlock()
             inBlock = (inBlock + 1) % BLOCK
             gain += step
@@ -115,6 +117,9 @@ internal class NightStage(val channels: Int, sampleRate: Int) {
     }
 
     internal companion object {
+        /** Where [targetDb] already reads -180 dB, and the peak is silence. */
+        const val PEAK_FLOOR = 1e-9f
+
         /** Where the compression starts, in decibels below full scale. */
         const val THRESHOLD_DB: Double = -30.0
 

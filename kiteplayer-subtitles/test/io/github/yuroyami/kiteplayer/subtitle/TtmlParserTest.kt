@@ -382,4 +382,21 @@ class TtmlParserTest {
         )
         assertEquals(emptyList(), text("""<p begin="0s" end="4s" region="timed">X</p>"""), "never active together")
     }
+
+    /** Many timed spans in one paragraph cost one sweep, and the limit counts the cues they make (#879). */
+    @Test
+    fun aParagraphOfManyTimedSpansStaysWithinTheLimits() {
+        val n = 3000
+        val body = buildString {
+            append("""<p begin="0s" end="${n + 1}s">""")
+            for (i in 1..n) append("""<span begin="${i}s">x</span>""")
+            append("</p>")
+        }
+        val cues = TtmlParser.parse(tt(body))
+        assertEquals(n, cues.size)
+        assertEquals("x".repeat(n), cues.last().text)
+        assertEquals(1, cues.last().spans.size, "one span for one style")
+        val capped = TtmlParser.read(tt(body), TtmlWork(), maxCues = 10)
+        assertEquals(10, capped.size, "the limit counts the cues a paragraph makes, not the paragraphs")
+    }
 }

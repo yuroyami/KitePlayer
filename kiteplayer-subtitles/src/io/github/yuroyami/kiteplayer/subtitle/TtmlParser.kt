@@ -135,6 +135,8 @@ public object TtmlParser {
 
         private val out = ArrayList<SubtitleCue.Text>()
         private var paragraphs = 0
+        private var emitted = 0
+        private var emittedChars = 0L
         private var lastEnd = 0L
 
         fun cues(): List<SubtitleCue.Text> {
@@ -170,7 +172,7 @@ public object TtmlParser {
             regionId: String?,
             preserve: Boolean,
         ): Long? {
-            if (paragraphs >= maxCues) return null
+            if (paragraphs >= maxCues || overLimit()) return null
             val ownBegin = time(element, "begin")
             // An element whose begin cannot be read is skipped, with what it holds (#762).
             if (ownBegin == UNREADABLE) return null
@@ -226,14 +228,33 @@ public object TtmlParser {
             // stretch in which the same spans show (#492): it used to show every span throughout.
             val edges = (listOf(begin, paragraphEnd) + runs.flatMap { listOf(it.begin, it.end) })
                 .filter { it in begin..paragraphEnd }.distinct().sorted()
+            // One sweep over the edges, each run joining the shown set at its begin and leaving it at
+            // its end, in document order. Filtering every run for every stretch cost work that grew
+            // with the square of a paragraph's timed spans (#879).
+            val joins = HashMap<Int, MutableList<Int>>()
+            val leaves = HashMap<Int, MutableList<Int>>()
+            runs.forEachIndexed { at, run ->
+                val first = edges.binarySearch(run.begin.coerceIn(begin, paragraphEnd))
+                val past = edges.binarySearch(run.end.coerceIn(begin, paragraphEnd))
+                if (past > first) {
+                    joins.getOrPut(first) { ArrayList() } += at
+                    leaves.getOrPut(past) { ArrayList() } += at
+                }
+            }
+            val shown = ArrayList<Int>()
             for (index in 0 until edges.lastIndex) {
-                val from = edges[index]
-                val until = edges[index + 1]
-                val spans = spansOf(runs.filter { it.begin <= from && it.end >= until })
+                if (overLimit()) return
+                leaves[index]?.forEach { at -> shown.removeAt(shown.binarySearch(at)) }
+                joins[index]?.forEach { at -> shown.add(-(shown.binarySearch(at) + 1), at) }
+                if (shown.isEmpty()) continue
+                val spans = spansOf(shown.map(runs::get))
                 if (spans.isEmpty()) continue
-                cueOf(from, until, spans, runs, look, def)
+                cueOf(edges[index], edges[index + 1], spans, runs, look, def)
             }
         }
+
+        /** Whether this document has made as many cues, or as much cue text, as one file may (#879). */
+        private fun overLimit(): Boolean = emitted >= maxCues || emittedChars >= MAX_TEXT_CHARS
 
         private fun cueOf(from: Long, until: Long, spans: List<StyledSpan>, runs: List<Run>, look: Look, def: RegionDef?) {
             // A region that is not active shows nothing (TTML 1, 9.1.2), so text in a timed region
@@ -241,6 +262,8 @@ public object TtmlParser {
             val begin = maxOf(from, def?.begin ?: from)
             val end = minOf(until, def?.end ?: until)
             if (end <= begin) return
+            emitted++
+            for (span in spans) emittedChars += span.text.length
             if (end != INDEFINITE && end > lastEnd) lastEnd = end
             val region = def?.region
             // TTML starts a line at its start edge, but a paragraph with no region and no alignment
@@ -376,24 +399,27 @@ public object TtmlParser {
         val first = tidy.indexOfFirst { it.isNotEmpty() }
         if (first < 0) return emptyList()
         val last = tidy.indexOfLast { it.isNotEmpty() }
+        // One builder for the span being written: appending to a copy of its text for each run cost
+        // work and garbage that grew with the square of a cue's runs (#879).
         val spans = ArrayList<StyledSpan>()
+        val text = StringBuilder()
+        var style = CueStyle()
+        fun flush() {
+            if (text.isNotEmpty()) spans += StyledSpan(text.toString(), style)
+            text.clear()
+        }
         for (index in first..last) {
             val lineRuns = tidy[index]
-            if (index > first) {
-                // The break takes the style of the run before it, so it joins that span.
-                val previous = spans.lastOrNull()
-                if (previous != null) spans[spans.lastIndex] = previous.copy(text = previous.text + "\n") else spans += StyledSpan("\n")
-            }
+            // The break takes the style of the run before it, so it joins that span.
+            if (index > first) text.append('\n')
             for (run in lineRuns) {
-                val style = run.look.styleWith(run.background)
-                val previous = spans.lastOrNull()
-                if (previous != null && previous.style == style) {
-                    spans[spans.lastIndex] = previous.copy(text = previous.text + run.text)
-                } else {
-                    spans += StyledSpan(run.text, style)
-                }
+                val runStyle = run.look.styleWith(run.background)
+                if (text.isNotEmpty() && style != runStyle) flush()
+                style = runStyle
+                text.append(run.text)
             }
         }
+        flush()
         return spans
     }
 
@@ -940,6 +966,9 @@ internal class TtmlWork {
     var styleVisits: Int = 0
         internal set
 }
+
+/** The most cue text one document makes, in characters, however its paragraphs cut it (#879). */
+private const val MAX_TEXT_CHARS: Long = 16L * 1024 * 1024
 
 /** The end of a paragraph whose end nothing gives, until the closing pass in cues() places it (#759). */
 private const val INDEFINITE: Long = Long.MAX_VALUE / 4

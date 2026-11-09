@@ -630,14 +630,6 @@ internal val DISABLED_QUALITY_UNIFORMS: FloatArray = packQualityUniforms(
 )
 
 /**
- * Packs the HDR-to-SDR law's uniforms from the frame's declared colour. SDR transfers return
- * the disabled block, which is what keeps every existing SDR pixel bit-exact.
- *
- * srcPeak is 1000 nits for both transfers: PQ mastering metadata (SMPTE ST 2086 / CTA-861.3)
- * is not plumbed through [ColorSpaceInfo] yet, and 1000 is both HLG's nominal peak and the
- * commonest PQ mastering level. Recorded as the honest limit of this first tone-mapping pass.
- */
-/**
  * Whether the shader will actually roll this colour off, as opposed to leaving it alone.
  *
  * The SAME question [packToneUniforms] answers by returning DISABLED, asked separately so the
@@ -649,6 +641,15 @@ internal fun ColorSpaceInfo.willToneMap(): Boolean =
     transfer == io.github.yuroyami.kiteplayer.spi.ColorTransfer.Pq ||
         transfer == io.github.yuroyami.kiteplayer.spi.ColorTransfer.Hlg
 
+/**
+ * Packs the HDR-to-SDR law's uniforms from the frame's declared colour. SDR transfers return
+ * the disabled block, which is what keeps every existing SDR pixel bit-exact.
+ *
+ * A PQ frame rolls off from [srcPeakNits], which the composer takes from
+ * [io.github.yuroyami.kiteplayer.spi.toneMapPeakNits]: the scene's peak, held at the title's,
+ * then the title's peak, then 1000 nits, the commonest PQ mastering level. HLG keeps its
+ * nominal 1000 nits, because its system gamma decides its light.
+ */
 internal fun packToneUniforms(
     colorSpace: ColorSpaceInfo,
     dstPeakNits: Float = SDR_WHITE_NITS,

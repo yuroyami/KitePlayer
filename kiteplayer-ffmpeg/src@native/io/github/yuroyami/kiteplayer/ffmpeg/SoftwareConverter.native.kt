@@ -35,10 +35,11 @@ import kotlinx.cinterop.get
  *   high ten, and the two are sixteen times apart. Guessing produces a picture that is entirely white
  *   or entirely black.
  *
- * Chroma upsampling here is nearest neighbour, which is tier 0's deliberate limit: it is exactly what
- * a GPU renderer does with a nearest-filtered texture, so the two can be compared pixel for pixel.
- * Bilinear chroma is a tier 1 improvement, and it is the point at which the declared chroma location
- * starts to change the picture; see `chromaSampleShift` for why nearest neighbour does not care.
+ * Chroma upsampling here is nearest neighbour, which is tier 0's deliberate limit. The Metal renderer
+ * samples chroma bilinearly, offset by the declared siting, so a comparison of the two pictures needs
+ * a tolerance at every chroma edge. Bilinear chroma is a tier 1 improvement here, and it is the point
+ * at which the declared chroma location starts to change the picture; see `chromaSampleShift` for why
+ * nearest neighbour does not care.
  */
 public object SoftwareConverter {
 

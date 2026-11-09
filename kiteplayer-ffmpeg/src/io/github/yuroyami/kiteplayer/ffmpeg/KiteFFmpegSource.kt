@@ -1292,10 +1292,11 @@ private class KiteFFmpegVideoDecoder(
      * which is the only honest moment to build it: the container's declared parameters can lie
      * and the decoder's output cannot. A graph takes one input shape, so a picture whose size,
      * format or pixel shape moves mid-stream gets a new graph, after the old one gave back what it
-     * held (#484), as the `ffmpeg` command line does. Timestamps pass through in the stream's own time base, so
-     * the supported chains are the timebase-preserving ones (scale, crop, eq, format and
-     * friends); fps-changing chains are the KD roadmap's own next step and refuse nothing today
-     * because their output time base would silently disagree with the stream's.
+     * held (#484), as the `ffmpeg` command line does. Every output carries the time base of the
+     * graph's own buffer sink, so a chain that changes the rate or the time base is dated
+     * correctly; the deinterlacer the player adds already halves it. A Dolby Vision scene peak
+     * follows its frame through the graph by time, so a chain that drops or makes frames gives an
+     * output the peak of the input at its own time, as [scenePeakOf] describes.
      */
     private fun nextDecodedFrame(): DecodedPicture? {
         val description = filterDescription ?: return decoder.receive()?.let(::readDolbyVision)

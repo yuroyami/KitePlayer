@@ -68,28 +68,28 @@ public fun interface AwtCanvasDecoration {
 }
 
 /**
- * Draws frames onto an AWT canvas, on a thread of its own.
+ * Draws frames onto an AWT canvas, on the engine's video scheduler rather than Compose's clock.
  *
  * ### Why this exists next to the Compose renderer
  *
  * Compose draws the whole window as one scene on one clock, so heavy UI work delays the picture.
- * This renderer paints a heavyweight AWT canvas from its own thread through a `BufferStrategy`,
- * which the window server presents independently. Measured 2026-08-30: with the Compose frame
+ * This renderer paints a heavyweight AWT canvas off that clock through a `BufferStrategy`, which
+ * the window server presents independently. Measured 2026-08-30: with the Compose frame
  * clock choked to 8 percent of its rate, a canvas painted this way kept 100 percent of its own.
  *
  * ### The ownership rule that matters most
  *
  * Every frame handed to [present] is closed exactly once, on every path including refusal. A leak
  * here is 3.11 MB per 1080p frame, so the paths that refuse are the ones worth reading: no canvas,
- * no peer yet, a zero-sized canvas, a painter that declines the frame, a closed renderer, and a
- * frame superseded by a newer one while the painter was busy. Each closes and counts.
+ * no peer yet, a zero-sized canvas, a painter that declines the frame, and a closed renderer.
+ * Each closes and counts.
  *
- ### Where the painting happens, said plainly because it is easy to assume otherwise
+ * ### Where the painting happens, said plainly because it is easy to assume otherwise
  *
  * [present] converts and paints on the thread that calls it, which is the engine's video
- * scheduler, exactly as the Android surface renderer does. That is already independent of
- * Compose, which is the decoupling this path exists for; it is NOT independent of the engine, and
- * a slow present slows the schedule that called it. There is no queue and no painter thread here,
+ * scheduler. That is already independent of Compose, which is the decoupling this path exists
+ * for; it is NOT independent of the engine, and a slow present slows the schedule that called it,
+ * an [AwtCanvasDecoration] included, since it paints in the same call. There is no queue and no painter thread here,
  * so nothing is ever superseded inside this renderer and [supersededFrames] stays zero: the
  * counter exists because the view's ledger sums one number across every renderer it builds, and a
  * renderer with nothing to report reports nothing rather than being absent from the sum.

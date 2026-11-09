@@ -231,6 +231,12 @@ public class AudioPlayback(
      */
     private var join: Join = Join.None
 
+    /**
+     * True once [endOfStream] or [drain] said no more audio is coming, until a [flush]. Under the
+     * lock, because [anchorLocked] reads it from whichever thread asks for the position (#818).
+     */
+    private var endMarked = false
+
     /** Where the next item's first sample plays, on the playout axis. */
     private var joinBoundaryUs: Long = 0
 
@@ -736,6 +742,12 @@ public class AudioPlayback(
         }
         if (playoutClock.paused) {
             val now = clock.nanos()
+            // Once the sound has ended, the anchor stays at its last sample while the clock runs on
+            // with the picture. Heard more than STALE_END_ANCHOR ago, with nothing left in the ring,
+            // it says nothing about now, so it cannot pull a paused clock back to the end of the
+            // sound (#818). A fresher one still trims the clock's short run past a sound that ended
+            // with the media, as the end of every item reads it.
+            if (endMarked && now - anchor.audibleAtNanos > STALE_END_ANCHOR_NANOS && (ring?.bufferedFrames ?: 0) == 0) return
             val toCome = (anchor.audibleAtNanos - now).coerceAtLeast(0L) / 1_000L
             val heardNow = anchor.pts.micros - toCome
             val frozen = playoutClock.nowOrNull()?.micros
@@ -901,6 +913,7 @@ public class AudioPlayback(
             // An empty ring has nothing on either side of a join, and the samples that follow
             // carry the current item's own timestamps.
             join = Join.None
+            endMarked = false
         }
         // The conversion stages hold audio of the position that was abandoned. After a seek,
         // carrying it into the new position would mix the two.
@@ -946,6 +959,7 @@ public class AudioPlayback(
      * a handful of underruns, which makes the counter useless for spotting the real thing.
      */
     public fun endOfStream() {
+        synchronized(lock) { endMarked = true }
         ring?.markEnding()
     }
 
@@ -965,6 +979,7 @@ public class AudioPlayback(
     @Throws(IllegalStateException::class, kotlin.coroutines.cancellation.CancellationException::class)
     public suspend fun drain() {
         val ring = ring ?: return
+        synchronized(lock) { endMarked = true }
         ring.markEnding()
         // Wait for the ring itself to empty first, then let the device finish its own buffer. Each
         // wait is the time the rest takes to play, so the end is noticed on time with few wake-ups.
@@ -1314,6 +1329,14 @@ public class AudioPlayback(
 
         /** How long [drain] waits for a device that takes nothing from the ring before it gives up. */
         val DRAIN_STALL_LIMIT: Duration = 2.seconds
+
+        /**
+         * How long after its last sound an ended ring's anchor stops moving a paused clock (#818).
+         * Longer than the clock's run past a sound that ends with the media, which the engine's
+         * drain and the device's buffer bound at a few hundred milliseconds; the 2.2 s clip of
+         * ItemClipTest measured 55 ms.
+         */
+        const val STALE_END_ANCHOR_NANOS = 500_000_000L
 
         /** The longest wait on a full ring, so a deep ring still refills in small steps. */
         val FULL_RING_WAIT_MAX: Duration = 50.milliseconds

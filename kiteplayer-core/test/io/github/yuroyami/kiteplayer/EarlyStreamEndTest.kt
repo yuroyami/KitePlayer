@@ -205,4 +205,32 @@ class EarlyStreamEndTest {
         assertTrue(harness.cuts().isEmpty(), "${harness.cuts()}")
         harness.close()
     }
+
+    /**
+     * Once the sound has ended, the ring's last anchor stays at its last sample while the clock
+     * runs on with the picture, so a pause in the silent tail must not move the position back to
+     * the end of the sound (#818).
+     */
+    @Test
+    fun aPauseAfterTheSoundEndedKeepsThePosition() = runTest {
+        val harness = CoreHarness(this, script = shortSound(endUs = 10_000_000))
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(20.seconds)
+        val playing = harness.core.position().inWholeMicroseconds
+        assertTrue(abs(playing - 20_000_000) < 500_000, "20 s in, the position is $playing")
+        harness.core.pause()
+        harness.run(1.seconds)
+        val paused = harness.core.position().inWholeMicroseconds
+        assertTrue(abs(paused - playing) < 200_000, "a pause at $playing moved the position to $paused")
+        harness.run(2.seconds)
+        assertTrue(abs(harness.core.position().inWholeMicroseconds - playing) < 200_000, "the paused position moved later")
+        // And at the end of the picture the position stays at the end, not at the end of the sound.
+        harness.core.play()
+        harness.run(25.seconds)
+        assertEquals(PlaybackStatus.Ended, harness.core.snapshots.value.status)
+        val ended = harness.core.position().inWholeMicroseconds
+        assertTrue(ended > 39_000_000, "once ended, the position is $ended")
+        harness.close()
+    }
 }

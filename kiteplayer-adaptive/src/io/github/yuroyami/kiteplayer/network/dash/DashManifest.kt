@@ -532,10 +532,15 @@ public object DashManifestParser {
             ?.attr("value")?.trim() ?: return null
         val columns = value.substringBefore('x', "").trim().toIntOrNull()?.takeIf { it > 0 } ?: return null
         val rows = value.substringAfter('x', "").trim().toIntOrNull()?.takeIf { it > 0 } ?: return null
+        // A grid of 65536 by 65536 overflowed the tile count to zero and failed the whole playlist.
+        // One past the limit is no thumbnail track a viewer can use, so it reads as no grid (#745).
+        if (columns.toLong() * rows > MAX_TILES) return null
         return DashTiles(columns, rows)
     }
 
-    /** The two addresses DASH-IF has given the thumbnail grid property. */
+    /** The most tiles one thumbnail image may hold; real grids are a few by a few (#745). */
+    private const val MAX_TILES = 10_000L
+
     /** Whether every `EssentialProperty` of [element] names a scheme this reader understands (#622). */
     private fun essentialUnderstood(element: XmlElement): Boolean =
         element.children("EssentialProperty").all { property ->
@@ -548,6 +553,7 @@ public object DashManifestParser {
     private const val CICP_SCHEME_PREFIX: String = "urn:mpeg:mpegb:cicp:"
     private const val DVB_FONT_DOWNLOAD_SCHEME: String = "urn:dvb:dash:fontdownload:2014"
 
+    /** The two addresses DASH-IF has given the thumbnail grid property. */
     private val TILE_SCHEMES = setOf("http://dashif.org/thumbnail_tile", "http://dashif.org/guidelines/thumbnail_tile")
 
     /** The transfer characteristics value [element] states, or null when it states none. */

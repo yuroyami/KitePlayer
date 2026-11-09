@@ -359,4 +359,18 @@ class DashSegmentPlanLimitsTest {
         assertEquals(256L * 1024 * 1024, raised.parseChars)
         assertEquals(DashManifestParser.MAX_PLAN_URLS, raised.planUrls, "a plan's ceilings do not follow the document")
     }
+
+    /** A thumbnail grid past ten thousand tiles reads as no grid, so its count cannot overflow (#745). */
+    @Test
+    fun aThumbnailGridTooLargeToShowReadsAsNoGrid() {
+        fun tiles(value: String): DashTiles? = manifest(
+            "<SegmentTemplate media=\"t-${d}Number${d}.jpg\" duration=\"2\" timescale=\"1\"/>",
+            representations = "<Representation id=\"t\" bandwidth=\"1\">" +
+                "<EssentialProperty schemeIdUri=\"http://dashif.org/thumbnail_tile\" value=\"$value\"/></Representation>",
+        ).periods.single().adaptationSets.single().representations.single().tiles
+        assertEquals(DashTiles(10, 1), tiles("10x1"))
+        assertEquals(DashTiles(100, 100), tiles("100x100"))
+        assertEquals(null, tiles("65536x65536"), "the tile count overflowed to zero")
+        assertEquals(null, tiles("100x101"))
+    }
 }

@@ -292,7 +292,7 @@ internal object DashHls {
                 val nominal = images?.segmentTemplate?.duration?.takeIf { it > 0 }
                     ?.let { it * 1_000_000L / images.segmentTemplate.timescale } ?: segment.durationMicros
                 if (grid != null && nominal != tilesWritten) {
-                    val tileMicros = nominal / (grid.columns * grid.rows)
+                    val tileMicros = nominal / (grid.columns.toLong() * grid.rows)
                     append("#EXT-X-TILES:")
                     tileSize(images)?.let { (w, h) -> append("RESOLUTION=${w}x$h,") }
                     append("LAYOUT=${grid.columns}x${grid.rows},DURATION=").append(seconds(tileMicros)).append('\n')

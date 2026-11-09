@@ -78,9 +78,11 @@ commonMain.dependencies {
 }
 ```
 
-This page describes `main`, which is ahead of 0.3.0. Three parts are marked *not released yet*:
-Matroska editions with linked files, 360 degree video, and `kiteplayer-compose` on the web. They
-come with the next release, and code that uses them does not compile against 0.3.0.
+This page describes `main`, which is ahead of 0.3.0. What 0.3.0 lacks is marked *not released
+yet*: among them Matroska editions with linked files, 360 degree video, `kiteplayer-compose` on the
+web, the CEA-708 caption services, the refusal of DRM media and `TrackInfo.isLanguage`. They come
+with the next release, and code that uses them does not compile against 0.3.0. The samples on this
+page use only what 0.3.0 has. The [CHANGELOG](CHANGELOG.md)'s Unreleased section lists all of it.
 
 You don't install FFmpeg (it comes inside the artifacts), and there is no Gradle plugin to apply.
 On Android, every artifact needs `minSdk` 26, and your app must compile against SDK 37.2 or later
@@ -291,8 +293,8 @@ player.setVolume(0.8f)
 
 // Every audio, video and subtitle track of the open item
 val tracks = player.state.value.tracks
-// isLanguage matches every spelling a container uses, such as fr, fra and fre
-val french = tracks.audio.firstOrNull { it.isLanguage("fr") }
+// The next release's isLanguage("fr") also matches the fra and fre spellings a container may use
+val french = tracks.audio.firstOrNull { it.language == "fr" || it.language == "fra" || it.language == "fre" }
 if (french != null) player.selectTrack(TrackKind.Audio, french.id)
 ```
 
@@ -346,7 +348,7 @@ KitePlayer reads these subtitle formats:
 - ASS and SSA, drawn by libass exactly as authored, including signs and karaoke
 - SubRip, WebVTT and TTML
 - image subtitles from Blu-ray, DVD and DVB, and DVB teletext
-- closed captions inside broadcast video, CEA-608 and each CEA-708 service
+- closed captions inside broadcast video, CEA-608, and each CEA-708 service (*not released yet*)
 - synced lyrics
 
 Each subtitle is a track of the item. A subtitle file that you add during playback becomes a track
@@ -532,7 +534,7 @@ case in detail.
   DASH adaptation sets. When every audio and video set of a DASH manifest is encrypted, or an HLS
   stream names a Widevine, PlayReady or FairPlay key or uses `SAMPLE-AES-CTR`, the open fails with
   `PlaybackError.DrmUnsupported`, which names the system, so an app can say so or hand the item to
-  a platform player.
+  a platform player. *Not released yet:* 0.3.0 has no `DrmUnsupported`.
 - The web build plays a much smaller set of formats than the other platforms, because its codec
   module is a much smaller FFmpeg. It opens MP4 and MOV, Matroska and WebM, MPEG-TS, MP3, raw AAC,
   FLAC, HLS and WebVTT, and decodes H.264, HEVC, VP9, AAC, MP3, FLAC, Opus, Vorbis and PCM. So an

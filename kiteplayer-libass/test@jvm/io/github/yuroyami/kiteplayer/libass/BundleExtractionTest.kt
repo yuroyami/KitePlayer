@@ -67,4 +67,37 @@ class BundleExtractionTest {
         assertTrue(starting.exists(), "a folder a launch may be about to load from was deleted")
         assertTrue(unrelated.exists(), "a folder of another program was deleted")
     }
+
+    /**
+     * On Linux the temporary folder is shared, so another account can plant a link named like an
+     * old folder of ours. The cleanup must not follow it into the folder it names (#885).
+     */
+    @Test
+    fun aPlantedLinkIsNotFollowedByTheCleanup() {
+        val victim = Files.createTempDirectory("bundle-extraction-victim").toFile()
+        try {
+            val precious = File(victim, "precious.txt").apply { writeText("keep") }
+            val link = File(temp, "${EXTRACT_PREFIX}-planted").toPath()
+            Files.createSymbolicLink(link, victim.toPath())
+            val old = System.currentTimeMillis() - 2 * 60 * 60 * 1000L
+            Files.setLastModifiedTime(link, java.nio.file.attribute.FileTime.fromMillis(old))
+            victim.setLastModified(old)
+            extractBundle(temp, bundle)
+            assertTrue(precious.exists(), "the cleanup followed a link and deleted what it named")
+        } finally {
+            victim.deleteRecursively()
+        }
+    }
+
+    /** A folder of the expected name that is open to others is not trusted (#885). */
+    @Test
+    fun aFolderOthersCanWriteToIsNotUsed() {
+        if ("posix" !in temp.toPath().fileSystem.supportedFileAttributeViews()) return
+        val first = extractBundle(temp, bundle)
+        Files.setPosixFilePermissions(first.toPath(), java.nio.file.attribute.PosixFilePermissions.fromString("rwxrwxrwx"))
+        val second = extractBundle(temp, bundle)
+        assertNotEquals(first, second, "a folder anybody can write to was used")
+        assertContentEquals(bundle.values.single(), File(second, "libkiteplayer_libass_jni.so").readBytes())
+        second.deleteRecursively()
+    }
 }

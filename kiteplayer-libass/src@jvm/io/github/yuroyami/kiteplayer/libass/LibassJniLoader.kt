@@ -2,7 +2,10 @@ package io.github.yuroyami.kiteplayer.libass
 
 import java.io.File
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.attribute.PosixFilePermissions
 
 /**
  * Finds and loads `kiteplayer_libass_jni` on a desktop JVM, the same three ways KiteFFmpeg's own
@@ -45,15 +48,23 @@ internal actual fun loadLibassJni() {
 }
 
 /**
- * Writes [files] into a folder of [temp] named for their contents, and answers that folder (#651).
+ * Writes [files] into a folder of [temp] named for their contents and for this user, and answers
+ * that folder (#651, #885).
  *
  * A launch reuses the copy an earlier one wrote and writes only a file that is missing or differs,
  * so the folder holds one copy per build of the library rather than one per launch. Windows
  * cannot delete a library that is loaded, so a folder made fresh at every launch and left to
- * `deleteOnExit` stayed behind at every launch, 5 MB each time. The other folders of this prefix,
- * those of other builds and of the old one-per-launch loader, are deleted once they are an hour
- * old, so a process that is just starting keeps the copy it is about to load; a delete that fails,
- * because a running process holds the library, is left for a later launch.
+ * `deleteOnExit` stayed behind at every launch, 5 MB each time.
+ *
+ * On Linux [temp] is the shared `/tmp`, where another account can make a folder of the same name
+ * first and put its own library in it. So the folder is made owner-only, and it is used only while
+ * this user owns it and nobody else can write to it; otherwise this launch extracts into a private
+ * folder of its own. The other folders of this prefix, those of other builds and of the old
+ * one-per-launch loader, are deleted once they are an hour old, so a process that is just starting
+ * keeps the copy it is about to load. That cleanup never follows a link, leaves a folder another
+ * user owns alone, and deletes only regular files: a planted link to a folder of this user's would
+ * otherwise have it emptied. A delete that fails, because a running process holds the library, is
+ * left for a later launch.
  */
 internal fun extractBundle(temp: File, files: Map<String, ByteArray>, nowMillis: Long = System.currentTimeMillis()): File {
     val digest = java.security.MessageDigest.getInstance("SHA-256")
@@ -63,10 +74,15 @@ internal fun extractBundle(temp: File, files: Map<String, ByteArray>, nowMillis:
         digest.update(bytes)
     }
     val tag = digest.digest().take(12).joinToString("") { ((it.toInt() and 0xFF) + 0x100).toString(16).substring(1) }
-    val directory = File(temp, "$EXTRACT_PREFIX-$tag")
-    directory.mkdirs()
-    // Fresh at every launch, so a launch of another build leaves a folder in use alone.
-    directory.setLastModified(nowMillis)
+    val shared = File(temp, "$EXTRACT_PREFIX-$tag-${userTag()}")
+    removeStale(temp, keep = shared, nowMillis = nowMillis)
+    val directory = if (ownedDirectory(shared)) {
+        // Fresh at every launch, so a launch of another build leaves a folder in use alone.
+        shared.setLastModified(nowMillis)
+        shared
+    } else {
+        Files.createTempDirectory(EXTRACT_PREFIX).toFile().apply { deleteOnExit() }
+    }
     for ((name, bytes) in files) {
         val target = File(directory, name)
         if (target.isFile && target.length() == bytes.size.toLong() && target.readBytes().contentEquals(bytes)) continue
@@ -86,16 +102,57 @@ internal fun extractBundle(temp: File, files: Map<String, ByteArray>, nowMillis:
         } finally {
             Files.deleteIfExists(partial)
         }
-    }
-    temp.listFiles()?.forEach { other ->
-        if (other.isDirectory && other.name.startsWith(EXTRACT_PREFIX) && other != directory &&
-            nowMillis - other.lastModified() > STALE_AFTER_MILLIS
-        ) {
-            runCatching { other.deleteRecursively() }
-        }
+        if (directory != shared) target.deleteOnExit()
     }
     return directory
 }
+
+/**
+ * Makes [directory] when it is missing and says whether this process may use it: on a POSIX
+ * system only while this user owns it and nobody else can write to it.
+ */
+private fun ownedDirectory(directory: File): Boolean {
+    val path = directory.toPath()
+    val posix = "posix" in path.fileSystem.supportedFileAttributeViews()
+    if (!Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
+        runCatching {
+            if (posix) {
+                Files.createDirectory(path, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")))
+            } else {
+                Files.createDirectory(path)
+            }
+        }
+        if (!Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) return false
+    }
+    if (!posix) return true
+    return runCatching {
+        val owner = Files.getOwner(path, LinkOption.NOFOLLOW_LINKS).name
+        val permissions = PosixFilePermissions.toString(Files.getPosixFilePermissions(path, LinkOption.NOFOLLOW_LINKS))
+        owner == System.getProperty("user.name") && permissions.substring(3) == "------"
+    }.getOrDefault(false)
+}
+
+private fun removeStale(temp: File, keep: File, nowMillis: Long) {
+    for (other in temp.listFiles().orEmpty()) {
+        if (other == keep || !other.name.startsWith(EXTRACT_PREFIX)) continue
+        val path = other.toPath()
+        val attributes = runCatching {
+            Files.readAttributes(path, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+        }.getOrNull() ?: continue
+        if (!attributes.isDirectory || attributes.isSymbolicLink) continue
+        if (nowMillis - attributes.lastModifiedTime().toMillis() <= STALE_AFTER_MILLIS) continue
+        val owner = runCatching { Files.getOwner(path, LinkOption.NOFOLLOW_LINKS).name }.getOrNull()
+        if (owner != null && owner != System.getProperty("user.name")) continue
+        val inside = other.listFiles().orEmpty()
+        if (inside.all { Files.isRegularFile(it.toPath(), LinkOption.NOFOLLOW_LINKS) } && inside.all { it.delete() }) {
+            other.delete()
+        }
+    }
+}
+
+/** Keeps two users of one machine out of each other's folder name. */
+private fun userTag(): String =
+    System.getProperty("user.name").orEmpty().filter { it.isLetterOrDigit() }.take(32).ifEmpty { "user" }
 
 /** The folder name of every copy this loader writes, and of the folders the earlier loader made. */
 internal const val EXTRACT_PREFIX = "kiteplayer-libass-jni"

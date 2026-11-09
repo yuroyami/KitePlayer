@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer
 
+import io.github.yuroyami.kiteplayer.internal.SeekResult
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -243,6 +244,24 @@ class NetworkRecoveryTest {
         assertTrue(harness.runUntil(5.seconds) { harness.snapshot().status == PlaybackStatus.Playing })
         assertEquals(40_000_000L, harness.source.seekTargets.last())
         assertTrue(harness.core.position() >= 40.seconds, "at ${harness.core.position()}")
+        harness.close()
+    }
+
+    /** A seek during the wait answers in the item's time, not its file's, as every other seek (#798). */
+    @Test
+    fun aSeekDuringTheWaitLandsInTheItemsTime() = runTest {
+        val faults = FaultPlan()
+        val network = FakeNetwork()
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 60_000_000), faults = faults, config = config(network))
+        harness.attachRenderer()
+        harness.core.open(MediaItem(address, clip = MediaClip(start = 10.seconds)))
+        harness.core.play()
+        harness.run(5.seconds)
+        harness.goOffline(faults, network)
+        assertTrue(harness.runUntil(5.seconds) { harness.snapshot().reconnecting }, "the read did not fail")
+        val result = harness.core.seek(Pts(20_000_000), SeekMode.Precise)
+        assertEquals(SeekResult.Applied(Pts(20_000_000)), result, "the landing in the item's time")
+        assertEquals(20.seconds, harness.core.position())
         harness.close()
     }
 

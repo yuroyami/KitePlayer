@@ -6192,7 +6192,8 @@ internal class PlaybackCore(
             publishedPositionMicros.value = at
             maskedSeekTargetMicros.value = NO_SEEK_MASK
             progressState.value = progressState.value.copy(position = itemUs.microseconds)
-            reply?.complete(SeekResult.Applied(Pts(at)))
+            // In the item's time, as every other seek answers (#798).
+            reply?.complete(SeekResult.Applied(Pts(itemUs)))
             return
         }
         val target = when (val to = request.target) {
@@ -6206,7 +6207,8 @@ internal class PlaybackCore(
         publishedPositionMicros.value = at
         maskedSeekTargetMicros.value = NO_SEEK_MASK
         progressState.value = progressState.value.copy(position = itemTime(at).microseconds)
-        reply?.complete(SeekResult.Applied(Pts(at)))
+        // In the item's time, as resolveSeekReplies answers every other seek (#798).
+        reply?.complete(SeekResult.Applied(Pts(itemTime(at))))
     }
 
     /**

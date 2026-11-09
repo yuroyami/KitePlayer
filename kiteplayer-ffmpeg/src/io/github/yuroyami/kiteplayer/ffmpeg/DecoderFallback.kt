@@ -179,7 +179,13 @@ private class ReplayFallbackDecoder(
         return true
     }
 
-    override suspend fun receive(): VideoFrame? {
+    override suspend fun receive(): VideoFrame? = try {
+        receiveOnWorker()
+    } finally {
+        publishDrained()
+    }
+
+    private suspend fun receiveOnWorker(): VideoFrame? {
         checkOpen()
         hardwareOutputs.removeFirstOrNull()?.let { frame ->
             accountHardwareOutput(frame)
@@ -203,15 +209,29 @@ private class ReplayFallbackDecoder(
         return frame
     }
 
-    override val isDrained: Boolean
-        get() {
-            val drained = !closed && replayOutputs.isEmpty() && hardwareOutputs.isEmpty() &&
-                (active?.isDrained == true)
-            if (drained && replaySuppressRemaining != 0L) failTerminal(replayShortageFailure())
-            return drained
-        }
+    /**
+     * A pure read, because the engine asks from the actor while the worker drives this decoder
+     * (#806). The worker publishes the answer at the end of each [receive], [flush] and [close].
+     * A replay still short of the outputs it owes is not drained: the worker's next receive fails
+     * it typed, as [receiveSoftware] does, instead of a getter closing the decoder under it.
+     */
+    override val isDrained: Boolean get() = drained.value
 
-    override suspend fun flush(newGeneration: Generation) {
+    private val drained = atomic(false)
+
+    /** On the worker: what [isDrained] answers until the worker's next call. */
+    private fun publishDrained() {
+        drained.value = !closed && replayOutputs.isEmpty() && hardwareOutputs.isEmpty() &&
+            active?.isDrained == true && replaySuppressRemaining == 0L
+    }
+
+    override suspend fun flush(newGeneration: Generation) = try {
+        flushOnWorker(newGeneration)
+    } finally {
+        publishDrained()
+    }
+
+    private suspend fun flushOnWorker(newGeneration: Generation) {
         checkOpen()
         var closeFailure: Throwable? = closeRetainedAndReplayOutputs()
         resetReplayState()
@@ -246,6 +266,7 @@ private class ReplayFallbackDecoder(
             first = first ?: failure
         }
         resetReplayState()
+        drained.value = false
         first?.let { throw it }
     }
 

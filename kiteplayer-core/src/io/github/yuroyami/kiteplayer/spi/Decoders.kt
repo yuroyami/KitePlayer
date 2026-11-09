@@ -74,6 +74,10 @@ public interface VideoDecoder : AutoCloseable {
      * this decoder has nothing left to give. Without the flag the engine would have to infer it from
      * having sent a null packet and then guess how many null receives are enough, which is how a player
      * ends up either cutting the last frames off or never finishing at all.
+     *
+     * The engine reads this from its actor while a worker drives the decoder, so it is a pure read:
+     * it never throws, closes or changes anything, and a decoder that has a failure to report gives
+     * it from its next [receive] on the worker (#806).
      */
     public val isDrained: Boolean
 

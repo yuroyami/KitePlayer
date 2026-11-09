@@ -464,6 +464,34 @@ class DecoderFallbackTest {
         h.assertLedgerZero()
     }
 
+    /**
+     * The engine reads isDrained from the actor while the worker drives the decoder, so the read
+     * must not close the decoder under the worker. A replay short of the outputs it owes fails on
+     * the worker's next receive, typed (#806).
+     */
+    @Test
+    fun aReplayShortOfItsOutputsFailsOnTheWorkerAndNeverInTheDrainedRead() = runTest {
+        val h = Harness().apply {
+            hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failSendAt = 3) }
+            softwareFactory = {
+                ScriptDecoder(ledger, HwdecStatus.Software) { packet ->
+                    if (packet.id == 1) listOf(FrameSpec(1, keyframe = true)) else emptyList()
+                }
+            }
+        }
+        val decoder = requireNotNull(h.open(autoSelection()))
+        assertDelivered(decoder, h.packet(1, keyframe = true), 1)
+        assertDelivered(decoder, h.packet(2), 2)
+        decoder.send(h.packet(3))
+        assertEquals(HwdecStatus.Software, decoder.hardware)
+        decoder.send(null)
+        assertFalse(decoder.isDrained, "a replay that still owes an output is not drained")
+        val failure = assertFailsWith<PlaybackException> { decoder.receive() }
+        assertTrue("previously delivered" in failure.message.orEmpty(), "the shortage is named: ${failure.message}")
+        decoder.close()
+        h.assertLedgerZero()
+    }
+
     @Test
     fun drainBackpressureIsResolvedInternallyBecauseCallerDoesNotRetryNull() = runTest {
         val h = Harness().apply {

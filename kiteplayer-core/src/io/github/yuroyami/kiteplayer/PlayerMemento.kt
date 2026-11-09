@@ -13,10 +13,15 @@ import kotlin.time.Duration.Companion.microseconds
  * [MediaItem.externalSubtitles], [MediaItem.thumbnails], [MediaItem.videoFilter] and
  * [MediaItem.audioFilter]. [asProperties] drops all five, and an item that needs one is rebuilt by the application before
  * [KitePlayer.restore]. Headers, raw
- * open options, the format hint, the demux settings, the start position, the clip, the title,
- * artist and album, and whether an item runs into the next are strings and travel. So do the
+ * open options, the format hint, the demux settings, the start position, the clip, the growth of
+ * a file still being written, the title, artist and album, and whether an item runs into the
+ * next are strings and travel. So do the
  * address, title and language of each [MediaItem.externalAudio] input, but not its [AudioSource.io],
  * and the address of each [MediaItem.linkedFiles] file, but not its [LinkedFile.io].
+ *
+ * Of the player's own settings, a memento leaves out only what belongs to the application rather
+ * than the viewer: the markers, an external clock, and the [PlayerConfig] the player was built
+ * with. The flash guard and the A-B loop travel (#914).
  *
  * Tracks are remembered by LANGUAGE rather than by id, because ids belong to one open of one
  * container and a memento outlives both.
@@ -75,12 +80,19 @@ public data class PlayerMemento(
     val skipSilence: Boolean = false,
     /** Where the viewer looked into a 360 degree video (#460), so a restore looks there again. */
     val sphericalView: SphericalView = SphericalView(),
+    /** Whether flashing video was dimmed. An accessibility setting, so it travels (#914). */
+    val flashGuard: FlashGuard = FlashGuard.FollowSystem,
+    /** The A of the A-B loop, or null when none was armed. It belongs to the player, so it travels (#914). */
+    val abLoopA: Duration? = null,
+    /** The B of the A-B loop, or null when it ran to the end of the media or none was armed. */
+    val abLoopB: Duration? = null,
 ) {
 
     /**
      * Flat string pairs, version-stamped. Keys: `version`, `queue.size`, then per item
      * `queue.N.uri`, `queue.N.formatHint`, `queue.N.startPosition` (microseconds),
      * `queue.N.clipStart` and `queue.N.clipEnd` (microseconds) for a clipped item,
+     * `queue.N.growth` (microseconds) for a file still being written,
      * `queue.N.title`, `queue.N.artist`, `queue.N.album`, `queue.N.audioContent` when it is not
      * automatic, `queue.N.header.<name>`,
      * `queue.N.option.<key>`, `queue.N.demux.<field>`, for each external audio input
@@ -101,6 +113,7 @@ public data class PlayerMemento(
                 put("queue.$n.clipStart", clip.start.inWholeMicroseconds.toString())
                 clip.end?.let { put("queue.$n.clipEnd", it.inWholeMicroseconds.toString()) }
             }
+            item.growth?.let { put("queue.$n.growth", it.endsAfter.inWholeMicroseconds.toString()) }
             item.title?.let { put("queue.$n.title", it) }
             item.artist?.let { put("queue.$n.artist", it) }
             item.album?.let { put("queue.$n.album", it) }
@@ -170,6 +183,9 @@ public data class PlayerMemento(
         put("quality.linearLight", renderQuality.linearLight.toString())
         put("quality.animationUpscaler", renderQuality.animationUpscaler.name)
         put("hdrPolicy", hdrPolicy.name)
+        put("flashGuard", flashGuard.name)
+        abLoopA?.let { put("abLoopA", it.inWholeMicroseconds.toString()) }
+        abLoopB?.let { put("abLoopB", it.inWholeMicroseconds.toString()) }
         subtitleStyle?.let { style ->
             put("subtitleStyle.present", "true")
             put("subtitleStyle.backgroundPaddingPx", style.backgroundPaddingPx.toString())
@@ -188,7 +204,7 @@ public data class PlayerMemento(
 
     public companion object {
         /** The version [asProperties] stamps. [fromProperties] also reads every older one. */
-        public const val FORMAT_VERSION: Int = 12
+        public const val FORMAT_VERSION: Int = 13
 
         /**
          * Reads what [asProperties] wrote.
@@ -210,8 +226,8 @@ public data class PlayerMemento(
             // about the programme an item plays, version 7 nothing about an item's clip,
             // version 8 nothing about an item that runs into the next, version 9 nothing
             // about an item's external audio, version 10 nothing about an item's linked files
-            // or the edition it plays, and version 11 nothing about the view into a 360 degree
-            // video.
+            // or the edition it plays, version 11 nothing about the view into a 360 degree
+            // video, and version 12 nothing about a growing item, the flash guard or the A-B loop.
             // Each reads back with the defaults for those, which is what a player that had never
             // been told about them would have had anyway.
             require(version != null && version in 1..FORMAT_VERSION) {
@@ -243,6 +259,7 @@ public data class PlayerMemento(
                         MediaClip(start.toLong().microseconds, properties["queue.$n.clipEnd"]?.toLong()?.microseconds)
                     },
                     runsIntoNext = properties["queue.$n.runsIntoNext"]?.toBooleanStrict() ?: false,
+                    growth = properties["queue.$n.growth"]?.let { FileGrowth(it.toLong().microseconds) },
                     // One uri key for each input, so the keys bound the count as they bound the queue.
                     externalAudio = generateSequence(0) { it + 1 }
                         .map { m -> "queue.$n.externalAudio.$m." }
@@ -330,6 +347,9 @@ public data class PlayerMemento(
                         ?.let { AnimationUpscaler.valueOf(it) } ?: AnimationUpscaler.Off,
                 ),
                 hdrPolicy = properties["hdrPolicy"]?.let { HdrPolicy.valueOf(it) } ?: HdrPolicy.Auto,
+                flashGuard = properties["flashGuard"]?.let { FlashGuard.valueOf(it) } ?: FlashGuard.FollowSystem,
+                abLoopA = properties["abLoopA"]?.toLong()?.microseconds,
+                abLoopB = properties["abLoopB"]?.toLong()?.microseconds,
                 videoEnabled = properties["videoEnabled"]?.toBooleanStrict() ?: true,
                 queueOrder = properties["queueOrder"]
                     ?.split(" ")?.filter { it.isNotBlank() }?.map { it.toInt() }

@@ -606,4 +606,56 @@ class MementoTest {
         assertTrue(memento.videoEnabled)
         assertEquals(SphericalView(), memento.sphericalView)
     }
+
+    /** A growing item, the flash guard and the A-B loop travel through the text form (#914). */
+    @Test
+    fun theTextFormCarriesGrowthTheFlashGuardAndTheAbLoop() {
+        val saved = memento().copy(
+            queue = listOf(MediaItem("recording.ts", growth = FileGrowth(5.seconds))),
+            flashGuard = FlashGuard.On,
+            abLoopA = 3.seconds,
+            abLoopB = 7.5.seconds,
+        )
+        val back = PlayerMemento.fromProperties(saved.asProperties())
+        assertEquals(FileGrowth(5.seconds), back.queue.single().growth)
+        assertEquals(FlashGuard.On, back.flashGuard)
+        assertEquals(3.seconds, back.abLoopA)
+        assertEquals(7.5.seconds, back.abLoopB)
+        assertEquals(saved, back)
+        val open = PlayerMemento.fromProperties(saved.copy(abLoopB = null).asProperties())
+        assertEquals(3.seconds to null, open.abLoopA to open.abLoopB, "a loop to the end of the media")
+    }
+
+    @Test
+    fun restoreBringsBackTheFlashGuardAndTheAbLoop() = runTest {
+        val first = CoreHarness(this, script = script())
+        val original = KitePlayer(first.core)
+        first.attachRenderer()
+        original.open(MediaItem("scripted://one"))
+        original.setFlashGuard(FlashGuard.On)
+        original.setAbLoop(2.seconds, 6.seconds)
+        first.run(100.milliseconds)
+
+        val second = CoreHarness(this, script = script())
+        val restored = KitePlayer(second.core)
+        second.attachRenderer()
+        restored.restore(original.memento())
+        second.run(100.milliseconds)
+
+        val snapshot = restored.state.value
+        assertEquals(FlashGuard.On, snapshot.flashGuard)
+        assertEquals(2.seconds to 6.seconds, snapshot.abLoopA to snapshot.abLoopB)
+        first.close()
+        second.close()
+    }
+
+    @Test
+    fun aMementoWithAnAbLoopOutOfOrderIsRefusedBeforeAnythingChanges() = runTest {
+        val harness = CoreHarness(this, script = script())
+        val player = KitePlayer(harness.core)
+        assertFailsWith<IllegalArgumentException> { player.restore(memento().copy(abLoopA = 5.seconds, abLoopB = 2.seconds)) }
+        assertFailsWith<IllegalArgumentException> { player.restore(memento().copy(abLoopB = 2.seconds)) }
+        assertEquals(PlaybackStatus.Idle, player.state.value.status)
+        harness.close()
+    }
 }

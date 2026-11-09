@@ -1423,6 +1423,9 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
             hdrPolicy = snapshot.hdrPolicy,
             videoEnabled = snapshot.videoEnabled,
             queueOrder = if (snapshot.shuffle && snapshot.queue.isNotEmpty()) snapshot.queueOrder else emptyList(),
+            flashGuard = snapshot.flashGuard,
+            abLoopA = snapshot.abLoopA,
+            abLoopB = snapshot.abLoopB,
         )
     }
 
@@ -1470,6 +1473,11 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         require(memento.queueOrder.isEmpty() || memento.queueOrder.sorted() == memento.queue.indices.toList()) {
             "queueOrder ${memento.queueOrder} is not an order of a queue of ${memento.queue.size}"
         }
+        val loopA = memento.abLoopA
+        val loopB = memento.abLoopB
+        require(loopA != null || loopB == null) { "an A-B loop needs its A; B alone is not a loop" }
+        require(loopA == null || loopA >= Duration.ZERO) { "A must not be negative, was $loopA" }
+        require(loopA == null || loopB == null || loopB > loopA) { "B must be after A: A=$loopA B=$loopB" }
 
         // The queue opens only from a stopped player. Stopped, the player keeps each setting for
         // the open that follows.
@@ -1497,7 +1505,10 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         setVideoAdjustments(memento.videoAdjustments)
         setRenderQuality(memento.renderQuality)
         setHdrPolicy(memento.hdrPolicy)
+        setFlashGuard(memento.flashGuard)
         setVideoEnabled(memento.videoEnabled)
+        // Armed while stopped, as a speed is, so it holds for the open that follows.
+        setAbLoop(loopA, loopB)
         openQueue(memento.queue, memento.queueIndex)
         setLoop(memento.loop)
         // The saved order continues, so the items already heard stay behind (#214).

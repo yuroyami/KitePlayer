@@ -677,8 +677,9 @@ public sealed class PlaybackWarning {
      * The suspending form of the same member throws instead; this
      * warning is how the refusal reaches [KitePlayer.events] and the warning history when the
      * caller never awaited a reply: a refused loop repeat on an unseekable source, a speed or
-     * pitch-law change such a source cannot anchor, or a renderer swap whose scheduler never
-     * quiesced.
+     * pitch-law change such a source cannot anchor, a renderer swap whose scheduler never
+     * quiesced, or a `BufferPolicy.stallTimeout` that passed on a source that cannot interrupt its
+     * read, once a session (#814).
      */
     public data class CommandRefused(val member: String, val detail: String) : PlaybackWarning() {
         override val message: String get() = "$member refused: $detail"

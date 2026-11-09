@@ -63,6 +63,11 @@ A `PlayerMediaSource` answers five questions and one command:
   engine reads on as before. Answer true, and play drops what was buffered and plays the live edge;
   throw, and play opens the stream again. The scripted source models an RTSP camera with
   `livePause` and a session timeout.
+- `interrupt()`: end a read or an open that is waiting, from another thread, and answer true. The
+  engine calls it when `BufferPolicy.stallTimeout` passes, and only an interrupted read lets it end
+  the stalled session. The default answers false, and then the engine keeps waiting past the stall
+  limit and says so once with `PlaybackWarning.CommandRefused`, naming `BufferPolicy.stallTimeout`.
+  A source over the network needs it.
 
 ## The decoders: `ScriptedVideoDecoder` and its audio sibling
 

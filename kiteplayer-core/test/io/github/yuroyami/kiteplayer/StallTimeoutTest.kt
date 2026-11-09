@@ -119,6 +119,10 @@ class StallTimeoutTest {
                 "a teardown around a read that cannot end would hang, so the session must keep waiting",
             )
             assertEquals(1, harness.source.interruptCalls, "the engine asks once and then leaves the source alone")
+            // And it says so, once, so the app learns its stall limit does nothing here (#814).
+            val refusals = harness.core.warningHistory().map { it.warning }
+                .filterIsInstance<PlaybackWarning.CommandRefused>().filter { it.member == "BufferPolicy.stallTimeout" }
+            assertEquals(1, refusals.size, "warnings: ${harness.core.warningHistory().map { it.warning }}")
         } finally {
             // Released on every path: a wedge nothing can interrupt would otherwise hold the test's
             // own cleanup for ever. The read returns on its own, as a slow scan eventually does.

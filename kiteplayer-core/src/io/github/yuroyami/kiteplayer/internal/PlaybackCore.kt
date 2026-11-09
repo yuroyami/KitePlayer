@@ -8232,6 +8232,14 @@ internal class PlaybackCore(
         }
         if (!runCatching { session.source.interrupt() }.getOrDefault(false)) {
             session.stallInterruptRefused = true
+            // Said once a session, so the app learns its stall limit does nothing here (#814).
+            warn(
+                PlaybackWarning.CommandRefused(
+                    "BufferPolicy.stallTimeout",
+                    "the source of ${redactUri(media?.uri ?: "")} cannot interrupt a read, so the player waits on past " +
+                        "its stall limit of $limit; a backend needs PlayerMediaSource.interrupt for it",
+                ),
+            )
             return false
         }
         val error = PlaybackError.SourceStalled(media?.uri ?: "", stalledFor)

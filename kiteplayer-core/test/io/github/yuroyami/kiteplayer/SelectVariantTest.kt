@@ -168,6 +168,27 @@ class SelectVariantTest {
         harness.close()
     }
 
+    /** A later call for automatic, the item's current choice, still replaces a change on its way (#792). */
+    @Test
+    fun aLaterCallForAutomaticReplacesAChangeOnItsWay() = runTest {
+        val script = MediaScript(durationUs = 30_000_000, variants = variants, variantsMovedInPlace = setOf(0, 1), variantMoveUs = 200_000)
+        val harness = CoreHarness(this, script = script)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(3.seconds)
+
+        val first = async { runCatching { harness.core.selectVariant(1) } }
+        harness.run(50.milliseconds)
+        val second = async { harness.core.selectVariant(null) }
+        harness.run(1.seconds)
+
+        assertTrue(first.await().isFailure, "the first choice is told it was replaced")
+        second.await()
+        assertEquals(0, harness.core.snapshots.value.tracks.selectedVariant, "the last call won")
+        assertEquals(null, harness.backend.lastOpenedItem?.demux?.variant, "and automatic adaptation is back")
+        harness.close()
+    }
+
     @Test
     fun aStreamTooSlowForItsVariantStepsDownByItselfAndKeepsPlaying() = runTest {
         // The high variant reads far slower than real time, the low one keeps up.

@@ -3032,7 +3032,11 @@ internal class PlaybackCore(
                 // The caller's choice, so the player does not lower it by itself.
                 variantChosenByPlayer = false
                 val asked = media?.demux?.variant
-                if (command.index == asked && (command.index == null || command.index == tracks.selectedVariant)) {
+                // A no-op only with nothing waiting: a later call for the current variant, or for
+                // automatic, replaces a different choice still on its way, as selectEdition does (#792).
+                if (command.index == asked && (command.index == null || command.index == tracks.selectedVariant) &&
+                    pendingVariant == null
+                ) {
                     command.reply.complete(Unit)
                 } else {
                     // A later choice replaces one still waiting, which is told so by an error.

@@ -165,10 +165,11 @@ class KtorMediaIoSegmentStoreTest {
         headers: Map<String, String> = emptyMap(),
         meter: DownloadMeter = DownloadMeter(),
         warnings: MutableList<PlaybackWarning> = mutableListOf(),
+        client: io.ktor.client.HttpClient? = null,
         block: suspend (KtorMediaIo) -> T,
     ): T {
         val reuse = store?.let { SegmentReuse(it) { now } }
-        val root = KtorMediaIo.open(url("/list.m3u8"), null, headers, quick, redirects = null, meter = meter, reuse = reuse)
+        val root = KtorMediaIo.open(url("/list.m3u8"), client, headers, quick, redirects = null, meter = meter, reuse = reuse)
         root.setWarningSink { warnings += it }
         try {
             readAll(root)
@@ -552,6 +553,34 @@ class KtorMediaIoSegmentStoreTest {
         assertContentEquals(phone, play(store, mapOf("X-Device" to "phone")) { it.segment("/seg1.ts") })
         assertContentEquals(tv, play(store, mapOf("x-device" to "tv")) { it.segment("/seg1.ts") })
         assertEquals(2, requests("/seg1.ts").size)
+        store.close()
+    }
+
+    /**
+     * A header that the application's client adds itself, here through defaultRequest, is not in
+     * the reader's own headers, so an answer that varies by it cannot be matched to the next
+     * request and is not stored. It was stored under no value, and a client that sent another
+     * value read the first one's bytes (#850).
+     */
+    @Test
+    fun anAnswerThatVariesByAHeaderTheClientAddsIsNotStored() = runBlocking {
+        start()
+        playlist("seg1.ts")
+        serve(
+            "/seg1.ts",
+            Served(mapOf(HttpHeaders.CacheControl to "max-age=3600", HttpHeaders.Vary to "X-Device")) { call ->
+                (call.request.headers["X-Device"] ?: "none").encodeToByteArray() + bytes(2_000, seed = 21)
+            },
+        )
+        fun clientSending(device: String) = io.ktor.client.HttpClient {
+            install(io.ktor.client.plugins.DefaultRequest) { headers.append("X-Device", device) }
+        }
+        val store = newStore()
+        val phone = clientSending("phone").use { client -> play(store, client = client) { it.segment("/seg1.ts") } }
+        val tablet = clientSending("tablet").use { client -> play(store, client = client) { it.segment("/seg1.ts") } }
+        assertEquals("phone", phone.decodeToString(0, 5))
+        assertEquals("tablet", tablet.decodeToString(0, 6), "the tablet client read the phone client's bytes")
+        assertEquals(2, requests("/seg1.ts").size, "the second client was answered from the store")
         store.close()
     }
 

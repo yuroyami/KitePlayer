@@ -1083,7 +1083,11 @@ private fun storeAnswer(
     val vary = varyNames(facts.vary)
     val sent = response.call.request.headers
     val sentCredentials = SegmentReuse.CREDENTIAL_HEADERS.any { sent[it] != null }
-    val sentVaried = vary.orEmpty().any { it in SegmentReuse.CREDENTIAL_HEADERS && sent[it] != SegmentReuse.headerValue(explicit, it) }
+    // Any varied header the request carried with another value than the reader's own headers give,
+    // such as one the application's client adds through defaultRequest, means the next request
+    // cannot be matched to this answer, so it is not stored. Only the credential headers were
+    // compared, and an answer was stored under a value nobody sent (#850).
+    val sentVaried = vary.orEmpty().any { sent[it] != SegmentReuse.headerValue(explicit, it) }
     val fresh = if (size == null || !plain) {
         null
     } else {

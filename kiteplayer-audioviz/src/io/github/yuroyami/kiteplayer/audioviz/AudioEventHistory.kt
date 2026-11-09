@@ -16,7 +16,7 @@ internal class AudioEventHistory(
     val generation: Generation,
     val revision: Long,
     val capacity: Int = 1024,
-    private val retentionMicros: Long = 2_000_000L,
+    private val retentionMicros: Long = 5_000_000L,
     val source: AudioEventSource = AudioEventSource.LiveTransient,
 ) {
     init {

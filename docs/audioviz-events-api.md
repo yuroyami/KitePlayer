@@ -70,7 +70,7 @@ these counts across resets for diagnostics.
 
 ## Bounds and compatibility
 
-The default event history retains at most 1024 records and two seconds of media history. Each
+The default event history retains at most 1024 records and five seconds of media history. Each
 record has a fixed 64-byte logical payload, so retained event payload is at most 64 KiB. Object,
 array and atomic-slot overhead is additional and is bounded by the same record count; the
 payload budget is not a claim about exact JVM or native heap size. Eviction counts and retained
@@ -129,7 +129,7 @@ sets the legacy `drop` flag.
 
 ## Feature history, compatibility and camera timing
 
-Feature history separately retains at most the configured 2..1024 slots, two seconds measured
+Feature history separately retains at most the configured 2..1024 slots, five seconds measured
 between feature reference times, and 8 MiB of conservatively charged primitive payload. The
 charge includes waveform/spectrum arrays, drivers, detections and fixed metadata; aliases within
 one frame are charged once. Bounded object/array/atomic-slot overhead is additional. Oversized

@@ -331,5 +331,8 @@ public class SpectrumTimeline(public val capacity: Int = 128) {
 }
 
 private const val MAX_HOLD_MICROS = 100_000L
-private const val RETENTION_MICROS = 2_000_000L
+// The picture samples the analysis at the heard position, which trails the decode by the output
+// buffer and the output's reported latency. Two seconds blanked the picture behind an output that
+// reports more, an AirPlay speaker among them, so five are kept (#963).
+private const val RETENTION_MICROS = 5_000_000L
 private const val MAX_PAYLOAD_BYTES = 8 * 1024 * 1024L

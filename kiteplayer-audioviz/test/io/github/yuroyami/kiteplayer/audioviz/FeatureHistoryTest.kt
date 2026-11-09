@@ -15,11 +15,19 @@ class FeatureHistoryTest {
     fun featureRetentionHasATimeBoundEvenWhenTheSlotCountIsLarge() {
         val timeline = SpectrumTimeline(1024)
         for (index in 0..200) timeline.push(frame(index * 50_000L))
-        assertNull(timeline.at(7_950_000L))
-        assertNotNull(timeline.at(8_000_000L))
-        assertEquals(41, timeline.historyStats.retainedFrames)
-        assertEquals(160L, timeline.historyStats.evictedFrames)
-        assertEquals(2_000_000L, timeline.historyStats.retentionMicros)
+        assertNull(timeline.at(4_950_000L))
+        assertNotNull(timeline.at(5_000_000L))
+        assertEquals(101, timeline.historyStats.retainedFrames)
+        assertEquals(100L, timeline.historyStats.evictedFrames)
+        assertEquals(5_000_000L, timeline.historyStats.retentionMicros)
+    }
+
+    /** A heard position a little more than two seconds behind the analysis still has a frame (#963). */
+    @Test
+    fun aHeardPositionWellBehindTheAnalysisStillFindsAFrame() {
+        val timeline = SpectrumTimeline(512)
+        for (index in 0..300) timeline.push(frame(index * 10_000L))
+        assertNotNull(timeline.at(3_000_000L - 2_100_000L), "an output 2.1 s deep blanked the picture")
     }
 
     @Test

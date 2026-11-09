@@ -276,6 +276,7 @@ internal class AudioVizFeed(
 
 internal const val BAND_COUNT = 40
 internal const val SCOPE_POINTS = 256
-private const val TIMELINE_CAPACITY = 256
+// 5.12 s at the 10 ms hop, so the slot count does not cut the timeline's five seconds short (#963).
+private const val TIMELINE_CAPACITY = 512
 // Some container timestamps are quantised to milliseconds. Known dropped blocks reset explicitly.
 private const val JUMP_MICROS = 2_000L

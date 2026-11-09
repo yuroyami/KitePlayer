@@ -11909,9 +11909,11 @@ internal class PlaybackCore(
         if (session == null) {
             pendingSeek = null
             // handlePlaybackTime cannot clear the mask with no session, so the request that
-            // cannot run clears it here; the published zero is the honest sessionless answer.
+            // cannot run clears it here. The media closed under it, by a failure in the same pass
+            // or a teardown, so it is refused: answering that it landed at zero told the caller of
+            // a failed player that the seek worked (#787).
             maskedSeekTargetMicros.value = NO_SEEK_MASK
-            resolveSeekReplies(SeekResult.Applied(Pts.Zero))
+            resolveSeekReplies(SeekResult.Rejected("the media closed before the seek could run"))
             return
         }
         val now = clock.nanos()

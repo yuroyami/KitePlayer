@@ -225,7 +225,11 @@ public data class IoCachePolicy(
     val readChunkBytes: Int = 256 * 1024,
     /** How many bytes behind the cursor stay in RAM, at least, for free backward seeks. */
     val backWindowBytes: Long = 8L * 1024 * 1024,
-    /** The whole window's byte budget, back window included. */
+    /**
+     * The whole window's byte budget, back window included. It is separate from the packet budget
+     * of [BufferPolicy.totalBytes], which can reach twice its value, and adds to it: size one
+     * player's memory from both.
+     */
     val forwardWindowBytes: Long = 32L * 1024 * 1024,
 ) {
     init {
@@ -250,7 +254,15 @@ public data class BufferPolicy(
     val readyPackets: Int = 25,
     /** Per-stream soft target. Exceeding it only marks the stream as well buffered. */
     val softTarget: Duration = 5.seconds,
-    /** The demux worker stalls when the total across all streams reaches either of these. */
+    /**
+     * The demux worker stalls when the total across all streams reaches either of these. One
+     * exception reads past them: while a selected stream is held under readiness and has an empty
+     * queue, and it gave a packet within the last 10 seconds of media read, the interleaving relief
+     * reads on up to twice [totalBytes], so a file whose streams are interleaved far apart keeps
+     * playing (#570). The packets of one player can therefore reach
+     * twice this. A reader-fed open also keeps its byte cache, [IoCachePolicy.forwardWindowBytes],
+     * on top: with the defaults one network open can hold about 96 MiB in all.
+     */
     val totalBytes: Long = 32L * 1024 * 1024,
     val totalDuration: Duration = 30.seconds,
     /** Decoded video frames held ahead of the one on screen. Bounded by the hardware pool. */

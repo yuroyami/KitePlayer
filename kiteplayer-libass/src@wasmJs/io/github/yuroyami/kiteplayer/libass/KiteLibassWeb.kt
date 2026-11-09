@@ -15,9 +15,12 @@ import kotlinx.coroutines.await
  *
  * On every other platform libass is linked in. In a browser it is a separate wasm module,
  * `kiteass.mjs` beside `kiteass.wasm`, which the page hosts the way it hosts the codec module. The
- * two files come as the `web` zip attached to this module's wasmJs artifact; unpack them beside
- * the page. The first ASS track a player meets starts loading [DEFAULT_URL] on its own, so a page
- * that serves the two files needs no code here. Until the module arrives the track draws nothing:
+ * two files come as the libass `web` zip on the project's GitHub release page, because a Kotlin
+ * Toolchain publication carries no extra files. The first ASS track a player meets starts loading
+ * [DEFAULT_URL] on its own. That address is a dynamic import inside the Kotlin/Wasm glue module,
+ * so it resolves beside that module, not beside the page: a page that serves the two files next
+ * to its compiled Kotlin needs no code here, and a page that keeps them in another folder calls
+ * [load] with an absolute address, or hands the worker player its `libassUrl`. Until the module arrives the track draws nothing:
  * the engine keeps what it was told and hands it over the moment the module lands, and
  * typesetting begins there. A load that fails, or that has not finished after ten seconds, hands
  * the track to the built-in styling, with a warning. A module that lands later still serves the
@@ -50,7 +53,10 @@ public object KiteLibassWeb {
 
     public val isLoaded: Boolean get() = module != null
 
-    /** Where the first ASS track looks for the module when nothing was loaded or attached. */
+    /**
+     * Where the first ASS track looks for the module when nothing was loaded or attached. It
+     * resolves against the Kotlin/Wasm module that imports it, not against the page.
+     */
     public const val DEFAULT_URL: String = "./kiteass.mjs"
 
     /** Adopts a module the page instantiated itself: `(await import("./kiteass.mjs")).default()`. */

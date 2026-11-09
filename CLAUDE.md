@@ -650,10 +650,11 @@ costs 119,963 bytes after gzip (`scripts/check-web-size.sh`).
 `kiteplayer-libass` rides `kiteplayer` the same way and is discovered the same way, through
 `SubtitleTypesetterProvider`. The engine typesets only the primary ASS/SSA track, on the raster
 lane, at video frame cadence, and publishes only when libass reports a change. On the web the
-engine is a separate `kiteass.mjs` module the page hosts (delivered as the `web` zip on the wasmJs
-publication; a browser distribution does not inherit library resources); the first ASS track loads
-it from `./kiteass.mjs` and the typesetter stays pending, keeping current state rather than a log
-of calls, until it lands. A load that fails or takes more than ten seconds, or more than 64 MB of
+engine is a separate `kiteass.mjs` module the page hosts (a GitHub release asset, the libass `web`
+zip, because a toolchain publication carries no extra files and a browser distribution does not
+inherit library resources); the first ASS track loads it from `./kiteass.mjs`, which resolves
+beside the importing Kotlin module rather than the page, and the typesetter stays pending, keeping
+current state rather than a log of calls, until it lands. A load that fails or takes more than ten seconds, or more than 64 MB of
 waiting data, hands the track to the built-in styling.
 
 ## The libass chain

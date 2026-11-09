@@ -36,7 +36,9 @@ public object Fmp4Rewrite {
      * pictures are reordered decodes ahead of what it shows, so its first decode times after a
      * stream that reorders less would not pass the last one read, and FFmpeg's MP4 reader has the
      * decoder drop every such sample as an overlap of two fragments. With [joined], no sample
-     * decodes before the first picture of the segment shows.
+     * decodes before the first picture of the segment shows. The samples held back that way share
+     * the delay evenly, so their durations run shorter than the frames' own for as long as the
+     * delay lasts, and never one tick each while there is room (#876).
      */
     public class Plan(
         public val source: Fmp4.Track,
@@ -159,9 +161,21 @@ public object Fmp4Rewrite {
         // Each decode time is converted on its own and the durations are the differences, so a
         // change of timescale never lets rounding drift add up across a segment.
         val decode = LongArray(kept.size + 1)
-        for (i in kept.indices) decode[i] = placed(kept[i].decodeTime).coerceAtLeast((if (i == 0) after else decode[i - 1]) + 1)
         val last = kept.last()
-        decode[kept.size] = placed(last.decodeTime + last.duration).coerceAtLeast(decode[kept.size - 1])
+        val end = placed(last.decodeTime + last.duration)
+        val shown = LongArray(kept.size) { placed(kept[it].decodeTime + kept[it].compositionOffset) }
+        // Once a join holds a sample back, the samples after it keep sharing the delay until their
+        // own decode times pass the share, so the last of them does not take a short step.
+        var held = false
+        for (i in kept.indices) {
+            val natural = placed(kept[i].decodeTime)
+            val previous = if (i == 0) after else decode[i - 1]
+            if (natural <= previous) held = true
+            val spread = if (held) previous + heldStep(previous, i, shown, end) else natural
+            if (natural >= spread) held = false
+            decode[i] = maxOf(natural, spread)
+        }
+        decode[kept.size] = end.coerceAtLeast(decode[kept.size - 1])
         val data = kept.map { sample -> if (inject != null && sample.isSync) inject + sample.data else sample.data }
         val count = kept.size
         val trunSize = 20 + 16 * count
@@ -191,6 +205,20 @@ public object Fmp4Rewrite {
         out.box(8 + data.sumOf { it.size }, "mdat")
         data.forEach { out.bytes(it, 0, it.size) }
         return decode[kept.size - 1]
+    }
+
+    /**
+     * How far a sample held back by a join steps past [previous], the decode time before it. The
+     * delay is spread evenly over the samples that follow, as far as each one's presentation time
+     * in [shown] and the fragment's [end] allow, rather than one tick at a time, so the trun
+     * durations FFmpeg hands on as the frames' stay near the frames' own (#876). The step is the
+     * smallest even share that still lets every later sample decode by the time it shows, and at
+     * least one tick when no room is left.
+     */
+    private fun heldStep(previous: Long, index: Int, shown: LongArray, end: Long): Long {
+        var step = (end - previous) / (shown.size - index + 1)
+        for (j in index until shown.size) step = minOf(step, (shown[j] - previous) / (j - index + 1))
+        return step.coerceAtLeast(1)
     }
 
     /** [ticks] of the timescale [from] in the timescale [to], exactly when the two are the same. */

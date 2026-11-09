@@ -224,7 +224,9 @@ class Fmp4RewriteTest {
         val plain = Fmp4.samples(Fmp4Rewrite.rewrite(segment, Fmp4Rewrite.Plan(init, init, 0, null)), init)
         assertEquals(listOf(3920L, 3960L, 4000L, 4040L, 4080L), plain.map { it.decodeTime }, "a segment that follows its own stream keeps its decode times")
         val joined = Fmp4.samples(Fmp4Rewrite.rewrite(segment, Fmp4Rewrite.Plan(init, init, 0, null, joined = true)), init)
-        assertEquals(listOf(4000L, 4001L, 4002L, 4040L, 4080L), joined.map { it.decodeTime }, "each rises, from the time the first picture shows")
+        assertEquals(listOf(4000L, 4020L, 4040L, 4066L, 4093L), joined.map { it.decodeTime }, "each rises, from the time the first picture shows")
+        // The delay is shared out, so no picture carries a one-tick duration (#876).
+        assertEquals(listOf(20L, 20L, 26L, 27L, 27L), joined.map { it.duration }, "the delay is spread evenly")
         assertEquals(shown, joined.map { it.decodeTime + it.compositionOffset }, "and every picture shows when it did")
         assertEquals(shown, plain.map { it.decodeTime + it.compositionOffset })
         assertEquals(4120L, joined.last().decodeTime + joined.last().duration, "the segment ends where it did")

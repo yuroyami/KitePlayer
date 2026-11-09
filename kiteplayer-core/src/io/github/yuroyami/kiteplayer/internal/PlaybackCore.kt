@@ -9328,7 +9328,10 @@ internal class PlaybackCore(
         stillImageShownSinceNanos = 0
         playRequested = true
         setStatus(PlaybackStatus.Buffering)
-        pendingSeek = SeekRequest(SeekTarget.Absolute(target), SeekMode.Precise)
+        // A seek already waiting wins: the viewer asked for it, and it leaves Ended when it lands.
+        // Overwriting the one slot threw it away and answered its caller as applied at the start
+        // (#793).
+        pendingSeek = pendingSeek ?: SeekRequest(SeekTarget.Absolute(target), SeekMode.Precise)
     }
 
     /**

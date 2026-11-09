@@ -360,4 +360,22 @@ class EngineAuditRegressionTest {
         )
         harness.close()
     }
+
+    /** A seek waiting when play restarts an ended item is the one that runs (#793). */
+    @Test
+    fun aSeekWaitingAtEndedWinsOverTheRestartThatPlayMakes() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 4_000_000))
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(5.seconds)
+        assertEquals(PlaybackStatus.Ended, harness.core.snapshots.value.status)
+
+        // Both in one drain: the seek lands in the one slot, and play must not overwrite it.
+        harness.core.seekLater(Pts(2_000_000), SeekMode.Precise)
+        harness.core.play()
+        harness.run(500.milliseconds)
+        val position = harness.core.progress.value.position
+        assertTrue(position >= 2.seconds, "the waiting seek to 2 s was thrown away: the position reads $position")
+        harness.close()
+    }
 }

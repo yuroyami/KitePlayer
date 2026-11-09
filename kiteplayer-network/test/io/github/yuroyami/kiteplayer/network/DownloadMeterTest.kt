@@ -59,8 +59,37 @@ class DownloadMeterTest {
         copyMeasured(body, pipe, meter, testTimeSource.markNow(), testTimeSource)
         pipe.flushAndClose()
         reader.join()
-        assertEquals(1_048_576, meter.measuredBytes())
-        assertEquals(10_485_760.0, assertNotNull(meter.bitsPerSecond()).toDouble(), 10_485_760 * 0.05)
+        // The first chunk read starts the clock and is not counted; it is at most one write.
+        assertTrue(meter.measuredBytes() in (1_048_576L - 65_536L) until 1_048_576L, "${meter.measuredBytes()}")
+        // The writes land in 64 KiB bursts, so the rest of the first burst counts as instant: a few
+        // percent fast here, and at most one chunk on a link whose bytes arrive steadily (#861).
+        assertEquals(10_485_760.0, assertNotNull(meter.bitsPerSecond()).toDouble(), 10_485_760 * 0.10)
+    }
+
+    /**
+     * The wait for the first byte is not the network's rate. Counted from the send, a link that
+     * answers after a second and then streams at 10 Mbit/s read at about half that (#861).
+     */
+    @Test
+    fun theWaitForTheFirstByteIsNotCountedAsTheRate() = runTest {
+        val body = ByteChannel(autoFlush = true)
+        val pipe = ByteChannel(autoFlush = true)
+        val meter = DownloadMeter()
+        launch {
+            delay(1_000)
+            repeat(17) {
+                body.writeFully(ByteArray(65_536))
+                delay(50)
+            }
+            body.flushAndClose()
+        }
+        val reader = launch { drain(pipe) }
+        copyMeasured(body, pipe, meter, testTimeSource.markNow(), testTimeSource)
+        pipe.flushAndClose()
+        reader.join()
+        // The writes here land in bursts, so the rest of the first burst reads a little fast; the
+        // wait for the first byte halved the old figure.
+        assertEquals(10_485_760.0, assertNotNull(meter.bitsPerSecond()).toDouble(), 10_485_760 * 0.10)
     }
 
     @Test

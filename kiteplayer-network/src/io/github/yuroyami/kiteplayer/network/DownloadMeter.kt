@@ -58,8 +58,12 @@ internal class DownloadMeter {
 }
 
 /**
- * Copies [body] into [pipe] and tells [meter] how fast the bytes arrived, counting from [since],
- * when the request went out. [since] must come from [clock].
+ * Copies [body] into [pipe] and tells [meter] how fast the bytes arrived. [since], when the request
+ * went out, must come from [clock].
+ *
+ * The clock starts at the first chunk, which is not measured: counted from the send, the connection
+ * setup and the wait for the first byte were inside the first chunk's time, and a fast link far
+ * away read slower than it is, which kept the player below variants it could carry (#861).
  *
  * A write that waits for the reader ends the measure for this response. While it waits, the bytes
  * pile up in the client and the system below, and they would then arrive at once and read as a
@@ -75,11 +79,13 @@ internal suspend fun copyMeasured(
     val chunk = ByteArray(COPY_CHUNK_BYTES)
     var waitStarted = since
     var measuring = true
+    var first = true
     while (true) {
         val count = body.readAvailable(chunk, 0, chunk.size)
         if (count < 0) return
         if (count == 0) continue
-        if (measuring) meter.add(count, waitStarted.elapsedNow())
+        if (measuring && !first) meter.add(count, waitStarted.elapsedNow())
+        first = false
         val writeStarted = clock.markNow()
         pipe.writeFully(chunk, 0, count)
         if (writeStarted.elapsedNow() > PIPE_WAIT) measuring = false

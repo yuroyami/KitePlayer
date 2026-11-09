@@ -2071,7 +2071,9 @@ internal class PlaybackCore(
     /** Seeks and returns what happened to this request: it landed, or a later request replaced it. */
     suspend fun seek(to: Pts, mode: SeekMode): SeekResult {
         val reply = CompletableDeferred<SeekResult>()
-        maskedSeekTargetMicros.value = maskFor(to)
+        // A closed player refuses the command in send, and must not answer the target as its
+        // position meanwhile (#785).
+        if (!closedNow.value) maskedSeekTargetMicros.value = maskFor(to)
         // The caller names a position of the item, and the engine seeks in its file (#456).
         val target = Pts(fileTime(to.micros))
         send(CoreCommand.Seek(SeekRequest(SeekTarget.Absolute(target, itemUs = to.micros), mode, keyframe = keyframeChoice.value), reply))
@@ -11999,6 +12001,10 @@ internal class PlaybackCore(
     }
 
     private fun resolveSeekReplies(result: SeekResult) {
+        // A seek that did not land leaves no mask behind, unless another one is waiting: a failed
+        // seek tears the session down, and the usual clear needs a session, so position() kept
+        // answering a place the player never reached (#785).
+        if (result is SeekResult.Rejected && pendingSeek == null) maskedSeekTargetMicros.value = NO_SEEK_MASK
         // Where the seek landed, in the item's time like the position the caller asked for (#456).
         val reported = if (result is SeekResult.Applied) SeekResult.Applied(Pts(itemTime(result.landedAt.micros))) else result
         pendingSeekReplies.forEach { it.complete(reported) }

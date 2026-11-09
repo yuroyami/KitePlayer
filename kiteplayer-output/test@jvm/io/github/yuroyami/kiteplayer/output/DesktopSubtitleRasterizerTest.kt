@@ -215,7 +215,8 @@ class DesktopSubtitleRasterizerTest {
             ),
         ).single()
         assertTrue(image.bitmap.width < 576, "a positioned cue must not carry the whole safe width")
-        assertEquals(320 - image.bitmap.width / 2, image.x, "an \\an2 anchor centres the extent on the point")
+        // The shadow pad lies outside the text extent, as in the vertical check below (#877).
+        assertEquals(320 - (image.bitmap.width - shadowPad) / 2, image.x,"an \\an2 anchor centres the extent on the point")
         assertEquals(
             180 - (image.bitmap.height - shadowPad),
             image.y,

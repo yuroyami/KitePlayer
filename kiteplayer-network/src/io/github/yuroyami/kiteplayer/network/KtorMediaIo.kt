@@ -125,6 +125,8 @@ public class KtorMediaIo private constructor(
     startsAt: Long = 0L,
     /** Where the first response ends when it answered a closed range, exclusive, or null for the end. */
     firstBodyEnd: Long? = null,
+    /** True when the open's 200 offered byte ranges and no ranged read has proved them yet (#870). */
+    private var rangesUnproven: Boolean = false,
 ) : MediaIo {
 
     /** Finds the segments an HLS playlist names as its bytes pass. A stored segment is never a playlist. */
@@ -624,6 +626,14 @@ public class KtorMediaIo private constructor(
     private fun checkRangedAnswer(response: HttpResponse, target: Long) {
         val ok = response.status == HttpStatusCode.PartialContent ||
             (target == 0L && response.status == HttpStatusCode.OK)
+        if (!ok && rangesUnproven && response.status == HttpStatusCode.OK) {
+            // It offered ranges at the open and serves none: no seek can land, and the file did
+            // not change, so nothing stored is dropped (#870).
+            throw KtorMediaIoException(
+                "$shown offered byte ranges, but answered ${response.status} to a ranged read at byte $target, so it cannot seek",
+            )
+        }
+        if (response.status == HttpStatusCode.PartialContent) rangesUnproven = false
         if (!ok) {
             related.answered(uri, response.status)
             // The whole file in answer to a range is another file than the stored one.
@@ -879,10 +889,18 @@ public class KtorMediaIo private constructor(
                                     val kept = plan?.let {
                                         storeAnswer(it, response, headers, location, total, ranged = false, type, interval == null && !radio, requestSeconds)
                                     }
+                                    // Some servers answer a range over the whole file with 200 and still
+                                    // serve every later range, which they say with Accept-Ranges, as
+                                    // FFmpeg's own http reader reads it (#870). The first real range
+                                    // proves it, in checkRangedAnswer.
+                                    val offersRanges = response.headers.getAll(HttpHeaders.AcceptRanges).orEmpty()
+                                        .flatMap { it.split(',') }.any { it.trim().equals("bytes", ignoreCase = true) }
+                                    val seekable = offersRanges && total != null && interval == null && !radio
                                     handOver(
                                         Probe(
-                                            total, seekable = false, tag, location, type, date, live = total == null && radio, interval, station,
+                                            total, seekable = seekable, tag, location, type, date, live = total == null && radio, interval, station,
                                             lastModified = response.headers[HttpHeaders.LastModified], stored = kept,
+                                            rangesUnproven = seekable,
                                         ),
                                     )
                                 }
@@ -947,6 +965,7 @@ public class KtorMediaIo private constructor(
                 lastModified = answer.lastModified.takeIf { answer.stored != null },
                 startsAt = answer.startsAt,
                 firstBodyEnd = answer.endsAt,
+                rangesUnproven = answer.rangesUnproven,
             )
         }
     }
@@ -1046,6 +1065,8 @@ private class Probe(
     val hasBody: Boolean = true,
     /** The byte the response starts at (#619). */
     val startsAt: Long = 0L,
+    /** True when a 200 offered byte ranges and no 206 has shown them yet (#870). */
+    val rangesUnproven: Boolean = false,
     /** Where a response to a closed range ends, exclusive, or null. */
     val endsAt: Long? = null,
 )

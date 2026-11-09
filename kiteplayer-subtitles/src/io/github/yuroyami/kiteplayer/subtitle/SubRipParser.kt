@@ -72,6 +72,9 @@ public object SubRipParser {
                     }
                 }
                 if (parseTiming(line) != null) break
+                // A line of digits right before a timing line is that cue's number, as FFmpeg's
+                // reader takes it, also in a file with no blank lines between cues (#766).
+                if (looksLikeIndex(line) && lines.getOrNull(i + 1)?.let(::parseTiming) != null) break
                 if (body.isNotEmpty()) body.append('\n')
                 body.append(line)
                 i++

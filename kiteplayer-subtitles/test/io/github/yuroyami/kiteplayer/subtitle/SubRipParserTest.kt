@@ -45,6 +45,15 @@ class SubRipParserTest {
         assertTrue(cues[2].spans.single().style.italic, "the italic tag must become a style, not text")
     }
 
+    /** With no blank lines between cues, the next cue's number is not text of the one before (#766). */
+    @Test
+    fun aCueNumberWithNoBlankLineBeforeItIsNotText() {
+        val cues = parse("1\n00:00:01,000 --> 00:00:02,000\nHello\n2\n00:00:03,000 --> 00:00:04,000\nWorld\n42 apples")
+        assertEquals(listOf("Hello", "World\n42 apples"), cues.map { it.plainText })
+        // A line of digits that is text, with no timing line after it, stays.
+        assertEquals(listOf("Count\n3"), parse("1\n00:00:01,000 --> 00:00:02,000\nCount\n3").map { it.plainText })
+    }
+
     @Test
     fun `a byte order mark never reaches the cue text`() {
         // Editors on Windows write a UTF-8 byte order mark. Left in place it either kills the first

@@ -96,9 +96,11 @@ An entry that is not fresh sends one conditional request at the open, with `If-N
   start a new entry. Old and new bytes never mix.
 - An answer that refuses the address, such as a 404, removes the entry.
 
-A read of a part that is not stored sends a range request with `If-Range`. When the server then
-answers with another file, the store removes the entry and that read fails. The next open reads
-the new file.
+A read of a part that is not stored sends a range request with `If-Range` when the stored
+response had a strong `ETag` or a `Last-Modified` date. When the server then answers with another
+file, the store removes the entry and that read fails. The next open reads the new file. An entry
+stored on a stated lifetime alone has no validator, so its partial reads are plain range requests:
+a file replaced on the server with the same size within that lifetime is joined onto the old bytes.
 
 ## Names, logins and Vary
 

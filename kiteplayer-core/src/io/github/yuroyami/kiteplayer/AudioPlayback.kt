@@ -1264,7 +1264,18 @@ public class AudioPlayback(
             ) {
                 "speed must be within ${TempoStage.MIN_SPEED}..${TempoStage.MAX_SPEED}, was $value"
             }
-            synchronized(lock) { wantedSpeed = value }
+            synchronized(lock) {
+                wantedSpeed = value
+                // A change is a line where the tempo stage reaches it, and after the last sound no
+                // buffer reaches anything, so the clock and the picture kept the old rate. With the
+                // ring told the sound ended and holding nothing, the line starts now (#820). A sound
+                // that comes back starts over from a flush, which clears the line.
+                if (endMarked && (ring?.bufferedFrames ?: 0) == 0) {
+                    playoutClock.nowOrNull()?.let { now ->
+                        timeline.mediaAt(now.micros)?.let { media -> timeline.append(now.micros, media.toDouble(), value) }
+                    }
+                }
+            }
         }
 
     /**

@@ -233,4 +233,24 @@ class EarlyStreamEndTest {
         assertTrue(ended > 39_000_000, "once ended, the position is $ended")
         harness.close()
     }
+
+    /**
+     * After the sound has ended no buffer carries a speed change into the timeline, so the position
+     * and the picture used to keep the old rate while setSpeed said it worked (#820).
+     */
+    @Test
+    fun aSpeedChangeAfterTheSoundEndedReachesThePosition() = runTest {
+        val harness = CoreHarness(this, script = shortSound(endUs = 10_000_000))
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(15.seconds)
+        val before = harness.core.position().inWholeMicroseconds
+        harness.core.setSpeed(2.0)
+        harness.run(5.seconds)
+        val after = harness.core.position().inWholeMicroseconds
+        assertTrue(abs(after - before - 10_000_000) < 300_000, "5 s at double speed went from $before to $after")
+        val shown = harness.renderer!!.timestamps.last().micros
+        assertTrue(abs(shown - after) < 300_000, "the picture on screen is at $shown, the position at $after")
+        harness.close()
+    }
 }

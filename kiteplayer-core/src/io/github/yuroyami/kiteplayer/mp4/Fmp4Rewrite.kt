@@ -376,24 +376,24 @@ public object Fmp4Rewrite {
         val at = config.dataStart
         val units = ArrayList<ByteArray>()
         fun take(from: Int): Int {
-            val length = ((entry[from].toInt() and 0xFF) shl 8) or (entry[from + 1].toInt() and 0xFF)
-            require(from + 2 + length <= config.end) { "a parameter set runs past its configuration" }
+            val length = (Fmp4.u8(entry, from) shl 8) or Fmp4.u8(entry, from + 1)
+            Fmp4.refuseUnless(from + 2 + length <= config.end) { "a parameter set runs past its configuration" }
             units += entry.copyOfRange(from + 2, from + 2 + length)
             return from + 2 + length
         }
         return if (family == "avc") {
-            val lengthSize = (entry[at + 4].toInt() and 0x03) + 1
+            val lengthSize = (Fmp4.u8(entry, at + 4) and 0x03) + 1
             var cursor = at + 6
-            repeat(entry[at + 5].toInt() and 0x1F) { cursor = take(cursor) }
-            val pictureSets = entry[cursor].toInt() and 0xFF
+            repeat(Fmp4.u8(entry, at + 5) and 0x1F) { cursor = take(cursor) }
+            val pictureSets = Fmp4.u8(entry, cursor)
             cursor++
             repeat(pictureSets) { cursor = take(cursor) }
             family to (lengthSize to units)
         } else {
-            val lengthSize = (entry[at + 21].toInt() and 0x03) + 1
+            val lengthSize = (Fmp4.u8(entry, at + 21) and 0x03) + 1
             var cursor = at + 23
-            repeat(entry[at + 22].toInt() and 0xFF) {
-                val count = ((entry[cursor + 1].toInt() and 0xFF) shl 8) or (entry[cursor + 2].toInt() and 0xFF)
+            repeat(Fmp4.u8(entry, at + 22)) {
+                val count = (Fmp4.u8(entry, cursor + 1) shl 8) or Fmp4.u8(entry, cursor + 2)
                 cursor += 3
                 repeat(count) { cursor = take(cursor) }
             }

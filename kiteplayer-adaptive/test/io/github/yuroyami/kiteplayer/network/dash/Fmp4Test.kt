@@ -66,6 +66,35 @@ class Fmp4Test {
         assertTrue(samples.all { it.data.isEmpty() })
     }
 
+    /**
+     * A box with no payload at the end of its segment, and a configuration record shorter than its
+     * fixed fields, are refused as the reader's own malformed input, which the DASH readers turn
+     * into theirs, rather than an index error that escaped them (#754).
+     */
+    @Test
+    fun aTruncatedBoxIsTheReadersOwnRefusal() {
+        val emptyTkhd = Mp4Bytes.box("moov", Mp4Bytes.box("trak", Mp4Bytes.box("tkhd", ByteArray(0))))
+        assertFailsWith<Fmp4UnsupportedException> { Fmp4.tracks(emptyTkhd) }
+        val emptyMvhd = Mp4Bytes.box("moov", Mp4Bytes.box("mvhd", ByteArray(0)))
+        assertFailsWith<Fmp4UnsupportedException> { Fmp4.tracks(emptyMvhd) }
+        val emptyTfdt = Mp4Bytes.box(
+            "moof",
+            Mp4Bytes.fullBox("mfhd", 0, 0, Mp4Bytes.u32(1)) +
+                Mp4Bytes.box("traf", Mp4Bytes.fullBox("tfhd", 0, 0x020000, Mp4Bytes.u32(1)) + Mp4Bytes.box("tfdt", ByteArray(0))),
+        )
+        assertFailsWith<Fmp4UnsupportedException> { Fmp4.fragments(emptyTfdt, defaultsTrack()) }
+    }
+
+    @Test
+    fun aConfigurationRecordShorterThanItsFieldsIsRefused() {
+        val full = Mp4Bytes.avc1(sps = byteArrayOf(0x67, 1, 1), pps = byteArrayOf(0x68, 1))
+        val good = Fmp4.tracks(Mp4Bytes.init(1, 1000, "vide", "avc1", entry = full)).single()
+        // The same entry with an avcC of three bytes: no length size, no counts.
+        val cut = Mp4Bytes.box("avc1", ByteArray(78) + Mp4Bytes.box("avcC", byteArrayOf(1, 0x64, 0)))
+        val bad = Fmp4.tracks(Mp4Bytes.init(1, 1000, "vide", "avc1", entry = cut)).single()
+        assertFailsWith<Fmp4UnsupportedException> { io.github.yuroyami.kiteplayer.mp4.Fmp4Rewrite.inBandParameterSets(bad, good) }
+    }
+
     @Test
     fun aRunWhoseSampleFieldsRunPastItsBoxIsRefused() {
         // A run that says it lists the sizes of 1000 samples and lists two.

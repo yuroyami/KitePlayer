@@ -7,7 +7,11 @@ on each renderer, and [TTML regions](subtitle-regions.md) describes how TTML tex
 ## Formats
 
 - SubRip, WebVTT and SubStation Alpha, from the container or from an external file. External files
-  load in the middle of playback.
+  load at open or in the middle of playback.
+- An external file can also be TTML or DFXP, or LRC lyrics, which the Kotlin parsers read, or any
+  of SAMI, MicroDVD, SubViewer and SBV, MPL2, JACOsub, VPlayer, PJS, RealText, Spruce STL,
+  Scenarist SCC, VobSub and Blu-ray `.sup`, which FFmpeg's own readers read. The FFmpeg backend
+  supplies both, so a player built on another backend reads only what that backend offers.
 - libass draws ASS and SSA tracks as authored: moving signs, animated transforms, karaoke fills,
   clips and vector drawings. A moving sign renders again on every video frame.
 - Blu-ray (PGS), DVB, DVD and XSUB image subtitles from the container, placed on the picture that

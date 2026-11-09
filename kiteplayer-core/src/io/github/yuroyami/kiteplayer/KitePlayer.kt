@@ -978,7 +978,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * Loads a subtitle FILE during playback, appends it to [PlayerSnapshot.tracks] as an
      * external track, selects it, and returns its id once it is really showing.
      *
-     * SubRip and WebVTT, the same text path the open-time route reads.
+     * It reads the formats an open-time [SubtitleSource] does, through the same path: see there.
      *
      * When a container subtitle stream is already timing cues, the swap needs the same reopen
      * [selectTrack] needs, and this call waits for it. It used to return the id as soon as the file

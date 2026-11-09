@@ -51,8 +51,8 @@ public data class MediaItem(
      */
     val headers: Map<String, String> = emptyMap(),
     /**
-     * Subtitle files to load alongside the media. Local SubRip and WebVTT files become
-     * selectable synthetic subtitle tracks; see [SubtitleSource] for the exact contract.
+     * Subtitle files to load alongside the media. Each becomes a selectable synthetic subtitle
+     * track; see [SubtitleSource] for the formats and the exact contract.
      */
     val externalSubtitles: List<SubtitleSource> = emptyList(),
     /**
@@ -536,7 +536,13 @@ public fun interface MediaIoResolver {
 /**
  * An external subtitle file added alongside a media item.
  *
- * SubRip, WebVTT and ASS files load at open: each becomes a selectable synthetic subtitle track
+ * The media backend supplies the reader, so the formats are its own. The FFmpeg backend reads
+ * SubRip, WebVTT, ASS and SSA, TTML and DFXP, and LRC lyrics with the Kotlin parsers, and hands
+ * every other file to FFmpeg's readers: SAMI, MicroDVD, SubViewer and SBV, MPL2, JACOsub, VPlayer,
+ * PJS, RealText, Spruce STL, Scenarist SCC, and the image tracks of VobSub and Blu-ray `.sup`
+ * files. A backend with no reader skips every entry with a warning.
+ *
+ * The files load at open: each becomes a selectable synthetic subtitle track
  * (a negative [io.github.yuroyami.kiteplayer.TrackId], labelled by [title] or the file name)
  * whose cues run through the same engine timing path container cues use. A file that cannot be
  * read or parsed warns typed and is skipped rather than failing the open.

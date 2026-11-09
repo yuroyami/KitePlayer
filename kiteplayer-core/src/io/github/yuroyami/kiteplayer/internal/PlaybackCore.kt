@@ -13262,7 +13262,6 @@ internal class PlaybackCore(
 
     private suspend fun handleWorkerOutcome(outcome: WorkerOutcome) {
         val cause = outcome.cause ?: return
-        if (cause is CancellationException) return
         if (pendingNext?.prepared?.session?.token == outcome.sessionToken) {
             dropPending("the ${outcome.name} worker of the next item failed${causeDetail(cause)}")
             return
@@ -13918,7 +13917,16 @@ internal class PlaybackCore(
                 // threw while the lane runs is its failure, and is reported as one (#589): taken
                 // for a stop, it ended the lane with nothing said, and playback stood still.
                 throwIfOwnCancellation(failure)
-                val outcome = WorkerOutcome(session.token, worker.name, failure)
+                // A stray CancellationException is posted as the failure it is, wrapped, because
+                // the outcome handler and every path that rethrows a worker's failure on the actor
+                // would otherwise take it for a cancellation and drop it: the lane ended with no
+                // teardown and no error, and the player sat in Buffering (#709).
+                val cause = if (failure is CancellationException) {
+                    IllegalStateException("the ${worker.name} lane was cancelled by code it called: ${failure.message}", failure)
+                } else {
+                    failure
+                }
+                val outcome = WorkerOutcome(session.token, worker.name, cause)
                 session.firstWorkerOutcome.compareAndSet(null, outcome)
                 outcomes.trySend(outcome)
             } finally {

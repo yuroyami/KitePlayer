@@ -1999,6 +1999,28 @@ class PlaybackCoreTest {
         harness.close()
     }
 
+    /**
+     * A source whose read throws a CancellationException of its own, from its own withTimeout for
+     * one, fails the item as any other read failure does, instead of ending the lane with nothing
+     * said and leaving the player in Buffering (#709).
+     */
+    @Test
+    fun aStrayCancellationFromARunningLaneFailsTheItem() = runTest {
+        val faults = FaultPlan().also { it.readFailure = kotlinx.coroutines.CancellationException("stray") }
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 600_000_000), faults = faults)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1.seconds)
+        // Once the item plays, a read a little further on throws.
+        faults.failReadAfter = harness.source.reads + 20
+        harness.run(20.seconds)
+        val snapshot = harness.core.snapshots.value
+        assertEquals(PlaybackStatus.Failed, snapshot.status, "status ${harness.core.statusHistory}")
+        assertNotNull(snapshot.error, "and the failure is named")
+        assertEquals(0, harness.ledger.liveCount, "with nothing left live")
+        harness.close()
+    }
+
     @Test
     fun `a decoder that dies becomes a typed failure and not a hang`() = runTest {
         val faults = FaultPlan().also { it.failReadAfter = 12 }

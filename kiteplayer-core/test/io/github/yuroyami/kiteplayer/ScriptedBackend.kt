@@ -565,6 +565,9 @@ internal class FaultPlan(
     /** True makes every read fail, as a source does while the network is gone (#461). */
     var readsFail: Boolean = false
 
+    /** What a failing read throws, or null for the source's own IllegalStateException. */
+    var readFailure: Throwable? = null
+
     /** True makes every video decoder factory refuse, so the video stream has to be deselected. */
     var videoDecodersRefuse: Boolean = false
 
@@ -1501,7 +1504,7 @@ internal class ScriptedSource(
         faults.readWedgesAfter?.let { limit ->
             if (reads > limit && !wedgeReleased.isCompleted) wedge("read")
         }
-        if (faults.failRead(reads)) error("the scripted source failed on read $reads")
+        if (faults.failRead(reads)) throw faults.readFailure ?: IllegalStateException("the scripted source failed on read $reads")
         val readDelayUs = selectedVariant?.let { script.readDelayUsByVariant[it] } ?: script.readDelayUs
         if (readDelayUs > 0) delay(readDelayUs / 1_000)
         if (reads <= script.slowStartReads && script.slowStartReadUs > 0) delay(script.slowStartReadUs / 1_000)

@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.network.dash
 import io.github.yuroyami.kiteplayer.network.xml.XmlElement
 import io.github.yuroyami.kiteplayer.network.xml.XmlLimits
 import io.github.yuroyami.kiteplayer.network.xml.XmlMini
+import kotlin.math.round
 
 /**
  * A DASH MPD parsed in pure commonMain Kotlin, because libxml2 was refused as a dependency.
@@ -1438,14 +1439,21 @@ public object DashManifestParser {
         val match = ISO_DURATION.matchEntire(raw.trim())
             ?: throw IllegalArgumentException("not an ISO 8601 duration: $raw")
         val g = match.groupValues
-        val total = (g[1].toDoubleOrNull() ?: 0.0) * 365 * 86_400 +
-            (g[2].toDoubleOrNull() ?: 0.0) * 30 * 86_400 +
-            (g[3].toDoubleOrNull() ?: 0.0) * 7 * 86_400 +
-            (g[4].toDoubleOrNull() ?: 0.0) * 86_400 +
-            (g[5].toDoubleOrNull() ?: 0.0) * 3_600 +
-            (g[6].toDoubleOrNull() ?: 0.0) * 60 +
-            (g[7].toDoubleOrNull() ?: 0.0)
-        return (total * 1_000_000).toLong()
+        // The seconds are read exactly, whole seconds and up to six digits of fraction; a double
+        // made PT2.002S 2,001,999 us (#757). A fraction of a larger unit is rare and rounds.
+        fun part(text: String, unitSeconds: Long): Long =
+            text.toDoubleOrNull()?.let { round(it * unitSeconds * 1_000_000).toLong() } ?: 0L
+        return part(g[1], 365L * 86_400) + part(g[2], 30L * 86_400) + part(g[3], 7L * 86_400) +
+            part(g[4], 86_400) + part(g[5], 3_600) + part(g[6], 60) + exactSecondsMicros(g[7])
+    }
+
+    /** [text], decimal seconds, in microseconds without a double: digits past the sixth are dropped. */
+    private fun exactSecondsMicros(text: String): Long {
+        if (text.isEmpty()) return 0L
+        val point = text.indexOfFirst { it == '.' || it == ',' }
+        val whole = (if (point < 0) text else text.substring(0, point)).ifEmpty { "0" }.toLongOrNull() ?: return 0L
+        val fraction = if (point < 0) "" else text.substring(point + 1).take(6).padEnd(6, '0')
+        return whole * 1_000_000 + (fraction.toLongOrNull() ?: 0L)
     }
 
     /**

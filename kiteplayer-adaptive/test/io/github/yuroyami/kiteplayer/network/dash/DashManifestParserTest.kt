@@ -53,6 +53,11 @@ class DashManifestParserTest {
         assertEquals(90_500_000L, DashManifestParser.parseIsoDurationMicros("PT1M30.5S"))
         assertEquals(3_723_000_000L, DashManifestParser.parseIsoDurationMicros("PT1H2M3S"))
         assertEquals(86_400_000_000L, DashManifestParser.parseIsoDurationMicros("P1D"))
+        // Exact to the microsecond, where a double read 2,001,999 and 1,000,999 (#757).
+        assertEquals(2_002_000L, DashManifestParser.parseIsoDurationMicros("PT2.002S"))
+        assertEquals(1_001_000L, DashManifestParser.parseIsoDurationMicros("PT1.001S"))
+        assertEquals(3_600_000_001L, DashManifestParser.parseIsoDurationMicros("PT1H0.0000019S"))
+        assertEquals(5_400_000_000L, DashManifestParser.parseIsoDurationMicros("PT1.5H"))
         assertFailsWith<IllegalArgumentException> { DashManifestParser.parseIsoDurationMicros("tomorrow") }
     }
 

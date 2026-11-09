@@ -37,6 +37,9 @@ settings:
     pom:
       name: kiteplayer-output
       description: KitePlayer's platform audio output, render support and subtitle rasterisers.
+      licenses:
+        - name: MIT License (the Anime4K weights; see NOTICE)
+          url: https://opensource.org/license/mit
 
 test-settings@jvm:
   # JUnit 4: some suites use org.junit.Assume and JUnit 4 rules.

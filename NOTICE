@@ -10,16 +10,18 @@ Third-party components
 KitePlayer decodes media through KiteFFmpeg (https://github.com/yuroyami/KiteFFmpeg),
 a separate Apache-2.0 project, consumed as a dependency and not vendored into
 this repository. KiteFFmpeg in turn links against FFmpeg's libav* libraries
-(https://ffmpeg.org), licensed under the LGPL-2.1-or-later (or the GPL when
-built with --enable-gpl). FFmpeg is NOT covered by this NOTICE or by
+(https://ffmpeg.org), licensed under the LGPL-2.1-or-later. FFmpeg is NOT covered by this NOTICE or by
 KitePlayer's Apache-2.0 license, and neither is KiteFFmpeg's own NOTICE.
 
-The published KiteFFmpeg artifacts that KitePlayer depends on embed exactly
-two third-party components, statically linked into the native libraries:
-FFmpeg (LGPL-2.1-or-later, https://ffmpeg.org) and dav1d (BSD-2-Clause,
-https://code.videolan.org/videolan/dav1d), its software AV1 decoder. KiteFFmpeg
-publishes no GPL flavour, and nothing else is linked. KiteFFmpeg's NOTICE lists
-them with their versions and the FFmpeg source offer. The per-component
+The published KiteFFmpeg artifacts that KitePlayer depends on bundle FFmpeg
+(LGPL-2.1-or-later, https://ffmpeg.org) and dav1d (BSD-2-Clause,
+https://code.videolan.org/videolan/dav1d), its software AV1 decoder, statically
+linked into the native libraries. The androidNativeArm64 klib also bundles the
+NDK's compiler-rt outline atomics helpers (Apache-2.0 WITH LLVM-exception), and
+zlib (zlib licence) is linked from the platform SDK or the system, not bundled.
+KiteFFmpeg publishes no GPL flavour, and nothing else is linked. KiteFFmpeg's
+NOTICE is the authority for this list, with the versions and the FFmpeg source
+offer. The per-component
 licenses, and the distribution obligations they carry, are documented at:
 https://yuroyami.github.io/KiteFFmpeg/licensing/
 (source: docs/licensing.md in the KiteFFmpeg repository).
@@ -32,7 +34,7 @@ https://github.com/fribidi/fribidi). Their license texts ship inside the JVM
 and Android artifacts under META-INF/licenses/kiteplayer-libass/, and inside
 the web zip under licenses/. The native klibs have no place for them, so for
 those the texts are in this repository, under
-kiteplayer-libass/src/jvmMain/resources/META-INF/licenses/kiteplayer-libass/.
+kiteplayer-libass/resources@jvm/META-INF/licenses/kiteplayer-libass/.
 FriBidi's LGPL terms apply to those artifacts; its source is the tagged
 upstream release, and the archives are built by KiteFFmpeg's
 buildAssChainFor* tasks and published as release assets of that repository.
@@ -61,7 +63,7 @@ drawing credits its original and lists every way it differs. The license
 texts ship inside the JVM and Android artifacts under
 META-INF/licenses/kiteplayer-audioviz/. The native klibs have no place for
 them, so for those the texts are in this repository, under
-kiteplayer-audioviz/src/jvmMain/resources/META-INF/licenses/kiteplayer-audioviz/.
+kiteplayer-audioviz/resources@jvm/META-INF/licenses/kiteplayer-audioviz/.
 
 - Silk ports codevember, Copyright (c) 2015 Matt DesLauriers, MIT. It also
   carries Ashima simplex noise, Copyright (C) 2011 by Ashima Arts, MIT;
@@ -86,7 +88,7 @@ scripts/generate-anime4k-networks.py generates them into Anime4kNetworks.kt,
 whose header carries the license text. The text also ships inside the Android
 artifact under META-INF/licenses/kiteplayer-output/. The Apple klibs have no
 place for it, so for those the text is in this repository, under
-kiteplayer-output/src/androidMain/resources/META-INF/licenses/kiteplayer-output/.
+kiteplayer-output/resources@android/META-INF/licenses/kiteplayer-output/.
 
 Sample media
 ------------

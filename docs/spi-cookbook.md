@@ -4,7 +4,7 @@ KitePlayer's engine is pure Kotlin and knows no container format, no codec and n
 one of those arrives through the SPI in `kiteplayer-core`'s `spi` package, and the FFmpeg backend
 in `kiteplayer-ffmpeg` is just one implementation of it. This page walks the complete, compiling
 backend the engine's own test suite runs thousands of sessions against: `ScriptedBackend` in
-`kiteplayer-core/src/commonTest/kotlin/io/github/yuroyami/kiteplayer/ScriptedBackend.kt`. It is
+`kiteplayer-core/test/io/github/yuroyami/kiteplayer/ScriptedBackend.kt`. It is
 the reference implementation in the truest sense: if the engine's contracts and that file
 disagree, the test suite fails, so they cannot drift apart.
 
@@ -134,7 +134,7 @@ This runs in real time and needs an audio device when the file has sound. `openH
 own ledger: count each source, decoder and frame you hand over, and count them down in `close`.
 
 The scripted backend and `CoreHarness` are this repository's own test fakes, in
-`kiteplayer-core/src/commonTest`. They are not published, so another project cannot use them or
+`kiteplayer-core/test`. They are not published, so another project cannot use them or
 the engine's suites, but they are the worked example of the rules above. Inside this repository
 the harness runs a full session in milliseconds of virtual time:
 

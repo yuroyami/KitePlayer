@@ -501,7 +501,7 @@ KitePlayer puts FFmpeg and libass into your app as native code:
   libass, measured on `arm64-v8a`).
 - On the desktop JVM, the KiteFFmpeg jar is about 39 MB, because it carries FFmpeg for four
   desktop platforms. The libass jar adds about 6 MB.
-- On the web, the page downloads about 1.5 MB for the codec module and 0.7 MB for the worker
+- On the web, the page downloads about 1.5 MB for the codec module and 0.9 MB for the worker
   player, with gzip.
 
 KitePlayer itself is Apache-2.0. Three of the libraries that the artifacts link statically use the

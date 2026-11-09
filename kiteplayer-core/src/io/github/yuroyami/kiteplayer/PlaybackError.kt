@@ -114,19 +114,23 @@ public sealed class PlaybackError {
      * The player was asked to exist without something it cannot invent, or against a runtime it cannot
      * use, or an item it was asked to open sets one option twice.
      *
-     * Three cases today. A missing backend: Kotlin/Native has no classpath service lookup, so there is no
-     * such thing as finding the platform's decoder or its audio device at runtime, and whoever creates
-     * the player passes both in. Saying so as a typed error is the alternative to reflection, and it
-     * names what to pass rather than failing later with a null.
+     * [detail] names the case. They are, today:
      *
-     * The second is an FFmpeg runtime that does not match the headers the native layer was compiled
-     * against. Nothing about that failure depends on the media: every file fails, the next file will fail
-     * too, and retrying is pointless, which is what separates it from [SourceUnavailable]. The detail
-     * carries both version columns for all six libraries and one actionable sentence.
-     *
-     * The third is an item that sets one FFmpeg option through a typed field, such as
-     * [MediaItem.formatHint] or [MediaItem.demux], and through [MediaItem.openOptions] as well. The
-     * FFmpeg backend refuses it at open, and the detail names the option and the field.
+     * - A missing backend. Kotlin/Native has no classpath service lookup, so there is no such thing as
+     *   finding the platform's decoder or its audio device at runtime, and whoever creates the player
+     *   passes both in. Saying so as a typed error is the alternative to reflection, and it names what
+     *   to pass rather than failing later with a null.
+     * - An FFmpeg runtime that does not match the headers the native layer was compiled against.
+     *   Nothing about that failure depends on the media: every file fails, the next file will fail
+     *   too, and retrying is pointless, which is what separates it from [SourceUnavailable]. The
+     *   detail carries both version columns for all six libraries and one actionable sentence.
+     * - An item that sets one FFmpeg option through a typed field, such as [MediaItem.formatHint] or
+     *   [MediaItem.demux], and through [MediaItem.openOptions] as well. The FFmpeg backend refuses it
+     *   at open, and the detail names the option and the field.
+     * - An item whose [MediaItem.headers] holds a line break in a name or a value.
+     * - A [MediaItem.audioFilter] on an FFmpeg build that has no filter graphs.
+     * - A probe depth smaller than FFmpeg reads at least.
+     * - A clip that starts past the end of the media.
      */
     public data class ConfigurationInvalid(val detail: String) : PlaybackError() {
         override val message: String get() = "the player cannot be built as configured: $detail"

@@ -18,8 +18,9 @@ import kotlin.time.Duration.Companion.seconds
  * set after initialisation that is silently ignored.
  *
  * The engine's session core reads these values: the sync mode, the frame drop policy, every buffering
- * threshold, the audio language preference, the two publication intervals, and the backends. The members
- * nothing reads are marked one by one below, each with a pointer to where they are decided.
+ * threshold, the audio language preference, the two publication intervals, and the backends. A member
+ * that some setup does not read says so in its own documentation, with a pointer to where it is
+ * decided instead.
  */
 public data class PlayerConfig(
     /**
@@ -395,8 +396,9 @@ public data class AudioConfig(
      * saturator instead of letting it clip, so a loud passage compresses rather than squaring off;
      * at or below unity nothing is folded and the samples are what they always were, bit for bit.
      *
-     * Last in the list on purpose: inserting it earlier would move `downmix`'s position and break
-     * every caller that passed it positionally.
+     * It comes after `downmix` on purpose: inserting it earlier would have moved `downmix`'s
+     * position and broken every caller that passed it positionally. The same holds for every field
+     * added since, which is why each new one goes at the end.
      */
     val volumeCeiling: Float = 1f,
     /** The equaliser a fresh player starts at. Change it live with [KitePlayer.setEqualizer]. */

@@ -134,7 +134,7 @@ When the engine leaves cues out, or when drawing them fails, it warns once with
 ## How this is checked
 
 `OverlayPlacementContractTest` holds rules 1 and 2 as tests. It lives in
-`kiteplayer-core/src/commonTest`. Each module that draws overlays keeps a copy, because Kotlin
+`kiteplayer-core/test`. Each module that draws overlays keeps a copy, because Kotlin
 Multiplatform shares no test code between modules, so change every copy in the same commit. Each
 renderer and view runs the contract through a subclass of its own:
 

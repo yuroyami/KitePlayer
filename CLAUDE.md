@@ -86,7 +86,7 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - `ci.yml` and `publish.yml` therefore resolve kiteffmpeg from Maven Central only. Raising the catalog's kiteffmpeg version to one Central does not serve yet turns
   CI red on the next push and makes the publish fail. The sibling reaches Central first, then this
   repository is pushed and published.
-- The five Actions secrets are set, so `publish.yml` can upload. Dispatch it with the version as
+- The four Actions secrets that `publish.yml` reads are set, so it can upload. Dispatch it with the version as
   an input; it is compared against `settings.publishing.version` in
   `library.module-template.yaml` and a mismatch fails before any work. It then runs the whole of `ci.yml` on the same commit, and the upload waits for it, so a
   release run takes as long as CI plus the upload and one flaky test stops a release. Leave the
@@ -611,9 +611,9 @@ Do not reopen these without new evidence.
 - The media library's artifact was renamed, and its version went backwards on purpose: a new
   artifact id is a new artifact to the public repository, so the line restarted with the name. The
   new number is strictly newer than the old line's. Never "fix" it by bumping past the old line.
-- The reader primitive in the media library that reselects streams has no caller here on purpose:
-  the engine's all-lanes subtitle cache made the interface member unnecessary and it was deleted.
-  Do not re-add the interface half without its caller.
+- The reader primitive in the media library that reselects streams has a caller here:
+  `KiteFFmpegSource.selectStreams` calls `reselect` to add a stream that a packet announces (#509)
+  and to change teletext pages (#510). The engine's own interface has no reselect member.
 - The consumer application pins this project in its own version catalog, adapts it in one file, and
   offers it on a home-screen selector; another engine is its default on Android.
 - Pulling logs off an iPhone for that application uses the device control command with the

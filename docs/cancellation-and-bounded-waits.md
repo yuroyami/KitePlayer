@@ -250,7 +250,8 @@ server answers. Each platform's status has a test where its platform can run one
 ## The URL fallback
 
 An item takes the URL fallback when it has no reader and no resolver answers for its URI. FFmpeg
-then opens the URI with the protocols of the build: file, fd, pipe, data, http and tcp.
+then opens the URI with the protocols of the build: file, fd, pipe, data, http, tcp, udp, rtp and
+rtmp, with the rtsp and sdp demuxers over them.
 
 - Every http and tcp read waits at most 10 seconds. The backend sets FFmpeg's `rw_timeout` option,
   in microseconds, unless the item sets `rw_timeout` in `MediaItem.openOptions`. FFmpeg limits the

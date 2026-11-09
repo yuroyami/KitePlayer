@@ -517,7 +517,8 @@ public data class SourceRefusal(val uri: String, val status: Int)
  * path.
  *
  * This is how https plays on phones: the engine's FFmpeg profile deliberately vendors no TLS
- * backend (its protocol list is pinned to file/fd/pipe/data/http/tcp), so a resolver such as
+ * backend (its protocol list is pinned to file, fd, pipe, data, http, tcp, udp, rtp and rtmp, with
+ * the rtsp and sdp demuxers over them, and no https), so a resolver such as
  * kiteplayer-network's Ktor one carries the bytes with the OS supplying TLS.
  */
 public fun interface MediaIoResolver {

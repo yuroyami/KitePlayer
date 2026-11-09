@@ -553,8 +553,9 @@ then taken back out. Calibrate the counter before trusting it about a drawing.
 
 **What it cannot see, measured.** A drawing draws its own bright marks, and the guard reads only
 the shared light, so a picture that flashes through what it draws passes the guard. Each drawing
-has to keep its own marks inside the policy. The capture test ran on all 24 drawings on
-2026-09-29, and none of them crosses the policy in the captured output. Bars, Fracture, Iris and
+has to keep its own marks inside the policy. The capture test last ran on 2026-09-29, on the 24
+drawings the catalogue had then, before it was cut to the 15 above, and none of them crosses the
+policy in the captured output. A run on the current catalogue is still owed. Bars, Fracture, Iris and
 Odyssey reach three on the drum loop, the limit itself, and the other twenty stay below it. With
 reduced motion on, every drawing stays inside the policy. Pipe and Honeycomb still flash once in
 their busiest second, and the other twenty-two flash not at all.

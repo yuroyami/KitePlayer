@@ -25,14 +25,14 @@ internal expect fun platformPlaybackDispatchers(): PlaybackDispatchers
 internal expect val blockingWorkDispatcher: kotlinx.coroutines.CoroutineDispatcher
 
 /**
- * Eight SERIAL LANES over the runtime's shared pools instead of eight owned OS threads: the session
- * actor, the video scheduler, demux, video decode, audio decode, audio feed, subtitle raster and
- * release.
+ * Nine SERIAL LANES over the runtime's shared pools instead of nine owned OS threads: the session
+ * actor, the video scheduler, demux, video decode, audio decode, audio feed, subtitle raster,
+ * release and the external subtitle parse.
  *
  * The engine's contracts are about CONFINEMENT, and `limitedParallelism(1)` is confinement:
  * one task at a time per lane, happens-before between consecutive tasks, exactly the mutual
- * exclusion the per-worker threads provided, without one player costing eight threads and six
- * players costing forty-eight. A lane may run on a different pool thread from one task to the
+ * exclusion the per-worker threads provided, without one player costing nine threads and six
+ * players costing fifty-four. A lane may run on a different pool thread from one task to the
  * next, so nothing in the engine may rely on thread identity or thread-local state. The split is by BEHAVIOUR: lanes that only suspend (the video
  * scheduler, the raster lane) ride [calm], the pool for computation; lanes that can BLOCK ride
  * [blocking], the pool built for exactly that, so a stall parks an elastic IO thread and never
@@ -41,7 +41,7 @@ internal expect val blockingWorkDispatcher: kotlinx.coroutines.CoroutineDispatch
  * that on a two-core Default pool could sit on half the computation budget.
  *
  * The one pinned thread the platform genuinely demands, the audio DEVICE callback, was never
- * one of these eight: the platform output owns it, and the ring is all it touches.
+ * one of these nine: the platform output owns it, and the ring is all it touches.
  *
  * close() releases nothing because nothing here is owned; the pools are the runtime's.
  */

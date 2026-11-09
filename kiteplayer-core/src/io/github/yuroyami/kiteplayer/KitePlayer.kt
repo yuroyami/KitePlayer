@@ -464,17 +464,6 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
-     * Raises or lowers the centre channel, where a film's dialogue lives, by [db] decibels wherever
-     * the downmix folds it into speakers that are not a centre (#442), as a receiver's dialogue
-     * level does. Zero, the default, leaves the downmix as FFmpeg's rules make it. A device that has
-     * a centre speaker, and a source without a centre channel, hear no change. A change crossfades,
-     * so it never clicks, and is heard once the audio already buffered has played, as a
-     * [setBalance] change is. Published as [PlayerSnapshot.dialogueLevelDb].
-     *
-     * @throws IllegalArgumentException when [db] is not finite or is more than
-     *         [DIALOGUE_LEVEL_MAX_DB] either way.
-     */
-    /**
      * Moves the pitch by [semitones], up or down to an octave, without changing how fast the media
      * plays (#465), for a singer practising in another key or a learner following a voice that is
      * hard to hear, as VLC's pitch control does. It works with any [setSpeed], and with
@@ -515,6 +504,17 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.post(CoreCommand.SetSkipSilence(on, CompletableDeferred()))
     }
 
+    /**
+     * Raises or lowers the centre channel, where a film's dialogue lives, by [db] decibels wherever
+     * the downmix folds it into speakers that are not a centre (#442), as a receiver's dialogue
+     * level does. Zero, the default, leaves the downmix as FFmpeg's rules make it. A device that has
+     * a centre speaker, and a source without a centre channel, hear no change. A change crossfades,
+     * so it never clicks, and is heard once the audio already buffered has played, as a
+     * [setBalance] change is. Published as [PlayerSnapshot.dialogueLevelDb].
+     *
+     * @throws IllegalArgumentException when [db] is not finite or is more than
+     *         [DIALOGUE_LEVEL_MAX_DB] either way.
+     */
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setDialogueLevel(db: Float) {
         require(db.isFinite() && db >= -DIALOGUE_LEVEL_MAX_DB && db <= DIALOGUE_LEVEL_MAX_DB) {
@@ -662,15 +662,6 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
-     * Sets how the picture occupies its surface: whole picture letterboxed ([VideoScale.Fit],
-     * the default), viewport filled with the overhang cropped ([VideoScale.Fill]), or both axes
-     * stretched independently ([VideoScale.Stretch]).
-     *
-     * Legal at any time, renderer attached or not; the mode belongs to the player and every
-     * renderer is told it on attach. Pixel aspect and container rotation are honoured in every
-     * mode. The current mode is published as [PlayerSnapshot.videoScale].
-     */
-    /**
      * Draws the picture on screen again (#438), for a surface that was replaced and came back
      * empty, as an Android view's does when its application returns to the foreground. A paused or
      * ended player decodes the picture it shows once more and presents it, and its position and its
@@ -686,6 +677,15 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.post(CoreCommand.RedrawPicture(CompletableDeferred()))
     }
 
+    /**
+     * Sets how the picture occupies its surface: whole picture letterboxed ([VideoScale.Fit],
+     * the default), viewport filled with the overhang cropped ([VideoScale.Fill]), or both axes
+     * stretched independently ([VideoScale.Stretch]).
+     *
+     * Legal at any time, renderer attached or not; the mode belongs to the player and every
+     * renderer is told it on attach. Pixel aspect and container rotation are honoured in every
+     * mode. The current mode is published as [PlayerSnapshot.videoScale].
+     */
     @Throws(IllegalStateException::class, IllegalArgumentException::class)
     public fun setVideoScale(mode: VideoScale) {
         core.post(CoreCommand.SetVideoScale(mode, CompletableDeferred()))

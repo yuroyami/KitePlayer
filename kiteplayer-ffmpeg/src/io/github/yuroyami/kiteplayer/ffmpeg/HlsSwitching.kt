@@ -695,7 +695,7 @@ private suspend fun readWhole(reader: MediaIo, limit: Long, name: String): ByteA
     return bytes.copyOf(filled)
 }
 
-/** [upstream] from [offset] on for [length] bytes, or all of it. Null stays null. */
+/** Moves [opened] to [offset], and closes it when the seek fails, so a failed open leaks no reader. */
 private suspend fun seekOrClose(opened: MediaIo, offset: Long) {
     try {
         opened.seek(offset)

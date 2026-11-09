@@ -1344,7 +1344,7 @@ internal class ScriptedSource(
     val seekTargets: MutableList<Long> = mutableListOf()
 
     /** When set, every seek of this one source throws it, whatever the plan says of the others. */
-    @Volatile var seekFailure: Throwable? = null
+    var seekFailure: Throwable? = null
 
     /** The keyframe choice each seek asked for, beside [seekTargets]. */
     val seekChoices: MutableList<KeyframeChoice> = mutableListOf()

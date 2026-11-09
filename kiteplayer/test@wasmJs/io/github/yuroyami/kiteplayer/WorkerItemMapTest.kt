@@ -91,4 +91,15 @@ class WorkerItemMapTest {
         assertSame(added, player.state.value.queue.last(), "the item did not come back as the caller's own object")
         player.close()
     }
+
+    /** A call still waiting when the worker answers the close fails, rather than waiting for ever (#908). */
+    @Test
+    fun aCallStillWaitingAtTheCloseReplyFails() {
+        val player = KitePlayerWorker.onWorkerForTest(silentWorker())
+        val open = start { player.openQueue(listOf(item(0))) }
+        player.close()
+        // The open was call 1 and the close call 2; the worker answers only the close.
+        player.receive(WorkerMessage.Reply(2).encode())
+        assertIs<IllegalStateException>(open.result?.exceptionOrNull(), "the open is still waiting: ${open.result}")
+    }
 }

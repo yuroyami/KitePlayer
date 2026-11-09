@@ -609,7 +609,13 @@ public class KitePlayerWorker private constructor(
         holdDisplay(null)
         workerTerminate(worker)
         releaseAudio()
-        closeId?.let { pending.remove(it) }?.complete(null)
+        val closing = closeId?.let { pending.remove(it) }
+        // A call the worker had not answered when it closed never will be, so it fails with the
+        // closed player's error rather than waiting for ever, as the other two endings do (#908).
+        val waiting = pending.values.toList()
+        pending.clear()
+        waiting.forEach { it.completeExceptionally(IllegalStateException("the player is closed")) }
+        closing?.complete(null)
     }
 
     public companion object {

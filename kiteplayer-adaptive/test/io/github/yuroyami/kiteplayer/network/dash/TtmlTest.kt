@@ -80,9 +80,13 @@ class TtmlTest {
         )
     }
 
+    /** Kept since #759: open until the next cue, or for SubRip's default when none follows. */
     @Test
-    fun aParagraphWithNoEndAnywhereIsSkipped() {
-        assertEquals(emptyList(), cues(tt("""<div><p begin="1s">for ever</p></div>""")))
+    fun aParagraphWithNoEndAnywhereShowsForTheOpenCueDefault() {
+        assertEquals(
+            listOf(Triple(1_000_000L, 1_000_000L + io.github.yuroyami.kiteplayer.subtitle.SubRipParser.OPEN_CUE_DEFAULT_MICROS, "for ever")),
+            cues(tt("""<div><p begin="1s">for ever</p></div>""")),
+        )
     }
 
     @Test

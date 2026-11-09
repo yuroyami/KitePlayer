@@ -173,4 +173,32 @@ class ThumbnailsTest {
         assertEquals(listOf(0, 0, 0, 0), cues.last().let { listOf(it.x, it.y, it.width, it.height) })
         assertEquals(40_000_000L, cues.last().startUs)
     }
+
+    /** Close ends a thumbnail file's read still under way, rather than leaving it to read on (#796). */
+    @Test
+    fun closeEndsAThumbnailReadStillUnderWay() = runTest {
+        var reading = false
+        var cancelled = false
+        val stalled = MediaIoFactory {
+            object : MediaIo {
+                override val size: Long? = null
+                override val seekable: Boolean = false
+                override suspend fun read(into: ByteArray, offset: Int, length: Int): Int {
+                    reading = true
+                    try {
+                        kotlinx.coroutines.awaitCancellation()
+                    } finally {
+                        cancelled = true
+                    }
+                }
+                override suspend fun seek(position: Long) = Unit
+                override fun close() = Unit
+            }
+        }
+        val harness = opened(MediaItem("scripted://media", thumbnails = ThumbnailSource("https://cdn.test/thumbs/index.vtt", io = stalled)))
+        assertTrue(harness.runUntil(2.seconds) { reading }, "the thumbnail file was never read")
+        harness.close()
+        harness.run(100.milliseconds)
+        assertTrue(cancelled, "the read went on after close")
+    }
 }

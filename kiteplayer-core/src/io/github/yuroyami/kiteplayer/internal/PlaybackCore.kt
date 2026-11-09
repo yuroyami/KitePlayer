@@ -217,6 +217,13 @@ internal class PlaybackCore(
         dispatchers.session + SupervisorJob(parent) + CoroutineName("kiteplayer-session"),
     )
 
+    /**
+     * The work the player starts outside a session's jobs: a thumbnail read and an in-place variant
+     * switch. Close cancels it, so neither reads the network for a released player nor reports a
+     * warning after the terminal state (#796).
+     */
+    private val looseWork = SupervisorJob(scope.coroutineContext[Job])
+
     private val commands = Channel<CoreCommand>(Channel.UNLIMITED)
     private val outcomes = Channel<WorkerOutcome>(Channel.UNLIMITED)
 
@@ -1932,7 +1939,7 @@ internal class PlaybackCore(
         if (itemThumbnails?.source == wanted) return
         val entry = ItemThumbnails(wanted)
         itemThumbnails = entry
-        scope.launch {
+        scope.launch(looseWork) {
             val reason = when (val read = readSubtitleBytes(io.github.yuroyami.kiteplayer.SubtitleSource(wanted.uri, io = wanted.io), item)) {
                 is SubtitleBytes.Refused -> read.reason
                 is SubtitleBytes.Read -> {
@@ -7184,7 +7191,7 @@ internal class PlaybackCore(
      */
     private fun startVariantInPlace(session: OpenSession, request: VariantRequest) {
         variantInPlace = request
-        scope.launch {
+        scope.launch(looseWork) {
             val moved = try {
                 session.source.switchVariant(request.index)
             } catch (cancellation: CancellationException) {
@@ -12583,6 +12590,7 @@ internal class PlaybackCore(
         // What close promises: the renderer's events stop reaching this player, which a renderer
         // that outlives it, as a Compose screen's does, otherwise kept reachable with everything
         // the closed player held, its parsed subtitles among them (#602).
+        looseWork.cancel()
         rendererEventsJob?.cancel()
         rendererEventsJob = null
         pendingRenderer = null

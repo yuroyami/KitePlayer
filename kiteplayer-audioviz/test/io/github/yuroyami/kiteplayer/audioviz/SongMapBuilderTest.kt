@@ -7,6 +7,7 @@ import io.github.yuroyami.kiteplayer.spi.SampleFormat
 import kotlin.math.abs
 import kotlin.math.log10
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -163,5 +164,30 @@ class SongMapBuilderTest {
         val changes = listOf(boundary(5.0), boundary(5.2), boundary(9.6), boundary(9.8), boundary(31.0), boundary(40.0))
         val merged = withKeyBoundaries(structure, changes).map { it.ptsMicros / 1_000_000.0 }
         assertEquals(listOf(5.0, 9.6, 30.0, 40.0), merged)
+    }
+
+    /** A timestamp jump of days is a scan failure, not an allocation for the whole gap (#954). */
+    @Test
+    fun aTimestampJumpOfDaysFailsTheMapInsteadOfFillingTheGap() {
+        val builder = SongMapBuilder(TrackId(1))
+        val block = FloatArray(1024 * 2) { 0.25f * kotlin.math.sin(it * 0.05f) }
+        var at = 0L
+        repeat(48) {
+            builder.feed(Pts(at), block, 1024, format)
+            at += 1024L * 1_000_000L / 48_000
+        }
+        val jumped = 2_000_000_000_000L
+        assertFailsWith<SongMapTooLong> {
+            repeat(48) {
+                builder.feed(Pts(jumped + it * 1024L * 1_000_000L / 48_000), block, 1024, format)
+            }
+        }
+    }
+
+    @Test
+    fun twoPartsFarApartFailTheMergeInsteadOfFillingTheGap() {
+        assertFailsWith<SongMapTooLong> {
+            mergeSongMapParts(listOf(part(0, 1, -10f), part(20_000_000, 1, -10f)), TrackId(1), complete = false)
+        }
     }
 }

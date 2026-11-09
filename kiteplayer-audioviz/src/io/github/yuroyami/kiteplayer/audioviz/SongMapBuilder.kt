@@ -96,6 +96,10 @@ internal class SongMapBuilder(
     private fun record(atMicros: Long, db: Double) {
         val start = curveStart ?: (floor(atMicros.toDouble() / SongMap.CURVE_STEP_MICROS).toLong() * SongMap.CURVE_STEP_MICROS)
             .also { curveStart = it }
+        // In Double first: a timestamp days past the start filled every cell of the gap, and the
+        // subtraction and the narrowing to Int were unchecked (#954).
+        val cells = (atMicros.toDouble() - start.toDouble()) / SongMap.CURVE_STEP_MICROS
+        if (cells >= MAX_CURVE_CELLS) throw SongMapTooLong(cells)
         val index = ((atMicros - start) / SongMap.CURVE_STEP_MICROS).toInt()
         if (index < curveSize) return
         while (curveSize <= index) {
@@ -189,6 +193,13 @@ internal class SongMapBuilder(
     private fun toDb(meanSquare: Double): Double = if (meanSquare <= 0.0) SILENT_DB else 10.0 * log10(meanSquare)
 
     internal companion object {
+        /**
+         * The most curve cells one map holds: 48 hours of media at one cell per 100 ms, 6.9 MB of
+         * curve. A map past it is a scan failure, as any other, rather than an allocation of the
+         * whole span a timestamp jump made.
+         */
+        const val MAX_CURVE_CELLS = 48 * 3600 * 10
+
         const val SILENT_DB = -100.0
         const val HISTOGRAM_LOW_DB = -70.0
         const val HISTOGRAM_STEP_DB = 0.1
@@ -274,6 +285,9 @@ internal fun mergeSongMapParts(parts: List<SongMapPart>, track: TrackId, complet
     if (filled.isNotEmpty()) {
         curveStart = filled.minOf { it.curveStartMicros }
         val end = filled.maxOf { it.curveStartMicros + it.curve.size * SongMap.CURVE_STEP_MICROS }
+        // Two small parts far apart would allocate for the whole gap between them (#954).
+        val cells = (end.toDouble() - curveStart.toDouble()) / SongMap.CURVE_STEP_MICROS
+        if (cells >= SongMapBuilder.MAX_CURVE_CELLS) throw SongMapTooLong(cells)
         val size = ((end - curveStart) / SongMap.CURVE_STEP_MICROS).toInt().coerceAtLeast(0)
         curve = FloatArray(size)
         val written = BooleanArray(size)
@@ -311,3 +325,7 @@ internal fun mergeSongMapParts(parts: List<SongMapPart>, track: TrackId, complet
     return SongMap(SongMap.VERSION, track, coveredThrough, complete, reference,
         structure.toTypedArray(), keys.toTypedArray(), curve, curveStart)
 }
+
+/** A song map whose span is past [SongMapBuilder.MAX_CURVE_CELLS], which ends its scan as a failure. */
+internal class SongMapTooLong(cells: Double) :
+    IllegalStateException("the song map would span ${cells.toLong()} curve cells, past ${SongMapBuilder.MAX_CURVE_CELLS}")

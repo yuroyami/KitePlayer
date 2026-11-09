@@ -39,4 +39,26 @@ class CaptureNeverWaitsTest {
         assertFailsWith<IllegalStateException> { harness.core.captureFrame() }
         harness.close()
     }
+
+    /**
+     * A capture on a paused player re-presents its frame by a seek to the clock's position, and
+     * a seek the viewer just asked for must not be replaced by it: the capture is the frame the
+     * viewer's seek lands on (#794).
+     */
+    @Test
+    fun aPausedCaptureRightAfterASeekTakesTheSeeksFrame() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 60_000_000))
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(3.seconds)
+        harness.core.pause()
+        harness.run(500.milliseconds)
+        harness.core.seekLater(Pts(40_000_000), SeekMode.Precise)
+        val capture = async(start = CoroutineStart.UNDISPATCHED) { harness.core.captureFrame() }
+        harness.run(3.seconds)
+        val frame = capture.await()
+        assertTrue(kotlin.math.abs(frame.pts.micros - 40_000_000) < 100_000, "the capture is at ${frame.pts.micros}")
+        assertTrue(kotlin.math.abs(harness.core.position().inWholeMicroseconds - 40_000_000) < 100_000, "the player is at ${harness.core.position()}")
+        harness.close()
+    }
 }

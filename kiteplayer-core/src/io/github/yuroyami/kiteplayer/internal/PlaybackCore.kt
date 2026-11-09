@@ -3287,7 +3287,9 @@ internal class PlaybackCore(
                 // flush the sound: a music app heard a break on every return to it (#834).
                 if (changed && command.value && session?.videoStream != null) {
                     session?.videoWaitingForKeyframe?.value = true
-                    if (session?.source?.seekable == true && status.isActive) {
+                    // A seek that waits lands on a keyframe of its own, which the returning picture
+                    // takes, and is not replaced by one to the clock's position (#794).
+                    if (session?.source?.seekable == true && status.isActive && pendingSeek == null) {
                         queueSeek(
                             SeekRequest(SeekTarget.Absolute(currentPosition()), SeekMode.Precise),
                             CompletableDeferred(),
@@ -11683,7 +11685,10 @@ internal class PlaybackCore(
                 video.captureRequest.getAndSet(reply)?.completeExceptionally(
                     IllegalStateException("superseded by a newer captureFrame"),
                 )
-                if (!playRequested) {
+                // A seek the viewer asked for and that waits presents its own landing through the
+                // capture gate; a seek to where the clock stands would replace it, and the merge
+                // keeps the newer target (#794).
+                if (!playRequested && pendingSeek == null) {
                     queueSeek(SeekRequest(SeekTarget.Absolute(currentPosition()), SeekMode.Precise), null)
                 }
             }

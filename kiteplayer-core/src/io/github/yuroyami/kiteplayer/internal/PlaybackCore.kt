@@ -9249,7 +9249,9 @@ internal class PlaybackCore(
                 return
             }
             if (endOfStream.subtitleTailUntilNanos == 0L) {
-                val overrun = subtitleTailOverrun(session)
+                // The overrun is media time; at 2x it passes in half the wall time (#802).
+                val rate = wakeRate()
+                val overrun = subtitleTailOverrun(session).let { if (rate > 0.0) it / rate else it }
                 endOfStream.subtitleTailUntilNanos = if (overrun <= Duration.ZERO) {
                     -1L
                 } else {

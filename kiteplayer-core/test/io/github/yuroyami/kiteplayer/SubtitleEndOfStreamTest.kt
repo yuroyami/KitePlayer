@@ -94,4 +94,23 @@ class SubtitleEndOfStreamTest {
         )
         harness.close()
     }
+
+    /** The wait for a closing cue runs at the playback speed, as every other wake-up does (#802). */
+    @Test
+    fun theWaitForAClosingCueRunsAtThePlaybackSpeed() = runTest {
+        // Four seconds of pictures and a line to eight: at 2x the pictures end after two seconds of
+        // wall time and the line four media seconds, two wall seconds, after that.
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(durationUs = 4_000_000, subtitleCues = listOf(cue(3_500_000, 8_000_000, "closing"))),
+        )
+        harness.openWithRenderer()
+        harness.core.setSpeed(2.0)
+        harness.core.play()
+        harness.run(3.seconds)
+        assertTrue(harness.core.snapshots.value.status != PlaybackStatus.Ended, "the line was still due")
+        harness.run(2.seconds)
+        assertEquals(PlaybackStatus.Ended, harness.core.snapshots.value.status, "the wait ran at 1x")
+        harness.close()
+    }
 }

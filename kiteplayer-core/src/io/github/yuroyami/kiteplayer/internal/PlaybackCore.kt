@@ -9473,7 +9473,10 @@ internal class PlaybackCore(
         val delayUs = newestUs - currentPosition().micros
         val readyUs = config.buffer.readyDuration.inWholeMicroseconds
         when {
-            delayUs < 0 || delayUs > 2 * config.buffer.totalDuration.inWholeMicroseconds -> applyLiveTrim(1.0)
+            // Saturating: an infinite totalDuration is Long.MAX_VALUE microseconds, and doubling it
+            // wrapped negative, which took this branch on every pass and switched the catch-up off
+            // for good (#808).
+            delayUs < 0 || delayUs > saturatingDouble(config.buffer.totalDuration.inWholeMicroseconds) -> applyLiveTrim(1.0)
             delayUs > readyUs + LIVE_CATCH_UP_ABOVE_US -> applyLiveTrim(LIVE_CATCH_UP_SPEED)
             delayUs <= readyUs + LIVE_CATCH_UP_UNTIL_US -> applyLiveTrim(1.0)
         }
@@ -13378,13 +13381,16 @@ internal class PlaybackCore(
             lastStatsDroppedLate = droppedLateNow
 
             // Bytes over the wire. The rate is a difference between two samples divided by the
-            // interval the sampler actually runs on, so a late tick reports a lower rate rather
-            // than a spike, which is the honest way round for a figure used to explain a rebuffer.
+            // time that actually passed between them, as the frame rate above is: divided by the
+            // configured interval, a late tick reported three seconds of bytes as one second's
+            // (#811). A forced early publish is measured over at least half the interval, so a very
+            // short gap does not report a spike.
             val ioBytesNow = retiredIoBytes + ioBytesOf(session)
             val ioDelta = (ioBytesNow - lastStatsIoBytes).coerceAtLeast(0)
             lastStatsIoBytes = ioBytesNow
-            val ioPerSecond = if (config.statsInterval > Duration.ZERO) {
-                ioDelta * 1000L / config.statsInterval.inWholeMilliseconds.coerceAtLeast(1)
+            val ioPerSecond = if (config.statsInterval > Duration.ZERO && elapsed > Duration.ZERO) {
+                val floorMs = (config.statsInterval.inWholeMilliseconds / 2).coerceAtLeast(1)
+                ioDelta * 1000L / elapsed.inWholeMilliseconds.coerceAtLeast(floorMs)
             } else {
                 0L
             }
@@ -17349,3 +17355,6 @@ private class ReadOnlyList<T>(private val items: List<T>) : AbstractList<T>() {
 
     override fun get(index: Int): T = items[index]
 }
+
+/** [value] doubled, held at [Long.MAX_VALUE] where it would wrap. */
+internal fun saturatingDouble(value: Long): Long = if (value > Long.MAX_VALUE / 2) Long.MAX_VALUE else value * 2

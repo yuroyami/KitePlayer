@@ -380,7 +380,23 @@ public class DesktopAudioSink internal constructor(
         synchronized(lifecycle) { if (writer === t) writer = null }
     }
 
+    /**
+     * [writeBlocks], and a failure of its own reported as a lost device rather than a thread that
+     * dies with the sink still marked running and nothing told (#716).
+     */
     private fun writerLoop() {
+        try {
+            writeBlocks()
+        } catch (failure: Throwable) {
+            synchronized(lifecycle) {
+                writerFailed = true
+                writerRun = false
+            }
+            eventFlow.tryEmit(AudioSinkEvent.DeviceLost("the line's writer failed: $failure"))
+        }
+    }
+
+    private fun writeBlocks() {
         val d = driver ?: return
         d.onWriterThreadStart()
         val format = accepted ?: return
@@ -491,7 +507,9 @@ public class DesktopAudioSink internal constructor(
     private fun packBlock(samples: Int) {
         var b = 0
         for (i in 0 until samples) {
-            val v = (blockBuffer[i] * 32768f).roundToInt().coerceIn(-32768, 32767)
+            // roundToInt throws on NaN, and a NaN from a sink's source killed the writer (#716).
+            val sample = blockBuffer[i]
+            val v = if (sample.isNaN()) 0 else (sample * 32768f).roundToInt().coerceIn(-32768, 32767)
             wireBuffer[b++] = (v and 0xFF).toByte()
             wireBuffer[b++] = ((v shr 8) and 0xFF).toByte()
         }

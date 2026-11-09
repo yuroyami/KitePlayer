@@ -117,7 +117,7 @@ internal class FilterGraphResampler(
                 ((converted[at + 1].toInt() and 0xFF) shl 8) or
                 ((converted[at + 2].toInt() and 0xFF) shl 16) or
                 (converted[at + 3].toInt() shl 24)
-            pending[pendingValues + i] = Float.fromBits(bits)
+            pending[pendingValues + i] = finiteSample(Float.fromBits(bits))
         }
         pendingValues += values
     }

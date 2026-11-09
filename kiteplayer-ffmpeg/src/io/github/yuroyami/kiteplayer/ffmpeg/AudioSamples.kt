@@ -27,8 +27,8 @@ internal object AudioSamples {
             "u8" -> { width = 1; read = { at -> ((bytes[at].toInt() and 0xFF) - 128) / 128f } }
             "s16" -> { width = 2; read = { at -> le16(bytes, at) / 32768f } }
             "s32" -> { width = 4; read = { at -> le32(bytes, at) / 2147483648f } }
-            "flt" -> { width = 4; read = { at -> Float.fromBits(le32(bytes, at)) } }
-            "dbl" -> { width = 8; read = { at -> Double.fromBits(le64(bytes, at)).toFloat() } }
+            "flt" -> { width = 4; read = { at -> finiteSample(Float.fromBits(le32(bytes, at))) } }
+            "dbl" -> { width = 8; read = { at -> finiteSample(Double.fromBits(le64(bytes, at)).toFloat()) } }
             else -> throw IllegalArgumentException("cannot read samples in the $name format")
         }
         require(bytes.size >= count * channels * width) {

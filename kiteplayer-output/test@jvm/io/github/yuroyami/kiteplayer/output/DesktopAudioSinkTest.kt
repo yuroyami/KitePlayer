@@ -359,6 +359,40 @@ class DesktopAudioSinkTest {
         s.close()
     }
 
+    /** A NaN sample plays as silence and the writer goes on, where it used to throw and die (#716). */
+    @Test
+    fun aNanSamplePlaysAsSilenceAndTheWriterGoesOn() = runBlocking {
+        val s = sink()
+        var blocks = 0
+        s.open(stereo48k) { destination, frames, _ ->
+            blocks++
+            destination.writeInterleaved(FloatArray(frames * 2) { i -> if (i == 0) Float.NaN else 0.5f }, 0, 0, frames)
+            frames
+        }
+        s.start()
+        awaitUntil("two blocks on the wire") {
+            synchronized(driver.writtenBytes) { driver.writtenBytes.size } >= 2 * 512 * 4
+        }
+        s.stop()
+        assertEquals(0, driver.shortAt(0), "the NaN sample")
+        assertEquals(16384, driver.shortAt(1), "the sample after it")
+        assertTrue(blocks >= 2, "the writer stopped after the first block")
+        s.close()
+    }
+
+    /** A writer whose own loop fails says so as a lost device, and leaves the sink startable (#716). */
+    @Test
+    fun aWriterThatFailsReportsTheDeviceLost() = runBlocking {
+        val s = sink()
+        s.open(stereo48k) { _, _, _ -> error("a render callback that throws") }
+        val lost = async { s.events.first { it is AudioSinkEvent.DeviceLost } }
+        yield()
+        s.start()
+        val event = withTimeout(5_000) { lost.await() } as AudioSinkEvent.DeviceLost
+        assertTrue("writer failed" in event.detail, "the event names the writer, was: ${event.detail}")
+        s.close()
+    }
+
     // The block buffer is preallocated and REUSED, so a short return leaves the previous block's
     // samples in the tail. The first block here is deliberately full and loud, so the tail the
     // second block does not write is dirty; nothing above the sink zeroes it.

@@ -549,8 +549,8 @@ private fun ByteArray.readSample(offset: Int, format: KiteSampleFormat): Float =
     KiteSampleFormat.U8, KiteSampleFormat.U8p -> ((this[offset].toInt() and 0xFF) - 128) / 128f
     KiteSampleFormat.S16, KiteSampleFormat.S16p -> leShort(offset) / 32_768f
     KiteSampleFormat.S32, KiteSampleFormat.S32p -> leInt(offset) / 2_147_483_648f
-    KiteSampleFormat.Flt, KiteSampleFormat.FltP -> Float.fromBits(leInt(offset))
-    KiteSampleFormat.Dbl, KiteSampleFormat.DblP -> Double.fromBits(leLong(offset)).toFloat()
+    KiteSampleFormat.Flt, KiteSampleFormat.FltP -> finiteSample(Float.fromBits(leInt(offset)))
+    KiteSampleFormat.Dbl, KiteSampleFormat.DblP -> finiteSample(Double.fromBits(leLong(offset)).toFloat())
     KiteSampleFormat.S64, KiteSampleFormat.S64p -> (leLong(offset).toDouble() / 9.223372036854776E18).toFloat()
     else -> error("unsupported sample format ${format.name}")
 }
@@ -566,3 +566,10 @@ private fun ByteArray.leInt(offset: Int): Int =
 
 private fun ByteArray.leLong(offset: Int): Long =
     (leInt(offset).toLong() and 0xFFFFFFFFL) or (leInt(offset + 4).toLong() shl 32)
+
+/**
+ * [value], or silence when it is not finite. A float file can carry NaN or an infinity, damaged or
+ * on purpose, and one of them stopped the desktop sound outright, so the engine takes no nonfinite
+ * sample from a decoder (#716). An integer format cannot hold one.
+ */
+internal fun finiteSample(value: Float): Float = if (value.isFinite()) value else 0f

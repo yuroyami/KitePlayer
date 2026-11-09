@@ -275,22 +275,28 @@ public object TtmlParser {
             end: Long,
             out: MutableList<Run>,
         ) {
+            // In a sequence each span counts its times from where the one before it ended, in a
+            // paragraph or a span as in a div (TTML 1, 10.2.4; #760). Text between them shows from
+            // there to the container's end, and moves nothing.
+            val sequence = element.attr("timeContainer") == "seq"
+            var origin = begin
             for (node in element.content) {
                 when (node) {
                     is XmlText -> {
                         val text = if (preserve) node.value else node.value.replace(WHITESPACE, " ")
-                        if (text.isNotEmpty()) out += Run(text, look, background, begin, end, preserve)
+                        if (text.isNotEmpty()) out += Run(text, look, background, origin, end, preserve)
                     }
                     is XmlElement -> when (node.name) {
-                        "br" -> out += Run("\n", look, background, begin, end, preserve)
+                        "br" -> out += Run("\n", look, background, origin, end, preserve)
                         "span" -> {
                             val effect = effectOf(node)
                             // A span's times count from its parent's begin, and stay inside it. A
                             // span whose begin cannot be read is skipped (#762).
                             val ownBegin = time(node, "begin")
                             if (ownBegin == UNREADABLE) continue
-                            val spanBegin = (begin + (ownBegin ?: 0L)).coerceIn(begin, end)
-                            val spanEnd = (endOf(node, spanBegin, begin, null) ?: end).coerceIn(spanBegin, end)
+                            val spanBegin = (origin + (ownBegin ?: 0L)).coerceIn(begin, end)
+                            val spanEnd = (endOf(node, spanBegin, origin, null) ?: end).coerceIn(spanBegin, end)
+                            if (sequence) origin = spanEnd
                             runs(
                                 node,
                                 look.with(effect, space),

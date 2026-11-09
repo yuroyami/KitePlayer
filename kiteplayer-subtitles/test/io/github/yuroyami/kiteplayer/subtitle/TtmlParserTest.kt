@@ -350,4 +350,17 @@ class TtmlParserTest {
         val spanned = TtmlParser.parse(tt("""<p><span begin="1s" end="2s">A</span></p>"""))
         assertEquals(listOf(Triple(1_000_000L, 2_000_000L, "A")), timed(spanned))
     }
+
+    /** A sequential paragraph or span times each span from the end of the one before (#760). */
+    @Test
+    fun sequentialTimingHoldsInsideAParagraph() {
+        val spans = """<span dur="1s">A</span><span dur="1s">B</span><span dur="1s">C</span>"""
+        val expected = listOf(Triple(0L, 1_000_000L, "A"), Triple(1_000_000L, 2_000_000L, "B"), Triple(2_000_000L, 3_000_000L, "C"))
+        assertEquals(expected, timed(TtmlParser.parse(tt("""<p begin="0s" dur="3s" timeContainer="seq">$spans</p>"""))))
+        assertEquals(expected, timed(TtmlParser.parse(tt("""<p begin="0s" dur="3s"><span timeContainer="seq">$spans</span></p>"""))))
+        assertEquals(
+            listOf(Triple(0L, 1_000_000L, "ABC")),
+            timed(TtmlParser.parse(tt("""<p begin="0s" dur="3s" timeContainer="par">$spans</p>"""))),
+        )
+    }
 }

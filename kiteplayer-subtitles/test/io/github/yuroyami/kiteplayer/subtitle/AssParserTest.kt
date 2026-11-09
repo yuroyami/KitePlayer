@@ -283,4 +283,18 @@ class AssParserTest {
         // Decimal 16777215 is white.
         assertEquals(0xFFFFFFFF.toInt(), cue.spans.single().style.primaryColor)
     }
+
+    /** Alpha tags set the alpha alone, and a colour tag keeps the alpha it found (#765). */
+    @Test
+    fun alphaTagsSetTheAlphaAndColourTagsKeepIt() {
+        fun style(text: String) =
+            (AssParser.parse(document("Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,$text")).single() as SubtitleCue.Text)
+                .spans.single().style
+        assertEquals(0x00FFFFFF, style("""{\1a&HFF&}Hidden""").primaryColor, "a hidden fill")
+        assertEquals(0xFF000000.toInt(), style("""{\1a&HFF&}Hidden""").outlineColor, "the outline stays")
+        val half = style("""{\alpha&H80&}Half""")
+        assertEquals(listOf(0x7F, 0x7F, 0x7F), listOf(half.primaryColor, half.outlineColor, half.shadowColor).map { it ushr 24 })
+        assertEquals(0x7FFF0000, style("""{\alpha&H80&\c&H0000FF&}Red""").primaryColor, "the colour keeps the alpha")
+        assertEquals(0x7FFFFFFF, style("""{\3a&H80&\1a&H80&\3a&H00&}x""").primaryColor)
+    }
 }

@@ -299,12 +299,27 @@ private fun parseOverrideText(
                         tag.startsWith("fn") -> newStyle = newStyle.copy(fontFamily = tag.drop(2).takeIf { it.isNotEmpty() })
                         tag.startsWith("fs") && tag.getOrNull(2)?.isDigit() == true ->
                             tag.drop(2).toFloatOrNull()?.let { newStyle = newStyle.copy(fontSizePx = it) }
+                        // An alpha tag sets the alpha alone, of all four colours or of one; the
+                        // secondary colour is karaoke's, which this tier does not draw (#765).
+                        tag.startsWith("alpha") -> assAlpha(tag.drop(5))?.let { a ->
+                            newStyle = newStyle.copy(
+                                primaryColor = withAlpha(newStyle.primaryColor, a),
+                                outlineColor = withAlpha(newStyle.outlineColor, a),
+                                shadowColor = withAlpha(newStyle.shadowColor, a),
+                            )
+                        }
+                        tag.startsWith("1a") -> assAlpha(tag.drop(2))?.let { newStyle = newStyle.copy(primaryColor = withAlpha(newStyle.primaryColor, it)) }
+                        tag.startsWith("2a") -> Unit
+                        tag.startsWith("3a") -> assAlpha(tag.drop(2))?.let { newStyle = newStyle.copy(outlineColor = withAlpha(newStyle.outlineColor, it)) }
+                        tag.startsWith("4a") -> assAlpha(tag.drop(2))?.let { newStyle = newStyle.copy(shadowColor = withAlpha(newStyle.shadowColor, it)) }
+                        // A colour tag changes the colour and keeps its alpha, as in libass: a
+                        // six-digit value has no alpha digits and used to make the text opaque (#765).
                         tag.startsWith("1c") || (tag.startsWith("c") && !tag.startsWith("clip")) -> {
                             val v = tag.substringAfter("c")
-                            assColor(v)?.let { newStyle = newStyle.copy(primaryColor = it) }
+                            assColor(v)?.let { newStyle = newStyle.copy(primaryColor = withColor(newStyle.primaryColor, it)) }
                         }
-                        tag.startsWith("3c") -> assColor(tag.drop(2))?.let { newStyle = newStyle.copy(outlineColor = it) }
-                        tag.startsWith("4c") -> assColor(tag.drop(2))?.let { newStyle = newStyle.copy(shadowColor = it) }
+                        tag.startsWith("3c") -> assColor(tag.drop(2))?.let { newStyle = newStyle.copy(outlineColor = withColor(newStyle.outlineColor, it)) }
+                        tag.startsWith("4c") -> assColor(tag.drop(2))?.let { newStyle = newStyle.copy(shadowColor = withColor(newStyle.shadowColor, it)) }
                         tag.startsWith("bord") -> tag.drop(4).toFloatOrNull()?.let { newStyle = newStyle.copy(outlineWidthPx = it) }
                         tag.startsWith("shad") -> tag.drop(4).toFloatOrNull()?.let { newStyle = newStyle.copy(shadowOffsetPx = it) }
                         tag == "b1" -> newStyle = newStyle.copy(bold = true)
@@ -389,6 +404,19 @@ internal fun assColor(raw: String?): Int? {
     val alpha = 255 - (value shr 24 and 0xFF).toInt()
     return (alpha shl 24) or (red shl 16) or (green shl 8) or blue
 }
+
+/** An ASS alpha `&HAA&`, 00 opaque and FF clear, as the cue model's alpha, 255 opaque. */
+internal fun assAlpha(raw: String): Int? {
+    val digits = raw.trim().removePrefix("&").removePrefix("H").removePrefix("h").trimEnd('&')
+    val value = digits.toLongOrNull(16) ?: return null
+    return 255 - (value and 0xFF).toInt()
+}
+
+/** [color] with its alpha replaced by [alpha]. */
+private fun withAlpha(color: Int, alpha: Int): Int = (color and 0x00FFFFFF) or (alpha shl 24)
+
+/** [color] with its red, green and blue taken from [rgb] and its alpha kept. */
+private fun withColor(color: Int, rgb: Int): Int = (color and 0xFF000000.toInt()) or (rgb and 0x00FFFFFF)
 
 /** ASS booleans: -1 (and any nonzero) is true, 0 false. */
 private fun assBool(raw: String?): Boolean = (raw?.toIntOrNull() ?: 0) != 0

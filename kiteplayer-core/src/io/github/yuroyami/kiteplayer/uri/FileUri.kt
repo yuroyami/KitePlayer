@@ -53,8 +53,12 @@ public object FileUri {
             if (end > runStart) text.substring(runStart, end).encodeToByteArray().forEach { bytes += it }
         }
         while (at < text.length) {
-            val value = if (text[at] == '%' && at + 2 <= text.lastIndex) {
-                text.substring(at + 1, at + 3).toIntOrNull(16)
+            // `%` and exactly two hexadecimal digits (RFC 3986, 2.1). toIntOrNull also took a sign,
+            // so a literal `%-1` decoded to the byte 0xFF (#875).
+            val high = if (text[at] == '%' && at + 2 <= text.lastIndex) text[at + 1].digitToIntOrNull(16) else null
+            val low = if (high != null) text[at + 2].digitToIntOrNull(16) else null
+            val value = if (high != null && low != null) {
+                high * 16 + low
             } else {
                 null
             }

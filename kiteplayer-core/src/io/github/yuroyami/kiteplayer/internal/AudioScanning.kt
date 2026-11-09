@@ -30,9 +30,12 @@ internal suspend fun scanMediaAudio(
     preferredLanguages: List<String>,
     range: AudioScanRange?,
     sink: AudioScanSink,
+    resolve: suspend (MediaItem) -> io.github.yuroyami.kiteplayer.MediaIo? = { null },
+    warn: (io.github.yuroyami.kiteplayer.PlaybackWarning) -> Unit = {},
 ): AudioScanResult {
-    // With the item's external audio inputs, so a track of one can be scanned (#392).
-    val session = openWithExternalAudio(backend, media)
+    // With the item's external audio inputs, so a track of one can be scanned (#392), each
+    // reached through the same reader rules as playback, its failure said (#799).
+    val session = openWithExternalAudio(backend, media, resolve).also { it.setWarningSink(warn) }
     // A read can block its thread inside the backend, where a cancellation cannot reach it, so
     // the caller's cancellation is linked to the source's interrupt for the whole scan (#411). A
     // child job is cancelled the moment its parent is, even while this thread is blocked, and its

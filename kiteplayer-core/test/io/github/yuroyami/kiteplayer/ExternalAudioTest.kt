@@ -439,6 +439,25 @@ class ExternalAudioTest {
         harness.close()
     }
 
+    /** The player's inspection reaches each input through the reader rules playback uses (#799). */
+    @Test
+    fun thePlayersInspectionReadsAnInputThroughTheResolverAsAnOpenDoes() = runTest {
+        val asked = mutableListOf<String>()
+        val resolver = object : MediaIoResolver {
+            override suspend fun resolve(uri: String): MediaIo? = resolve(uri, emptyMap())
+            override suspend fun resolve(uri: String, headers: Map<String, String>): MediaIo? {
+                asked += uri
+                return CountingReader()
+            }
+        }
+        val harness = CoreHarness(this, script = film(), config = PlayerConfig(network = NetworkConfig(ioResolver = resolver)))
+        harness.backend.scriptFor = { opened -> if (opened.uri.endsWith(".m4a")) sound(0.5f) else null }
+        val item = MediaItem("https://cdn.example/film.mp4", externalAudio = listOf(AudioSource("https://cdn.example/dub.m4a")))
+        harness.core.inspect(item)
+        assertEquals(listOf("https://cdn.example/film.mp4", "https://cdn.example/dub.m4a"), asked)
+        harness.close()
+    }
+
     @Test
     fun theInputsOfAnItemAreItsOwnInTextAndInAMemento() {
         val media = mediaItem("film.mkv") {

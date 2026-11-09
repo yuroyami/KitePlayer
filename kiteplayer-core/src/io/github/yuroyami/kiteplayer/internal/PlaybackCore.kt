@@ -1772,7 +1772,11 @@ internal class PlaybackCore(
         val io = resolveMediaIo(media, config.network)
         val item = if (io == null) media else media.copy(io = { io })
         return try {
-            scanMediaAudio(backend, item, track, config.audio.preferredLanguages, range, sink)
+            scanMediaAudio(
+                backend, item, track, config.audio.preferredLanguages, range, sink,
+                resolve = { input -> resolveMediaIo(input, config.network) },
+                warn = ::reportWarning,
+            )
         } catch (failure: Throwable) {
             // A reader the backend never took over is closed here; close tolerates a second call.
             if (io != null) runCatching { io.close() }
@@ -1786,7 +1790,7 @@ internal class PlaybackCore(
         val io = resolveMediaIo(media, config.network)
         val item = if (io == null) media else media.copy(io = { io })
         return try {
-            inspectMedia(backend, item)
+            inspectMedia(backend, item, { input -> resolveMediaIo(input, config.network) }, ::reportWarning)
         } catch (failure: Throwable) {
             // A reader the backend never took over is closed here; close tolerates a second call.
             if (io != null) runCatching { io.close() }
@@ -17104,11 +17108,18 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
  * lists rather than devices, so opening and closing one straight away is exactly a probe and costs
  * a container read. That is why this needs nothing new from a backend.
  */
-internal suspend fun inspectMedia(backend: MediaBackend, media: MediaItem): MediaInspection =
+internal suspend fun inspectMedia(
+    backend: MediaBackend,
+    media: MediaItem,
+    resolve: suspend (MediaItem) -> io.github.yuroyami.kiteplayer.MediaIo? = { null },
+    warn: (PlaybackWarning) -> Unit = {},
+): MediaInspection =
     // A backend open may block its thread, so it never runs on the caller's (#202).
     withContext(blockingWorkDispatcher) {
         val session = try {
-            openWithExternalAudio(backend, media)
+            // Each external input through the same reader rules as playback, and an input that
+            // could not open is said, as at an open (#799).
+            openWithExternalAudio(backend, media, resolve).also { it.setWarningSink(warn) }
         } catch (failure: CancellationException) {
             throw failure
         } catch (failure: PlaybackException) {

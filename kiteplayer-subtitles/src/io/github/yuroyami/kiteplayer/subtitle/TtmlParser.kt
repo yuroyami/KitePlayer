@@ -235,7 +235,12 @@ public object TtmlParser {
             }
         }
 
-        private fun cueOf(begin: Long, end: Long, spans: List<StyledSpan>, runs: List<Run>, look: Look, def: RegionDef?) {
+        private fun cueOf(from: Long, until: Long, spans: List<StyledSpan>, runs: List<Run>, look: Look, def: RegionDef?) {
+            // A region that is not active shows nothing (TTML 1, 9.1.2), so text in a timed region
+            // shows only while both it and the region are active (#761).
+            val begin = maxOf(from, def?.begin ?: from)
+            val end = minOf(until, def?.end ?: until)
+            if (end <= begin) return
             if (end != INDEFINITE && end > lastEnd) lastEnd = end
             val region = def?.region
             // TTML starts a line at its start edge, but a paragraph with no region and no alignment

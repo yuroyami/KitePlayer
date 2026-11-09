@@ -363,4 +363,23 @@ class TtmlParserTest {
             timed(TtmlParser.parse(tt("""<p begin="0s" dur="3s" timeContainer="par">$spans</p>"""))),
         )
     }
+
+    /** Text in a timed region shows only while the region is active (#761). */
+    @Test
+    fun textInATimedRegionShowsOnlyWhileTheRegionIsActive() {
+        val head = """<layout>
+            <region xml:id="timed" begin="5s" end="8s" tts:origin="0% 0%" tts:extent="100% 100%"/>
+            <region xml:id="lasting" begin="5s" dur="2s" tts:origin="0% 0%" tts:extent="100% 100%"/>
+        </layout>"""
+        fun text(body: String) = timed(TtmlParser.parse(tt(body, head = head)).filter { it.spans.isNotEmpty() })
+        assertEquals(listOf(Triple(5_000_000L, 8_000_000L, "X")), text("""<p begin="0s" end="10s" region="timed">X</p>"""))
+        assertEquals(listOf(Triple(5_000_000L, 7_000_000L, "X")), text("""<p begin="0s" end="10s" region="lasting">X</p>"""), "dur")
+        assertEquals(listOf(Triple(6_000_000L, 8_000_000L, "X")), text("""<p begin="6s" region="timed">X</p>"""), "an open end")
+        assertEquals(
+            listOf(Triple(7_000_000L, 8_000_000L, "Y")),
+            text("""<p begin="0s" end="10s" region="timed"><span begin="7s" end="9s">Y</span></p>"""),
+            "a timed span",
+        )
+        assertEquals(emptyList(), text("""<p begin="0s" end="4s" region="timed">X</p>"""), "never active together")
+    }
 }

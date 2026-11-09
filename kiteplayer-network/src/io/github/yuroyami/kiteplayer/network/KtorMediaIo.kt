@@ -805,6 +805,12 @@ public class KtorMediaIo private constructor(
             val shown = shownUri(uri)
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
             val probe = CompletableDeferred<Probe>()
+            // An answer carries the store entry it now holds. An open that already gave up, by a
+            // cancel or its timeout, never takes it, so the entry goes back here, or the store
+            // could never evict it (#851).
+            fun handOver(answer: Probe) {
+                if (!probe.complete(answer)) answer.stored?.close()
+            }
             val pipe = ByteChannel(autoFlush = true)
             val job = scope.launch {
                 val sent = TimeSource.Monotonic.markNow()
@@ -822,7 +828,7 @@ public class KtorMediaIo private constructor(
                             redirects?.refuseHidden(response, shown)
                             if (plan != null && response.status == HttpStatusCode.NotModified) {
                                 plan.revalidated(factsOf(response), requestSeconds)?.let { record ->
-                                    probe.complete(
+                                    handOver(
                                         Probe(
                                             record.size, record.ranged, record.entityTag, record.location, record.contentType,
                                             record.date, lastModified = record.lastModified, stored = plan.spans(), hasBody = false,
@@ -860,7 +866,7 @@ public class KtorMediaIo private constructor(
                                     val kept = plan?.let {
                                         storeAnswer(it, response, headers, location, range.complete, ranged = true, type, interval == null && !radio, requestSeconds)
                                     }
-                                    probe.complete(
+                                    handOver(
                                         Probe(
                                             range.complete, seekable = interval == null, tag, location, type, date, live = false, interval, station,
                                             lastModified = response.headers[HttpHeaders.LastModified], stored = kept,
@@ -873,7 +879,7 @@ public class KtorMediaIo private constructor(
                                     val kept = plan?.let {
                                         storeAnswer(it, response, headers, location, total, ranged = false, type, interval == null && !radio, requestSeconds)
                                     }
-                                    probe.complete(
+                                    handOver(
                                         Probe(
                                             total, seekable = false, tag, location, type, date, live = total == null && radio, interval, station,
                                             lastModified = response.headers[HttpHeaders.LastModified], stored = kept,
@@ -905,6 +911,12 @@ public class KtorMediaIo private constructor(
                 withTimeoutOrNull(policy.connectTimeout) { probe.await() }
                     ?: throw KtorMediaIoException("no answer from $shown within ${policy.connectTimeout}", retryable = true)
             } catch (failure: Throwable) {
+                // A probe that completed while the wait was ending holds the store entry its answer
+                // took; it is closed here, or nothing ever would (#851).
+                if (!probe.completeExceptionally(failure)) {
+                    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+                    runCatching { probe.getCompleted() }.getOrNull()?.stored?.close()
+                }
                 scope.cancel()
                 if (ownsClient) http.close()
                 throw failure

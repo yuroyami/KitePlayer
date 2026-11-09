@@ -14209,9 +14209,11 @@ internal class PlaybackCore(
             }
         }
         val subtitleCutoff = positionUs - CUE_PRUNE_BEHIND_MICROS
-        val activeSubtitle = session.subtitleQueue
+        // Both lanes' queues, primary and secondary, read from what the actor published: a lane's
+        // queue has one consumer, its lane, and the actor's own fields are not the demux lane's (#807).
+        val readSubtitles = session.subtitleQueuesInUse
         session.subtitleQueues.values.forEach { queue ->
-            if (queue !== activeSubtitle) {
+            if (readSubtitles.none { it === queue }) {
                 queue.dropBefore(subtitleCutoff, assumedDurationUs = CUE_PRUNE_BEHIND_MICROS)
             }
         }
@@ -15515,12 +15517,12 @@ internal class PlaybackCore(
         audioLane: AudioLane?,
         /** One epoch-aligned compressed cache for every audio stream in the container. */
         audioQueues: Map<Int, PacketQueue>,
-        // The subtitle trio is mutable for exactly one writer: the actor. Demux never reads it;
-        // it routes through the per-track maps below, so a live swap needs no video or demux
-        // interruption.
+        // The subtitle trio is mutable for exactly one writer: the actor. Demux routes through the
+        // per-track maps below, so a live swap needs no video or demux interruption, and learns
+        // which queues a lane reads only from subtitleQueuesInUse (#807).
         var subtitleStream: PlayerStreamInfo?,
         var subtitleDecoder: io.github.yuroyami.kiteplayer.spi.SubtitleDecoder?,
-        var subtitleQueue: PacketQueue?,
+        subtitleQueue: PacketQueue?,
         /** One epoch-aligned compressed cache for every container subtitle stream. */
         subtitleQueues: Map<Int, PacketQueue>,
         video: VideoPlayback?,
@@ -15764,6 +15766,26 @@ internal class PlaybackCore(
         private val audioRouting = atomic(
             AudioRouting(audioLane, listOfNotNull(videoQueue, audioLane?.queue)),
         )
+
+        /** The primary subtitle lane's packets. The actor's alone, as its decoder is. */
+        var subtitleQueue: PacketQueue? = subtitleQueue
+            set(value) {
+                field = value
+                publishSubtitleQueuesInUse()
+            }
+
+        private val subtitleQueuesRead = atomic(listOfNotNull(subtitleQueue))
+
+        /**
+         * The subtitle queues a lane reads, the primary's and the secondary's, which the demux
+         * lane's prune leaves alone (#807). The actor writes both fields; this is how the demux
+         * lane sees them.
+         */
+        val subtitleQueuesInUse: List<PacketQueue> get() = subtitleQueuesRead.value
+
+        private fun publishSubtitleQueuesInUse() {
+            subtitleQueuesRead.value = listOfNotNull(subtitleQueue, subtitle2Queue)
+        }
 
         val audioLane: AudioLane? get() = audioRouting.value.lane
         val audioStream: PlayerStreamInfo? get() = audioLane?.stream
@@ -16137,6 +16159,10 @@ internal class PlaybackCore(
         var subtitle2Stream: PlayerStreamInfo? = null
         var subtitle2Decoder: io.github.yuroyami.kiteplayer.spi.SubtitleDecoder? = null
         var subtitle2Queue: PacketQueue? = null
+            set(value) {
+                field = value
+                publishSubtitleQueuesInUse()
+            }
         var pendingSubtitle2Packet: io.github.yuroyami.kiteplayer.spi.PlayerPacket? = null
         var subtitle2DecoderMayHaveOutput: Boolean = false
         var subtitle2Drained: Boolean = false

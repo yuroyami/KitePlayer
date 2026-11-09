@@ -6145,6 +6145,8 @@ internal class PlaybackCore(
                 wait.video,
                 wait.audio,
                 wait.subtitle,
+                // From where it played, as a rebuild reads, not from byte 0 (#812).
+                startUs = wait.atUs ?: 0L,
                 run = wait.run,
                 timeline = wait.timeline,
                 plain = wait.timeline == null,
@@ -7096,9 +7098,11 @@ internal class PlaybackCore(
                 video,
                 audio,
                 subtitle,
-                // A part of an ordered edition reads on from where it plays, rather than from the
-                // start of its file, which may be another part's or none of the edition's (#501).
-                startUs = if (current.timeline != null && seekBack) at.micros else 0L,
+                // The rebuilt session reads from where it plays, rather than from the start of its
+                // file: a part of an ordered edition, whose file may be another part's or none of the
+                // edition's (#501), and a plain file, which otherwise filled its read-ahead at byte 0,
+                // megabytes over the network, before the reposition seek threw it away (#812).
+                startUs = if (seekBack) at.micros else 0L,
                 run = current.run,
                 timeline = current.timeline,
                 plain = current.timeline == null,

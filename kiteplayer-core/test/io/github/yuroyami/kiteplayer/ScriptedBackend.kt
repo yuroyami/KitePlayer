@@ -1343,6 +1343,10 @@ internal class ScriptedSource(
         private set
     val seekTargets: MutableList<Long> = mutableListOf()
 
+    /** The packets read before this source's first seek, or null before it seeks (#812). */
+    var readsBeforeFirstSeek: Int? = null
+        private set
+
     /** When set, every seek of this one source throws it, whatever the plan says of the others. */
     var seekFailure: Throwable? = null
 
@@ -1584,6 +1588,7 @@ internal class ScriptedSource(
     override suspend fun seekToKeyframe(target: Pts, choice: KeyframeChoice): Pts? {
         check(selectCalls > 0) { "selectStreams must be called before seeking" }
         check(choice != KeyframeChoice.InSeekDirection) { "the engine resolves the seek's direction itself" }
+        if (seeks == 0) readsBeforeFirstSeek = reads
         seeks++
         seekFailure?.let { throw it }
         if (faults.seekWedges && !wedgeReleased.isCompleted) wedge("seek")

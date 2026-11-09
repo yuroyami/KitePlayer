@@ -110,6 +110,8 @@ class NetworkRecoveryTest {
         assertTrue(harness.runUntil(5.seconds) { harness.snapshot().status == PlaybackStatus.Playing }, "status ${harness.snapshot().status}")
         assertFalse(harness.snapshot().reconnecting)
         assertEquals(lostAt.inWholeMicroseconds, harness.source.seekTargets.last(), "at the position it reached")
+        // From where it played, not from the start of the file and then back (#812).
+        assertEquals(0, harness.source.readsBeforeFirstSeek, "the reopened item read before it moved to the position")
         assertEquals(0, network.watching, "and the status is let go")
         harness.run(1.seconds)
         assertTrue(harness.core.position() > lostAt, "and plays on")

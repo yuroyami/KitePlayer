@@ -92,6 +92,28 @@ class RebuildSubtitleStateTest {
         harness.close()
     }
 
+    /**
+     * A rebuild opens the new session where the viewer is, rather than filling its read-ahead from
+     * the start of the file and then seeking back, which over the network read megabytes for
+     * nothing (#812).
+     */
+    @Test
+    fun aVideoRebuildReadsFromThePositionNotFromTheStart() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 60_000_000), config = config)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(20.seconds)
+        val opens = harness.backend.sessions.size
+        assertIs<TrackChange.Applied>(harness.core.selectTrack(TrackKind.Video, TrackId(0)))
+        harness.run(1500.milliseconds)
+        assertTrue(harness.backend.sessions.size > opens, "the video change did not rebuild")
+        val rebuilt = harness.source
+        assertEquals(0, rebuilt.readsBeforeFirstSeek, "the rebuilt session read before it moved to the position")
+        assertTrue(rebuilt.seekTargets.first() > 19_000_000, "its first move went to ${rebuilt.seekTargets.first()}")
+        assertTrue(harness.core.position() > 20.seconds, "the position went back to ${harness.core.position()}")
+        harness.close()
+    }
+
     @Test
     fun anExternalPrimarySurvivesAVideoRebuild() = runTest {
         val harness = CoreHarness(this, script = MediaScript(durationUs = 6_000_000), config = config)

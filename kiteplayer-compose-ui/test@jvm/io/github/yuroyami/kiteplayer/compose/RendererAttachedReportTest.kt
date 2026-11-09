@@ -65,6 +65,33 @@ class RendererAttachedReportTest {
         assertEquals(listOf(player), reported, "four compositions of one attachment")
     }
 
+    /** The resolved path is reported when it changes, not after every recomposition (#938). */
+    @Test
+    fun aRecompositionDoesNotReportTheEffectivePathAgain() {
+        val padding = mutableStateOf(0)
+        val reported = mutableListOf<KiteRenderPath>()
+        val scene = ImageComposeScene(40, 40, Density(1f), content = {
+            KitePlayerVideo(
+                null,
+                Modifier.padding(padding.value.dp),
+                path = KiteRenderPath.ComposeCanvas,
+                onEffectivePath = { reported += it },
+                keepDisplayAwake = false,
+            )
+        })
+        try {
+            var nanos = 0L
+            repeat(4) {
+                padding.value = it
+                scene.render(nanos)
+                nanos += 16_666_667L
+            }
+        } finally {
+            scene.close()
+        }
+        assertEquals(listOf(KiteRenderPath.ComposeCanvas), reported, "four compositions of one path")
+    }
+
     @Test
     fun `a different player is reported as a new attachment`() {
         val first = player()

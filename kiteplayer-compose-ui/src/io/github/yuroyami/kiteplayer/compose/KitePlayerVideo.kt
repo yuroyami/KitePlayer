@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -66,7 +65,9 @@ public fun KitePlayerVideo(
     val effective = resolveRenderPath(path)
     val currentOnEffectivePath by rememberUpdatedState(onEffectivePath)
     val currentOnRendererAttached by rememberUpdatedState(onRendererAttached)
-    SideEffect { currentOnEffectivePath?.invoke(effective) }
+    // Keyed on the path, so the report runs when the path changes and not after every
+    // recomposition, as the attach report below already is (#938).
+    LaunchedEffect(effective) { currentOnEffectivePath?.invoke(effective) }
     key(effective) {
         when (effective) {
             KiteRenderPath.NativeView -> NativeViewVideo(

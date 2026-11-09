@@ -244,7 +244,8 @@ public class KiteFFmpegSource internal constructor(
         val atOpen = openDuration ?: return null
         val growing = growing ?: return atOpen
         val from = growing.sizeAtOpen?.takeIf { it > 0 } ?: return atOpen
-        val now = growing.size?.takeIf { it > from } ?: return atOpen
+        // Sampled on the demux worker: the engine's thread never calls the reader itself (#864).
+        val now = growing.sampledSize?.takeIf { it > from } ?: return atOpen
         return Pts((atOpen.micros.toDouble() * now / from).toLong())
     }
 

@@ -34,12 +34,24 @@ internal class GrowingMediaIo(private val inner: MediaIo, private val endsAfter:
     /** The size at the open, from which the source's length follows the file. */
     val sizeAtOpen: Long? = inner.size
 
+    /**
+     * The file's size as the last read or seek found it, for the source's length. The reader's
+     * members are for the demux worker only, so the engine's thread reads this and never [size]
+     * itself, which a custom reader may answer with I/O or under a lock (#864).
+     */
+    @Volatile
+    var sampledSize: Long? = sizeAtOpen
+        private set
+
     override val size: Long? get() = inner.size
     override val seekable: Boolean get() = inner.seekable
     override val location: String? get() = inner.location
     override val contentType: String? get() = inner.contentType
 
-    override suspend fun read(into: ByteArray, offset: Int, length: Int): Int {
+    override suspend fun read(into: ByteArray, offset: Int, length: Int): Int =
+        readOnce(into, offset, length).also { sampledSize = inner.size }
+
+    private suspend fun readOnce(into: ByteArray, offset: Int, length: Int): Int {
         val first = inner.read(into, offset, length)
         if (first != -1 || !waitAtEnd || position == endedAt) return first.also { if (it > 0) position += it }
         var waited = Duration.ZERO
@@ -61,6 +73,7 @@ internal class GrowingMediaIo(private val inner: MediaIo, private val endsAfter:
     override suspend fun seek(position: Long) {
         inner.seek(position)
         this.position = position
+        sampledSize = inner.size
     }
 
     override fun setWarningSink(sink: (PlaybackWarning) -> Unit) = inner.setWarningSink(sink)

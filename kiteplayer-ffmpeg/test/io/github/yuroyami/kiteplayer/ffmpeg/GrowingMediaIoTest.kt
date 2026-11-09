@@ -62,4 +62,25 @@ class GrowingMediaIoTest {
         assertEquals(30, reader.read(ByteArray(200), 0, 200))
         assertEquals(150L + 30L, reader.size)
     }
+
+    /**
+     * The size the source's length follows is sampled at each read, on the demux worker, so the
+     * engine's thread reads a field and never the reader (#864).
+     */
+    @Test
+    fun theSizeIsSampledAtEachReadAndReadWithoutCallingTheReader() = runTest {
+        val file = Growing(100)
+        var sizeCalls = 0
+        val counting = object : MediaIo by file {
+            override val size: Long get() = file.size.also { sizeCalls++ }
+        }
+        val reader = GrowingMediaIo(counting, endsAfter = 2.seconds)
+        assertEquals(100L, reader.sampledSize)
+        file.available = 150
+        val before = sizeCalls
+        assertEquals(100L, reader.sampledSize, "the size changed without a read")
+        assertEquals(before, sizeCalls, "reading the sampled size asked the reader")
+        reader.read(ByteArray(200), 0, 200)
+        assertEquals(150L, reader.sampledSize, "a read did not sample the new size")
+    }
 }

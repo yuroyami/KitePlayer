@@ -311,10 +311,10 @@ class ChannelMixerTest {
     @Test
     fun `a mask with a speaker no rule covers passes the first channels through and warns once`() {
         val warnings = mutableListOf<PlaybackWarning>()
-        // Front left, front right and a top centre. The downmix rules have no place for a height
-        // speaker, so there is no matrix for it.
+        // Front left, front right and a top front left without its right. FFmpeg refuses a half
+        // pair, so there is no matrix for it.
         val mixer = ChannelMixer(
-            source = format(3, mask = 0x803L),
+            source = format(3, mask = 0x1003L),
             target = stereoDevice,
             onWarning = { warnings += it },
         )
@@ -327,7 +327,36 @@ class ChannelMixerTest {
         assertEquals(1, warnings.size, "the fallback is reported exactly once")
         val warning = warnings.single() as PlaybackWarning.ChannelLayoutUnknown
         assertEquals(3, warning.channels)
-        assertTrue(warning.message.contains("0x803"), "the message must name the mask: ${warning.message}")
+        assertTrue(warning.message.contains("0x1003"), "the message must name the mask: ${warning.message}")
+    }
+
+    /**
+     * 5.1.2, FL FR FC LFE BL BR TFL TFR: the height pair joins the front pair at -3 dB and the
+     * centre and the back pair keep their rules, as FFmpeg's build_matrix has it, where the downmix
+     * used to give up and play the front pair alone (#830).
+     */
+    @Test
+    fun fivePointOnePointTwoKeepsItsCentreAndHeightInStereo() {
+        val warnings = mutableListOf<PlaybackWarning>()
+        val mask = 0x503FL
+        assertMix(listOf(1f, 0f), impulse(mask, 0, stereoDevice, warnings), "5.1.2 front left")
+        assertMix(listOf(M, M), impulse(mask, 2, stereoDevice, warnings), "5.1.2 centre")
+        assertMix(listOf(0f, 0f), impulse(mask, 3, stereoDevice, warnings), "5.1.2 LFE")
+        assertMix(listOf(M, 0f), impulse(mask, 4, stereoDevice, warnings), "5.1.2 back left")
+        assertMix(listOf(M, 0f), impulse(mask, 6, stereoDevice, warnings), "5.1.2 top front left")
+        assertMix(listOf(0f, M), impulse(mask, 7, stereoDevice, warnings), "5.1.2 top front right")
+        assertTrue(warnings.isEmpty(), "a layout FFmpeg mixes is not a fallback: $warnings")
+    }
+
+    /** A speaker with no rule, a top centre here, gets no gain and the rest mixes on (#830). */
+    @Test
+    fun aHeightSpeakerWithNoRuleIsSilentAndTheRestStillMixes() {
+        val warnings = mutableListOf<PlaybackWarning>()
+        // FL FR FC TC.
+        val mask = 0x807L
+        assertMix(listOf(M, M), impulse(mask, 2, stereoDevice, warnings), "the centre")
+        assertMix(listOf(0f, 0f), impulse(mask, 3, stereoDevice, warnings), "the top centre")
+        assertTrue(warnings.isEmpty(), "$warnings")
     }
 
     /** One impulse on [channel] of a [mask] source, mixed into [target] with the default policy. */

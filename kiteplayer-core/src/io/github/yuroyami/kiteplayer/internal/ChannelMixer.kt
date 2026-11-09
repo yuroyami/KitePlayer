@@ -158,9 +158,10 @@ internal enum class MixLayout(val mask: Long, val channels: Int, val label: Stri
  *
  * - the stream declared no mask, so the layout is guessed from the channel count and mixed with that
  *   layout's matrix;
- * - the mask disagrees with the channel count, or names a speaker these rules do not cover (a
- *   height speaker, or one half of a pair), in which case the first channels pass through in source
- *   order;
+ * - the mask disagrees with the channel count, or is one FFmpeg refuses too (no front speaker,
+ *   or one half of a pair), in which case the first channels pass through in source order. A
+ *   speaker FFmpeg has no rule for, such as a rear height speaker, gets no gain and the rest of
+ *   the matrix stays, as in FFmpeg (#830);
  * - no matrix reaches the target channel count, which is an upmix, with the same pass-through.
  *
  * Only the source layout is ever guessed. The target is the device, its channel count is the
@@ -572,29 +573,37 @@ internal class ChannelMixer(
         private const val SIDE_LEFT_BIT: Int = 9
         private const val SIDE_RIGHT_BIT: Int = 10
 
-        /** The eleven speakers the downmix rules cover, bits 0 to 10. */
-        private const val RULED_SPEAKERS: Int = 11
+        private const val TOP_FRONT_LEFT_BIT: Int = 12
+        private const val TOP_FRONT_CENTER_BIT: Int = 13
+        private const val TOP_FRONT_RIGHT_BIT: Int = 14
+
+        /** Every bit a native order mask can name. */
+        private const val SPEAKERS: Int = 64
 
         private fun has(mask: Long, bit: Int): Boolean = (mask shr bit) and 1L == 1L
 
         /**
-         * True when every speaker has a rule and every pair is whole. FFmpeg refuses the same
-         * masks: a left speaker without its right has no symmetric place to go.
+         * True for a mask FFmpeg's `sane_layout` takes: at least one front speaker, and every pair,
+         * the top front pair among them, whole, because a left speaker without its right has no
+         * symmetric place to go. Height speakers are taken: the top front pair has a rule, and a
+         * speaker with none gets no gain while the rest is mixed, as in FFmpeg (#830).
          */
         private fun ruled(mask: Long): Boolean {
-            if (mask shr RULED_SPEAKERS != 0L) return false
+            if (mask and ((1L shl FRONT_LEFT_BIT) or (1L shl FRONT_RIGHT_BIT) or (1L shl FRONT_CENTER_BIT)) == 0L) return false
             fun whole(left: Int, right: Int) = has(mask, left) == has(mask, right)
             return whole(FRONT_LEFT_BIT, FRONT_RIGHT_BIT) &&
                 whole(BACK_LEFT_BIT, BACK_RIGHT_BIT) &&
                 whole(FRONT_LEFT_OF_CENTER_BIT, FRONT_RIGHT_OF_CENTER_BIT) &&
-                whole(SIDE_LEFT_BIT, SIDE_RIGHT_BIT)
+                whole(SIDE_LEFT_BIT, SIDE_RIGHT_BIT) &&
+                whole(TOP_FRONT_LEFT_BIT, TOP_FRONT_RIGHT_BIT) &&
+                mask.countOneBits() < SPEAKERS
         }
 
         /**
          * The downmix of [sourceMask] into [targetMask], by FFmpeg's `build_matrix` rules at its
          * defaults: centre and surround levels of -3 dB, no matrix encoding, and an LFE level of 0,
-         * or 1 when [policy] includes the LFE. Null when a speaker has no rule, which leaves the
-         * channels to pass through.
+         * or 1 when [policy] includes the LFE. Null when FFmpeg would refuse either mask, which
+         * leaves the channels to pass through.
          */
         private fun downmix(
             sourceMask: Long,
@@ -607,8 +616,8 @@ internal class ChannelMixer(
             val m = MINUS_3_DB
             val lfeLevel = if (policy.includeLfe) 1f else 0f
             // [target speaker][source speaker], by bit.
-            val gain = Array(RULED_SPEAKERS) { FloatArray(RULED_SPEAKERS) }
-            for (bit in 0 until RULED_SPEAKERS) {
+            val gain = Array(SPEAKERS) { FloatArray(SPEAKERS) }
+            for (bit in 0 until SPEAKERS) {
                 if (has(sourceMask, bit) && has(targetMask, bit)) gain[bit][bit] = 1f
             }
             fun source(bit: Int) = has(sourceMask, bit)
@@ -686,6 +695,21 @@ internal class ChannelMixer(
                         gain[FRONT_CENTER_BIT][FRONT_LEFT_OF_CENTER_BIT] += m
                         gain[FRONT_CENTER_BIT][FRONT_RIGHT_OF_CENTER_BIT] += m
                     }
+                    else -> return null
+                }
+            }
+            // The top front pair, as FFmpeg's build_matrix has it for 5.1.2 and 7.1.4 (#830).
+            if (lost(TOP_FRONT_LEFT_BIT)) {
+                when {
+                    target(TOP_FRONT_CENTER_BIT) -> {
+                        gain[TOP_FRONT_CENTER_BIT][TOP_FRONT_LEFT_BIT] += m
+                        gain[TOP_FRONT_CENTER_BIT][TOP_FRONT_RIGHT_BIT] += m
+                        if (source(TOP_FRONT_CENTER_BIT)) gain[TOP_FRONT_CENTER_BIT][TOP_FRONT_CENTER_BIT] = 1f
+                    }
+                    target(FRONT_LEFT_BIT) -> pair(
+                        FRONT_LEFT_BIT, FRONT_RIGHT_BIT, TOP_FRONT_LEFT_BIT, TOP_FRONT_RIGHT_BIT,
+                        if (source(FRONT_LEFT_BIT)) m else 1f,
+                    )
                     else -> return null
                 }
             }

@@ -235,7 +235,11 @@ internal object XspfReader {
         while (at < raw.length) {
             val char = raw[at]
             if (char == '&') {
-                val semicolon = raw.indexOf(';', at)
+                // Only reference characters may follow, up to a ';', as in XmlMini: searching the
+                // rest of the node for a ';' at every '&' cost quadratic time and copies (#862).
+                var end = at + 1
+                while (end < raw.length && end - at <= MAX_REFERENCE && raw[end].isReferenceChar()) end++
+                val semicolon = if (end < raw.length && raw[end] == ';') end else -1
                 val entity = if (semicolon > at) raw.substring(at + 1, semicolon) else ""
                 val decoded = when {
                     entity == "amp" -> "&"
@@ -268,3 +272,9 @@ internal object XspfReader {
         else -> null
     }
 }
+
+/** A letter, a digit or the '#' of a character reference, in ASCII. */
+private fun Char.isReferenceChar(): Boolean = this in 'a'..'z' || this in 'A'..'Z' || this in '0'..'9' || this == '#'
+
+/** Longer than any reference a playlist uses: `#x10FFFF` is 8, `quot` 4. */
+private const val MAX_REFERENCE = 16

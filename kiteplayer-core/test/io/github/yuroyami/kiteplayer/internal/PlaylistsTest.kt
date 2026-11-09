@@ -39,6 +39,17 @@ class PlaylistsTest {
         assertEquals(expected("/music/album"), read(Playlists.parse(xspf, "/music/album/list.xspf")))
     }
 
+    /** A title full of ampersands reads in linear time and keeps them, with references decoded (#862). */
+    @Test
+    fun anXspfTitleFullOfAmpersandsIsReadWhole() {
+        val ampersands = "&".repeat(200_000)
+        val xspf = """<?xml version="1.0"?><playlist version="1" xmlns="http://xspf.org/ns/0/"><trackList>""" +
+            "<track><location>a.mp3</location><title>$ampersands x;&amp;&#65;&#x42;&bogus;</title></track>" +
+            "</trackList></playlist>"
+        val items = Playlists.parse(xspf, "/m/list.xspf").orEmpty()
+        assertEquals(listOf("$ampersands x;&AB&bogus;"), items.map { it.title })
+    }
+
     @Test
     fun anHlsPlaylistIsNoQueue() {
         assertNull(Playlists.parse("#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\nseg0.ts\n", "https://cdn.test/live.m3u8"))

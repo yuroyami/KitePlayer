@@ -349,6 +349,9 @@ internal class StoredSpans(
         writer = null
         runCatching { entry?.close() }
         entry = null
+        // The entry itself is what failed, a span cut short by a power loss for one, so it goes,
+        // or every later play of the item met the same failure and fetched everything (#856).
+        runCatching { reuse.store.remove(name) }
         reuse.failed(failure, sink)
         otherwise
     }

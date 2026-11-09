@@ -95,6 +95,32 @@ class FileSegmentStoreTest {
         }
     }
 
+    /**
+     * A span renamed into place before its bytes reached the disk comes back short after a power
+     * loss. The next store must not trust the length in its name (#856).
+     */
+    @Test
+    fun aSpanCutShortByAPowerLossIsDroppedAtTheNextStart() {
+        val first = store()
+        first.put("a", 0, bytes(5_000))
+        first.put("a", 10_000, bytes(3_000, seed = 9))
+        first.close()
+        val entry = "$directory/v1/" + files.list("$directory/v1").single()
+        val cut = files.list(entry).single { it.startsWith("10000-") }
+        // The file keeps its name and loses its bytes, as a crash before the data was written leaves it.
+        files.delete("$entry/$cut")
+        files.create("$entry/$cut").apply { write(bytes(100, seed = 9), 0, 100); close() }
+
+        val again = store()
+        try {
+            assertNull(again.get("a", 10_000, 3_000), "a span shorter than its name was trusted")
+            assertContentEquals(bytes(5_000), again.get("a", 0, 5_000), "an intact span was lost")
+            assertEquals(5_000L, again.sizeBytes, "the cut span still counts")
+        } finally {
+            again.close()
+        }
+    }
+
     @Test
     fun oneDirectoryHasOneStoreAtATime() {
         val first = store()

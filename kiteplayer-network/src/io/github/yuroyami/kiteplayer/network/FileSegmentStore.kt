@@ -256,6 +256,16 @@ internal class DirectorySegmentStore(
     }
 
     /** Reads the directory [name] of an earlier process into the index, or removes it when it is not a whole entry. */
+    /**
+     * True when [path] holds exactly [length] bytes, the length its name gives. A span is renamed
+     * into place without a sync, so after a power loss the name can survive while the bytes do
+     * not, and trusting the name failed every later read of that span (#856).
+     */
+    private fun holdsExactly(path: String, length: Long): Boolean = runCatching {
+        val probe = ByteArray(1)
+        files.read(path, length - 1, probe, 0, 1) == 1 && files.read(path, length, probe, 0, 1) <= 0
+    }.getOrDefault(false)
+
     private fun recover(name: String) {
         val directory = "$base/$name"
         val key = name.substringBeforeLast('.')
@@ -276,7 +286,9 @@ internal class DirectorySegmentStore(
                     val range = file.removeSuffix(SPAN_SUFFIX)
                     val start = range.substringBefore('-').toLongOrNull()
                     val length = range.substringAfter('-', "").toLongOrNull()
-                    if (start == null || length == null || start < 0 || length <= 0) {
+                    if (start == null || length == null || start < 0 || length <= 0 ||
+                        !holdsExactly("$directory/$file", length)
+                    ) {
                         files.delete("$directory/$file")
                     } else {
                         resource.spans += Span(start, length, file)

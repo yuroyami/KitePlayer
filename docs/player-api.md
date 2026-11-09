@@ -36,8 +36,12 @@ Flows tell your UI what is happening: `state`, `progress`, `stats`, `events`, `s
 `losslessEvents` when you must see every event. `position()` reads the current time without
 collecting anything.
 
-The player refuses anything it cannot do with a typed error, instead of accepting the call and
-ignoring it. Two players in one process work.
+A suspending call that the player cannot carry out fails with a typed error, instead of accepting
+the call and ignoring it. A setter that returns at once reports a refusal later, as
+`PlaybackWarning.CommandRefused` on `events`, because there is nobody to throw to by then.
+`requestSeek` drops a request that a newer one replaced, on purpose, and ignores one on a source
+that cannot seek, and `setRenderQuality` asks the renderer for what it can do and never fails. Two
+players in one process work.
 
 ## Seeking
 

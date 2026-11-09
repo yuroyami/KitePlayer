@@ -294,8 +294,10 @@ if (french != null) player.selectTrack(TrackKind.Audio, french.id)
 
 Collect `player.state` for the status, the tracks and every setting, and `player.progress` for the
 position and the buffer. `player.events` reports what happens, including warnings and errors. When
-the player cannot do what a call asks, the call fails with a typed error. It is never silently
-ignored.
+the player cannot do what a suspending call asks, the call fails with a typed error. A setter that
+returns at once has nobody to throw to, so it reports a refusal later as
+`PlaybackWarning.CommandRefused` on `player.events`. `requestSeek` drops a request that a newer one
+replaced, on purpose, and `setRenderQuality` asks the renderer for what it can do.
 
 The player can also:
 

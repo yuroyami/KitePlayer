@@ -598,6 +598,8 @@ internal class AudioPipeline(
         // The filters ring for a few dozen samples, so a seek that kept their history would splice
         // the tail of the old position onto the head of the new one.
         equalizer.reset()
+        // The night mode's follower and gain hold the level of the old position too (#823).
+        night.reset()
     }
 
     /** Releases the rate conversion. The owner calls it when it replaces this pipeline or closes. */

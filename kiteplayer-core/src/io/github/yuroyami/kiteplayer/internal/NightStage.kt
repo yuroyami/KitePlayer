@@ -58,6 +58,19 @@ internal class NightStage(val channels: Int, sampleRate: Int) {
     }
 
     /**
+     * Forgets the level of the position that was abandoned, keeping the on or off setting. A seek
+     * calls it through the pipeline's reset, because a follower that kept a loud scene's peak cut
+     * the first few hundred milliseconds of the quiet scene after it by up to 11 dB (#823).
+     */
+    fun reset() {
+        peak = 0f
+        gainDb = 0.0
+        gain = 1f
+        inBlock = 0
+        step = 0f
+    }
+
+    /**
      * Compresses the first [frames] sample frames of interleaved [samples] in place. Only those
      * frames, because the pipeline reuses one buffer across calls.
      */

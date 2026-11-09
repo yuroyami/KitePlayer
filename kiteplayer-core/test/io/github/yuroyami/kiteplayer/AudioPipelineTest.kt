@@ -56,6 +56,29 @@ class AudioPipelineTest {
         assertEquals(0, pipeline.finish(), "a second finish has nothing left to give")
     }
 
+    /**
+     * A seek resets the pipeline, and the night mode must forget the loud scene it left, or the
+     * quiet one after it starts many decibels down and swells up (#823).
+     */
+    @Test
+    fun aResetMakesTheNightModeForgetTheLevelOfTheOldPosition() {
+        fun quietStart(pipeline: AudioPipeline): Float {
+            val frames = 2_400
+            val quiet = FloatArray(frames * 2) { at -> (0.02 * kotlin.math.sin(2 * kotlin.math.PI * 1_000 * (at / 2) / 48_000.0)).toFloat() }
+            val produced = pipeline.process(quiet, frames)
+            return (0 until produced * 2).maxOf { kotlin.math.abs(pipeline.output[it]) }
+        }
+        val fresh = AudioPipeline(stereoDevice, stereoDevice).apply { night.set(true) }
+        val expected = quietStart(fresh)
+
+        val seeked = AudioPipeline(stereoDevice, stereoDevice).apply { night.set(true) }
+        val loud = FloatArray(48_000 * 2) { at -> (0.9 * kotlin.math.sin(2 * kotlin.math.PI * 1_000 * (at / 2) / 48_000.0)).toFloat() }
+        repeat(4) { seeked.process(loud, 48_000) }
+        seeked.reset()
+        val after = quietStart(seeked)
+        assertTrue(kotlin.math.abs(after - expected) <= expected * 0.05f, "after a seek the quiet scene starts at $after, a fresh one at $expected")
+    }
+
     private fun peakOf(pipeline: AudioPipeline, frames: Int, channels: Int): Float {
         var peak = 0f
         for (i in 0 until frames * channels) peak = maxOf(peak, kotlin.math.abs(pipeline.output[i]))

@@ -149,6 +149,9 @@ internal class DirectorySegmentStore(
 
     /** The bytes of every span on the disk, those of removed entries that a reader still holds included. */
     private var total = 0L
+
+    /** The bytes of spans still being written, which count against [maxBytes] as well (#852). */
+    private var writing = 0L
     private var useCount = 0L
     private var sequence = 0L
     private var closed = false
@@ -379,9 +382,31 @@ internal class DirectorySegmentStore(
         private var length = 0L
         private var done = false
 
+        /** True once the span passed the limit for bytes being written; it stores nothing more. */
+        private var dropped = false
+
+        /** The bytes this span holds against the limit for spans being written. */
+        private var held = 0L
+
         override fun write(from: ByteArray, offset: Int, length: Int) {
             check(!done) { "the span is already published or dropped" }
-            if (length <= 0) return
+            if (length <= 0 || dropped) return
+            // The bytes of spans still being written count against maxBytes too, all writers
+            // together, or one long read filled the disk while sizeBytes said nothing (#852). A
+            // span that would pass it is dropped, and its read goes on without storing.
+            val admitted = lock.withLock {
+                if (writing + length > maxBytes) {
+                    false
+                } else {
+                    writing += length
+                    held += length
+                    true
+                }
+            }
+            if (!admitted) {
+                drop()
+                return
+            }
             val open = sink ?: run {
                 val path = lock.withLock {
                     check(!closed) { "the segment store is closed" }
@@ -395,9 +420,28 @@ internal class DirectorySegmentStore(
             this.length += length
         }
 
+        /** Forgets the bytes this span holds back from the limit for spans being written. */
+        private fun release() {
+            if (held > 0) lock.withLock { writing -= held }
+            held = 0
+        }
+
+        private fun drop() {
+            dropped = true
+            release()
+            length = 0
+            val path = partial ?: return
+            partial = null
+            runCatching { sink?.close() }
+            sink = null
+            runCatching { files.delete(path) }
+        }
+
         override fun publish() {
             if (done) return
             done = true
+            if (dropped) return
+            release()
             val path = partial ?: return
             try {
                 sink?.close()
@@ -435,6 +479,8 @@ internal class DirectorySegmentStore(
         override fun close() {
             if (done) return
             done = true
+            if (dropped) return
+            release()
             val path = partial ?: return
             runCatching { sink?.close() }
             runCatching { files.delete(path) }

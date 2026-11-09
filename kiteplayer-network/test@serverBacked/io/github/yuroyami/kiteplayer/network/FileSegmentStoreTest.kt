@@ -121,6 +121,38 @@ class FileSegmentStoreTest {
         }
     }
 
+    /**
+     * A span still being written counts against maxBytes, so one long read cannot fill the disk
+     * with a temporary file the limit never sees (#852). The span is dropped, the writes go on
+     * without error, and nothing is published.
+     */
+    @Test
+    fun aSpanBeingWrittenStopsAtTheLimit() {
+        val store = store(maxBytes = 20_000)
+        try {
+            store.open("big").use { entry ->
+                entry.write(0).use { writer ->
+                    val chunk = bytes(4_096)
+                    repeat(20) {
+                        writer.write(chunk, 0, chunk.size)
+                        val dir = "$directory/v1"
+                        val biggest = files.list(dir).flatMap { e -> files.list("$dir/$e").map { "$dir/$e/$it" } }
+                            .filter { it.endsWith(".tmp") }
+                            .maxOfOrNull { path -> files.readAll(path)?.size ?: 0 } ?: 0
+                        assertTrue(biggest <= 20_000, "a span being written grew to $biggest bytes")
+                    }
+                    writer.publish()
+                }
+            }
+            assertEquals(0L, store.sizeBytes, "a span past the limit was published")
+            // The limit is free again for a span that fits.
+            store.put("small", 0, bytes(10_000))
+            assertEquals(10_000L, store.sizeBytes)
+        } finally {
+            store.close()
+        }
+    }
+
     @Test
     fun oneDirectoryHasOneStoreAtATime() {
         val first = store()

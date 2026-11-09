@@ -130,6 +130,10 @@ one account. Use `namespace` to keep two accounts apart in one directory.
 - **Limit.** `maxBytes` counts the bytes of published spans. When a new span would pass the
   limit, the store removes the entries used longest ago. It never removes an entry that a reader
   holds. When that frees too little, the store drops the new span.
+- **Spans being written.** The bytes of spans still being written, which sit in temporary files
+  until they are published, count against `maxBytes` as well, all readers together. A span that
+  would pass that is dropped while it is written, and its read goes on from the network without
+  storing, so one long read cannot fill the disk.
 - **Removal.** `remove` and `clear` never cut a read. A reader that holds an entry reads it to
   the end, and the files go when the reader closes. Until then `sizeBytes` still counts them.
 - **One process.** The store locks its directory. A second store over the same directory, in the

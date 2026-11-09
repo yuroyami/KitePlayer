@@ -15,6 +15,9 @@ internal interface SessionTarget {
     /** A count that moves with every play, pause, stop, open and queue move a caller makes. */
     val transportMark: Long
     val videoEnabled: Boolean
+
+    /** Whether the item plays a picture, a selected video track, which the background policy parks (#834). */
+    val hasPicture: Boolean
     fun play()
     fun pause()
     /** The duck multiplier on top of the volume. 1 is no duck. */
@@ -40,6 +43,7 @@ internal class PlayerSessionTarget(private val player: KitePlayer) : SessionTarg
     override val playing: Boolean get() = player.state.value.playRequested
     override val transportMark: Long get() = player.transportMark
     override val videoEnabled: Boolean get() = player.state.value.videoEnabled
+    override val hasPicture: Boolean get() = player.state.value.tracks.selectedVideo != null
     override fun play() = player.playFromRemote()
     override fun pause() = player.pauseFromRemote()
     override fun setDuckLevel(level: Float) = player.setDuckLevel(level)

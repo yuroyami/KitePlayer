@@ -33,6 +33,27 @@ class VideoEnabledTest {
         run(20.milliseconds)
     }
 
+    /**
+     * The background policy turns the picture off and on around every trip away from the app,
+     * and an item with no picture has nothing to bring back: the seek that brings a picture back
+     * only broke its sound (#834).
+     */
+    @Test
+    fun aPictureSwitchOnAnItemWithNoPictureSeeksNothing() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 5_000_000, hasVideo = false))
+        harness.open()
+        harness.core.play()
+        harness.run(500.milliseconds)
+        val seeks = harness.source.seeks
+        harness.setVideoEnabled(false)
+        harness.run(200.milliseconds)
+        harness.setVideoEnabled(true)
+        harness.run(300.milliseconds)
+        assertEquals(seeks, harness.source.seeks, "an item with no picture was sought on the way back")
+        assertTrue(harness.events.none { it is PlayerEvent.SeekCompleted }, "a seek completed")
+        harness.close()
+    }
+
     @Test
     fun `parking stops the decoder while the clock keeps moving`() = runTest {
         val harness = CoreHarness(this, script = MediaScript(durationUs = 5_000_000))

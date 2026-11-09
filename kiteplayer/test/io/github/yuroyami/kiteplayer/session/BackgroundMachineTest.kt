@@ -78,6 +78,16 @@ class BackgroundMachineTest {
         assertEquals(listOf("video false", "video true"), target.calls)
     }
 
+    /** A music app has no picture to park, so a trip away turns nothing off or on (#834). */
+    @Test
+    fun aTripAwayLeavesTheVideoSwitchOfAnItemWithNoPictureAlone() {
+        val target = FakeTarget(hasPicture = false)
+        val applier = BackgroundApplier(target, BackgroundPolicy.ContinueAudio)
+        applier.handle(foreground = false)
+        applier.handle(foreground = true)
+        assertEquals(emptyList(), target.calls)
+    }
+
     @Test
     fun `pause all pauses on leaving and plays on return`() {
         val target = FakeTarget()

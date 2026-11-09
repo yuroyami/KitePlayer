@@ -176,18 +176,25 @@ internal class BackgroundApplier(
     private val claim = PauseClaim(target)
 
     fun handle(foreground: Boolean) {
-        apply(machine.on(foreground, target.playing, target.videoEnabled))
+        apply(machine.on(foreground, target.playing, parkablePicture))
     }
 
     /** The handle attached while the application was away from the screen. Called once, first. */
     fun attachedAway() {
-        apply(machine.attachedAway(target.videoEnabled))
+        apply(machine.attachedAway(parkablePicture))
     }
 
     /** A picture in picture window opened, or closed. */
     fun handleWindow(showing: Boolean) {
-        apply(machine.onWindow(showing, target.playing, target.videoEnabled))
+        apply(machine.onWindow(showing, target.playing, parkablePicture))
     }
+
+    /**
+     * Whether there is a picture to park: video on, and an item that plays one. A music app has
+     * none, and turning its picture off and on again around each trip away only broke its sound
+     * and its gapless join (#834); the machine then remembers that it parked nothing.
+     */
+    private val parkablePicture: Boolean get() = target.videoEnabled && target.hasPicture
 
     private fun apply(decision: BackgroundDecision) {
         decision.videoEnabled?.let(target::setVideoEnabled)

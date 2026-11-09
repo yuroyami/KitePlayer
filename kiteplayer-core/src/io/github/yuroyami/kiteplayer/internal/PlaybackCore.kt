@@ -3283,7 +3283,9 @@ internal class PlaybackCore(
                  * seek to where playback already is, which flushes the lane and lands on a
                  * keyframe, so the picture returns at the right frame rather than at the next one
                  * the container happens to key. An unseekable source waits for that keyframe. */
-                if (changed && command.value) {
+                // A session with no picture has nothing to bring back, and the seek would only
+                // flush the sound: a music app heard a break on every return to it (#834).
+                if (changed && command.value && session?.videoStream != null) {
                     session?.videoWaitingForKeyframe?.value = true
                     if (session?.source?.seekable == true && status.isActive) {
                         queueSeek(
@@ -11516,8 +11518,19 @@ internal class PlaybackCore(
         is CoreCommand.SetLoop -> command.mode != loop
         is CoreCommand.SetSpeed -> command.value != speed
         is CoreCommand.SetPreservePitch -> command.value != preservePitch
-        is CoreCommand.SetVideoEnabled -> command.value != videoEnabled
+        is CoreCommand.SetVideoEnabled -> command.value != videoEnabled && picturesAffected()
         else -> false
+    }
+
+    /**
+     * Whether the picture switch reaches the current item or the next one, which it cannot when
+     * neither has a picture. A preload still being built counts as one that may (#834).
+     */
+    private fun picturesAffected(): Boolean {
+        if (session?.videoStream != null) return true
+        val next = pendingNext ?: return false
+        val prepared = next.prepared ?: return true
+        return prepared.session.videoStream != null
     }
 
     /**

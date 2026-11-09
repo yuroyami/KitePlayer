@@ -12,6 +12,7 @@ internal class FakeTarget(
     playing: Boolean = true,
     volume: Float = 1f,
     videoEnabled: Boolean = true,
+    override val hasPicture: Boolean = true,
 ) : SessionTarget {
     val calls = mutableListOf<String>()
 

@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -194,6 +195,26 @@ class ExternalAudioTest {
         assertTrue(harness.cuts().isEmpty(), "${harness.cuts()}")
         harness.close()
         assertEquals(0, harness.ledger.liveCount, "a packet read ahead before the seek was never closed")
+    }
+
+    /** An input whose seek fails is left out with one warning, and the item plays on (#803). */
+    @Test
+    fun anInputWhoseSeekFailsIsLeftOutAndThePicturePlaysOn() = runTest {
+        val harness = harness(this, film(hasAudio = false))
+        harness.openItem(item(AudioSource(dubUri)))
+        harness.core.play()
+        harness.run(2.seconds)
+        val (_, input) = harness.sourcesOf(1)
+        input.seekFailure = PlaybackException(PlaybackError.SourceUnavailable(dubUri, null, "HTTP 416"))
+        harness.core.seek(Pts(10_300_000), SeekMode.Precise)
+        val shownBefore = harness.renderer!!.timestamps.size
+        harness.run(2.seconds)
+        assertNotEquals(PlaybackStatus.Failed, harness.core.snapshots.value.status, "the item failed for its input")
+        assertTrue(harness.renderer!!.timestamps.size > shownBefore + 30, "the picture stopped after the seek")
+        val lost = harness.leftOut()
+        assertEquals(listOf(dubUri), lost.map { it.uri }, "warnings: $lost")
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount)
     }
 
     @Test

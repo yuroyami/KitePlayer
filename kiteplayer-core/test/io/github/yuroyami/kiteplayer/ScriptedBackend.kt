@@ -1343,6 +1343,9 @@ internal class ScriptedSource(
         private set
     val seekTargets: MutableList<Long> = mutableListOf()
 
+    /** When set, every seek of this one source throws it, whatever the plan says of the others. */
+    @Volatile var seekFailure: Throwable? = null
+
     /** The keyframe choice each seek asked for, beside [seekTargets]. */
     val seekChoices: MutableList<KeyframeChoice> = mutableListOf()
     var selectCalls: Int = 0
@@ -1582,6 +1585,7 @@ internal class ScriptedSource(
         check(selectCalls > 0) { "selectStreams must be called before seeking" }
         check(choice != KeyframeChoice.InSeekDirection) { "the engine resolves the seek's direction itself" }
         seeks++
+        seekFailure?.let { throw it }
         if (faults.seekWedges && !wedgeReleased.isCompleted) wedge("seek")
         faults.seekFailsOnce?.let { before ->
             faults.seekFailsOnce = null

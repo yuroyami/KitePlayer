@@ -130,6 +130,9 @@ internal class ExternalAudioInput(
         }
     }
 
+    /** The address the item named for this input, for a warning about it. */
+    val uri: String get() = declared.uri
+
     private val base = externalAudioStreamIndex(number, 0)
     private val listed = atomic(relabel(session.source.streams))
 
@@ -202,6 +205,7 @@ internal class ExternalAudioSession(
 
     override fun setWarningSink(sink: (PlaybackWarning) -> Unit) {
         main.setWarningSink(sink)
+        joined?.warn = sink
         inputs.forEach { it.session.setWarningSink(sink) }
         held.getAndSet(emptyList()).forEach(sink)
     }
@@ -286,6 +290,9 @@ internal class ExternalAudioSource(
         /** True when the reader is not where the other readers are, so it seeks before its next read. */
         var misplaced = false
 
+        /** True once an input's seek failed: it is read no more, and its sound ends (#803). */
+        var lost = false
+
         fun dropAhead() {
             ahead?.close()
             ahead = null
@@ -294,6 +301,34 @@ internal class ExternalAudioSource(
     }
 
     private val readers: List<Reader> = listOf(Reader(main, null)) + inputs.map { Reader(it.session.source, it) }
+
+    /** Where a lost input is reported. The session sets it when the engine gives its sink. */
+    var warn: (PlaybackWarning) -> Unit = {}
+
+    /**
+     * Runs [step] on [reader], and leaves an input out when it fails (#803). Inputs are optional at
+     * the open, so they are at a seek and a read too: the input's sound ends with one warning, and
+     * the media and every other input play on. A failure of the media's own reader is not caught.
+     */
+    private suspend fun tolerated(reader: Reader, what: String, step: suspend () -> Unit) {
+        val input = reader.input
+        if (input == null) {
+            step()
+            return
+        }
+        try {
+            step()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            reader.lost = true
+            reader.reading = false
+            reader.dropAhead()
+            warn(PlaybackWarning.AudioSourceUnreadable(input.uri, "$what failed: ${failure.message ?: failure::class.simpleName}"))
+        }
+    }
+
+    private suspend fun seekInput(reader: Reader, aim: Pts) = tolerated(reader, "a seek") { reader.source.seekToKeyframe(aim) }
 
     /** Where the reads are: the latest time handed out, or the place of the last seek. */
     private var frontierUs = NO_TIME
@@ -328,7 +363,7 @@ internal class ExternalAudioSource(
         // The media first: its refusal of an index leaves every reader as it was.
         readers.forEachIndexed { at, reader ->
             val next = wanted[at]
-            if (next.isEmpty()) {
+            if (next.isEmpty() || reader.lost) {
                 reader.reading = false
                 reader.dropAhead()
                 return@forEachIndexed
@@ -355,15 +390,17 @@ internal class ExternalAudioSource(
     /**
      * The packet with the lowest decode time among the readers that are read, one packet read
      * ahead for each. A packet with no time goes out at once. A reader at its end gives nothing
-     * more, and the answer is null once every reader read is at its end. A read that fails, of the
-     * media or of an input, fails as any source's read does.
+     * more, and the answer is null once every reader read is at its end. A read of the media that
+     * fails fails as any source's read does; an input whose read or seek fails is left out with
+     * [PlaybackWarning.AudioSourceUnreadable], and its sound ends (#803).
      */
     override suspend fun readPacket(): PlayerPacket? {
         var next: Reader? = null
         for (reader in readers) {
             if (!reader.reading) continue
             if (reader.misplaced) align(reader)
-            if (reader.ahead == null && !reader.ended) fill(reader)
+            if (reader.ahead == null && !reader.ended) tolerated(reader, "a read") { fill(reader) }
+            if (!reader.reading) continue
             if (reader.ahead == null) continue
             if (reader.aheadAtUs == NO_TIME) {
                 next = reader
@@ -409,7 +446,7 @@ internal class ExternalAudioSource(
         if (frontierUs == NO_TIME || !reader.source.seekable) return
         reader.dropAhead()
         reader.ended = false
-        reader.source.seekToKeyframe(Pts(frontierUs))
+        seekInput(reader, Pts(frontierUs))
     }
 
     /** Seeks every reader read, as [seekToKeyframe] with a choice does, and answers the media's landing. */
@@ -445,7 +482,7 @@ internal class ExternalAudioSource(
         frontierUs = aim.micros
         for (reader in read) {
             if (reader === first) continue
-            reader.source.seekToKeyframe(aim)
+            seekInput(reader, aim)
             reader.misplaced = false
         }
         return landing

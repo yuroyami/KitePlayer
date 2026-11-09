@@ -109,10 +109,12 @@ ask for 37 on their own. To build a smaller stack of your own, the
 <br>
 
 A dynamic framework needs no flags, because Kotlin links it with the system frameworks. Xcode links
-a static framework instead, which needs these Other Linker Flags:
+a static framework instead, which needs these Other Linker Flags, the iOS linker options of
+KiteFFmpeg's FFmpeg, the libass chain and the audio callback together. libass's HarfBuzz needs the
+C++ runtime and its FriBidi needs iconv, which a Swift app does not link by itself:
 
 ```text
--ObjC -lz -framework CoreFoundation -framework CoreMedia -framework CoreVideo -framework VideoToolbox -framework AudioToolbox
+-ObjC -lz -liconv -lc++ -framework CoreFoundation -framework CoreMedia -framework CoreVideo -framework VideoToolbox -framework AudioToolbox -framework CoreText -framework CoreGraphics
 ```
 
 KitePlayer times playback with `mach_absolute_time`, which Apple lists as a system boot time API.

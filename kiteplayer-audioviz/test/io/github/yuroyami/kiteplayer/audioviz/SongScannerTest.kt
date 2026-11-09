@@ -291,6 +291,18 @@ class SongScannerTest {
         rig.close()
     }
 
+    /** Two clips of one file with the same length are two maps (#961). */
+    @Test
+    fun twoClipsOfEqualLengthHaveTwoKeys() {
+        fun at(start: Int) = ScanTarget(
+            MediaItem("file:///album.flac", clip = MediaClip(start.seconds, (start + 30).seconds)),
+            TrackId(1), null, 30_000_000L, true,
+        )
+        assertFalse(SongMapCache.key(at(60)) == SongMapCache.key(at(120)), "the clips share a key")
+        assertEquals(SongMapCache.key(at(60)), SongMapCache.key(at(60)))
+        assertFalse(SongMapCache.key(at(0)) == SongMapCache.key(ScanTarget(MediaItem("file:///album.flac"), TrackId(1), null, 30_000_000L, true)))
+    }
+
     @Test
     fun theCacheKeyHoldsNoRawUriOrHeaders() {
         val secret = ScanTarget(MediaItem("https://cdn.example.test/a.flac?token=SECRET",

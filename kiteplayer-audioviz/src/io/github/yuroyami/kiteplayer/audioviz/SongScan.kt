@@ -146,7 +146,10 @@ internal object SongMapCache {
 
     const val CAPACITY = 16
 
-    /** Hash of the URI, stream identity and analysis version. Headers never enter it. */
+    /**
+     * Hash of the URI, the clip, stream identity and analysis version. Headers never enter it. A
+     * map describes one clip of a file, so two clips of equal length are two keys (#961).
+     */
     fun key(target: ScanTarget): String {
         var hash = FNV_OFFSET
         for (char in target.media.uri) {
@@ -154,8 +157,10 @@ internal object SongMapCache {
             hash *= FNV_PRIME
         }
         val stream = target.stream
+        val clip = target.media.clip
+        val clipPart = if (clip == null) "-" else "${clip.start.inWholeMicroseconds}-${clip.end?.inWholeMicroseconds}"
         return "${hash.toULong().toString(16)}/${target.track?.value}/${target.durationMicros}/" +
-            "${stream?.sampleRate}/${stream?.channels}/${SongMap.VERSION}"
+            "${stream?.sampleRate}/${stream?.channels}/$clipPart/${SongMap.VERSION}"
     }
 
     private const val FNV_OFFSET = -3750763034362895579L

@@ -20,6 +20,7 @@ import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.pow
@@ -27,6 +28,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.microseconds
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.nanoseconds
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * The engine's audio half: a device, a ring, and the clock derived from them.
@@ -950,6 +952,12 @@ public class AudioPlayback(
     /**
      * Plays out what is already submitted, then stops. This is the end-of-media path.
      *
+     * The wait is bounded (#831). When the device takes nothing from the ring for
+     * [DRAIN_STALL_LIMIT], as when its writer stopped after a lost device or a browser's audio
+     * context was never resumed, this returns with the rest unplayed rather than waiting for ever,
+     * and the device's own drain gets the same limit past its buffer. Either way the device counts
+     * as stopped afterwards.
+     *
      * Belongs to the session owner.
      */
     public suspend fun drain() {
@@ -957,10 +965,21 @@ public class AudioPlayback(
         ring.markEnding()
         // Wait for the ring itself to empty first, then let the device finish its own buffer. Each
         // wait is the time the rest takes to play, so the end is noticed on time with few wake-ups.
-        while (ring.bufferedFrames > 0) {
-            delay(ring.bufferedUs.microseconds.coerceIn(FULL_RING_WAIT_MIN, fullRingWait))
+        // The stall is counted in the waits themselves, so it follows a test's virtual time too.
+        var left = ring.bufferedFrames
+        var stalled = Duration.ZERO
+        while (left > 0 && stalled < DRAIN_STALL_LIMIT) {
+            val wait = ring.bufferedUs.microseconds.coerceIn(FULL_RING_WAIT_MIN, fullRingWait)
+            delay(wait)
+            val now = ring.bufferedFrames
+            if (now < left) stalled = Duration.ZERO else stalled += wait
+            left = now
         }
-        sink.drain()
+        if (left <= 0) {
+            val rate = format?.sampleRate ?: 0
+            val deviceBuffer = if (rate > 0) (sink.deviceBufferFrames.toLong() * 1_000_000L / rate).microseconds else Duration.ZERO
+            withTimeoutOrNull(deviceBuffer + DRAIN_STALL_LIMIT) { sink.drain() }
+        }
         deviceRunning = false
     }
 
@@ -1282,6 +1301,9 @@ public class AudioPlayback(
 
         /** The shortest wait on a full ring, for a ring so small that a quarter of it is less. */
         val FULL_RING_WAIT_MIN: Duration = 2.milliseconds
+
+        /** How long [drain] waits for a device that takes nothing from the ring before it gives up. */
+        val DRAIN_STALL_LIMIT: Duration = 2.seconds
 
         /** The longest wait on a full ring, so a deep ring still refills in small steps. */
         val FULL_RING_WAIT_MAX: Duration = 50.milliseconds

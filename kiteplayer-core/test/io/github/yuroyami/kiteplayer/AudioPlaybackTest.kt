@@ -326,4 +326,17 @@ class AudioPlaybackTest {
         /** 50 ms at 48 kHz: two of them fit in a ring that is never read. */
         const val FRAMES_PER_TAP = 2_400
     }
+
+    /** A device that takes nothing from the ring cannot hold drain for ever (#831). */
+    @Test
+    fun drainReturnsWhenTheDeviceStopsTakingAudio() = runTest {
+        // This sink never pulls, so the ring keeps what it was given.
+        val audio = AudioPlayback(FakeAudioSink(), TestClock())
+        audio.open(format(2))
+        audio.submitDecoded(pts(0), FloatArray(4800 * 2) { 0.1f }, 4800, format(2))
+        val started = testScheduler.currentTime
+        audio.drain()
+        val waited = testScheduler.currentTime - started
+        assertTrue(waited in 2_000L..3_000L, "drain gave up after $waited ms of a device that took nothing")
+    }
 }

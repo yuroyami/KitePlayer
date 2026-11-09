@@ -2631,6 +2631,12 @@ internal class PlaybackCore(
                     // the shared terminal result pending. Reject every outstanding command, then let the
                     // actor completion hook report the compromised close.
                     settleOutstandingForClose()
+                    // And release the graph, as the cancellation branch does: the Close command
+                    // that would have released it never runs, and without this the workers, the
+                    // decoders, the source and the device ran on with no owner (#708). A release
+                    // that fails too must not hide the failure that ended the loop.
+                    runCatching { withContext(NonCancellable) { teardownSession() } }
+                        .exceptionOrNull()?.let(failure::addSuppressed)
                     throw failure
                 }
                 // The actor must not die quietly: a loop that stops is a player that hangs with no

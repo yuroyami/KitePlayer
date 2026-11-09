@@ -2000,6 +2000,29 @@ class PlaybackCoreTest {
     }
 
     /**
+     * close() marks the player closed before the Close command reaches the actor. A pass that
+     * throws in that window ended the actor without tearing the session down, so the workers, the
+     * decoders, the source and the device ran on with no owner (#708).
+     */
+    @Test
+    fun aPassThatFailsAfterCloseWasAskedStillReleasesTheSession() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 30_000_000))
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1.seconds)
+        val session = harness.session
+        var armed = false
+        harness.core.onHandlerRun = { if (armed) { armed = false; throw IllegalStateException("a pass handler failed") } }
+        armed = true
+        harness.core.close()
+        harness.run(2.seconds)
+        runCatching { harness.core.closeAndAwait() }
+        assertEquals(1, session.closeCount, "the backend session was never closed")
+        assertEquals(0, harness.ledger.liveCount, "the session's packets and frames were left live")
+        harness.core.onHandlerRun = null
+    }
+
+    /**
      * A source whose read throws a CancellationException of its own, from its own withTimeout for
      * one, fails the item as any other read failure does, instead of ending the lane with nothing
      * said and leaving the player in Buffering (#709).

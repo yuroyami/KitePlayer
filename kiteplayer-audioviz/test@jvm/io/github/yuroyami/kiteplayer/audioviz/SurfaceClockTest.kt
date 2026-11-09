@@ -85,6 +85,33 @@ class SurfaceClockTest {
         assertTrue(wrong.isEmpty(), "in one second capped at 30 frames: ${wrong.joinToString("; ")}")
     }
 
+    /** A new frame cap starts the clock again and keeps the plain surface's drawing (#952). */
+    @Test
+    fun aNewFrameCapDoesNotRestartThePlainSurfacesDrawing() {
+        var resets = 0
+        val drawing = object : Visualization {
+            override val name: String = "counted"
+            override fun reset() { resets++ }
+            override fun DrawScope.draw(state: VizRenderState) = Unit
+        }
+        val cap = mutableStateOf(60)
+        val silence = SpectrumFrame.silent(48, 64)
+        val screen = Screen {
+            VisualizerSurface(drawing, { silence }, VizPalette.Prism, Modifier.fillMaxSize(), post = false, framesPerSecond = cap.value)
+        }
+        try {
+            screen.play(0.2f)
+            val afterStart = resets
+            cap.value = 30
+            screen.play(0.2f)
+            cap.value = 45
+            screen.play(0.2f)
+            assertEquals(afterStart, resets, "a new frame cap restarted the drawing")
+        } finally {
+            screen.close()
+        }
+    }
+
     @Test
     fun aReplacedDirectorIsTheOneThatMovesOn() {
         val first = changingDirector("a")

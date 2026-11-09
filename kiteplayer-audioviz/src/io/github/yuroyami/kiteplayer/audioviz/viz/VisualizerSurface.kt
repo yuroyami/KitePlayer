@@ -126,9 +126,14 @@ private fun VisualizerCanvas(
     // Read at every step, so a replaced analysis source is followed without restarting the drawing.
     val currentFrame by rememberUpdatedState(frame)
 
-    LaunchedEffect(visualization, framesPerSecond) {
+    // A new drawing starts from nothing; a new frame cap only starts the clock again and keeps the
+    // picture, as on the directed surface. One effect for both restarted the drawing whenever the
+    // cap changed (#952). This one is first, so a new drawing restarts before its clock runs.
+    LaunchedEffect(visualization) {
         visualization.restart()
         buffers.discard()
+    }
+    LaunchedEffect(visualization, framesPerSecond) {
         clock.run(framesPerSecond, { currentFrame() })
     }
 

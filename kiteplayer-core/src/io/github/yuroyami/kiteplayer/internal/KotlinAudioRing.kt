@@ -581,7 +581,7 @@ internal class KotlinAudioRing(
                 // Boosting. Fold, so a loud passage cannot leave here squared off.
                 for (i in 0 until frames * channels) {
                     samples[i] *= wanted
-                    samples[i] = softClip(samples[i])
+                    samples[i] = softClip(samples[i], wanted)
                 }
             } else if (wanted != 1f) {
                 for (i in 0 until frames * channels) samples[i] *= wanted
@@ -597,7 +597,7 @@ internal class KotlinAudioRing(
             if (gain > 1f) {
                 for (channel in 0 until channels) {
                     samples[base + channel] *= gain
-                    samples[base + channel] = softClip(samples[base + channel])
+                    samples[base + channel] = softClip(samples[base + channel], gain)
                 }
             } else {
                 for (channel in 0 until channels) samples[base + channel] *= gain
@@ -909,12 +909,20 @@ internal class KotlinAudioRing(
          * invites the same fusion, because the differential oracle compares the two rings by raw
          * bits and one fused instruction is a failing row rather than a rounding difference.
          */
-        internal fun softClip(x: Float): Float {
-            val knee = 0.75f
+        internal fun softClip(x: Float, gain: Float): Float {
+            // The knee follows the gain (#822): with a fixed knee at 0.75, a volume of 1.0001 bent
+            // every sample above it as hard as a large boost and turned a full-scale peak down to
+            // 0.875. Now a sample whose boosted level stays below full scale passes untouched, the
+            // fold runs from the knee to the boosted full scale, and a full-scale input always
+            // plays at full scale, so no peak gets quieter as the volume rises.
+            val inverse = 1f / gain
+            val knee = if (inverse > 0.75f) inverse else 0.75f
             val mag = if (x < 0f) -x else x
             if (mag <= knee) return x
-            val excess = (mag - knee) / (1f - knee)
-            var folded = excess / (1f + excess)
+            var excess = (mag - knee) / (gain - knee)
+            if (excess > 1f) excess = 1f
+            var folded = excess + excess
+            folded = folded / (1f + excess)
             folded = (1f - knee) * folded
             folded = knee + folded
             return if (x < 0f) -folded else folded

@@ -3,8 +3,8 @@
  * The ring's gain used to be clamped to unity on the way in, so a caller asking for 2.0 got 1.0 and
  * a player could not offer a boost at all. Letting the multiply exceed unity is what mpv and VLC do
  * and it clips hard on anything already loud, which is the worst sound a player can make. So the
- * boost lands with a saturator instead: identity below a knee, folding smoothly above it, never
- * reaching full scale however hard it is driven.
+ * boost lands with a saturator instead: identity below a knee that follows the gain, folding
+ * smoothly above it from the knee to the boosted full scale, which it maps to full scale (#822).
  *
  * The properties, each with its own reason for existing:
  *
@@ -14,9 +14,10 @@
  *  - Above unity the output is the saturator's exact value, checked against the arithmetic written
  *    out longhand here rather than against the implementation's own helper. A test that called
  *    `kprt_soft_clip` to compute its expectation would agree with any curve, including a wrong one.
- *  - However hard it is driven, no output sample reaches full scale. That is the whole promise: a
- *    boosted passage folds instead of clipping, so it can never produce the square edges that make
- *    a hard clip audible.
+ *  - No output sample passes full scale, and a full-scale input plays at full scale at every gain,
+ *    so a peak never gets quieter as the volume rises. Before #822 the knee sat at 0.75 whatever
+ *    the gain, so a volume of 1.0001 turned a full-scale peak down to 0.875 and bent every sample
+ *    above the knee as hard as a large boost did. Only input already past full scale clips.
  *  - The fold is odd-symmetric, so a waveform is not given a DC offset by being boosted.
  *  - The walk from one gain to another still clips per frame, so the frames of a ramp that are
  *    below unity are untouched while the ones above it are folded. The ramp is where a per-buffer
@@ -43,17 +44,21 @@ static float buffer[REQUEST * CHANNELS];
 /* The saturator's arithmetic, written out longhand and independently of the implementation.
  * Deliberately a copy: this is the expectation, and an expectation that calls the thing it checks
  * proves only that the code equals itself. */
-static float expected_clip(float x)
+static float expected_clip(float x, float gain)
 {
-    const float knee = 0.75f;
+    const float inverse = 1.0f / gain;
+    const float knee = inverse > 0.75f ? inverse : 0.75f;
     float mag = x < 0.0f ? -x : x;
     float excess;
     float folded;
     if (mag <= knee)
         return x;
-    excess = (mag - knee) / (1.0f - knee);
-    folded = excess / (1.0f + excess);
-    folded = knee + (1.0f - knee) * folded;
+    excess = (mag - knee) / (gain - knee);
+    if (excess > 1.0f)
+        excess = 1.0f;
+    folded = (2.0f * excess) / (1.0f + excess);
+    folded = (1.0f - knee) * folded;
+    folded = knee + folded;
     return x < 0.0f ? -folded : folded;
 }
 
@@ -149,18 +154,20 @@ int main(void)
     {
         kprt_ring *ring = ring_at_gain(2.0f);
         int32_t i;
-        /* 1.0 * 2.0 = 2.0. excess = (2 - 0.75) / 0.25 = 5, folded = 0.75 + 0.25 * (5 / 6). */
-        float expected = 0.75f + 0.25f * (5.0f / 6.0f);
-        KT_EQ_INT(feed_constant(ring, 256, 1.0f), 256);
+        /* 0.9 * 2.0 = 1.8. knee = 0.75, excess = (1.8 - 0.75) / (2 - 0.75) = 0.84, and the fold
+         * maps it to 2 * 0.84 / 1.84 of the headroom above the knee. */
+        float expected = 0.75f + 0.25f * (1.68f / 1.84f);
+        KT_EQ_INT(feed_constant(ring, 256, 0.9f), 256);
         KT_EQ_INT(kprt_ring_render(ring, buffer, 256, 0), 256);
+        KT_CHECKF(buffer[0] > expected - 1e-6f && buffer[0] < expected + 1e-6f,
+                  "0.9 at gain 2.0 rendered %.9g, expected about %.9g", (double)buffer[0], (double)expected);
         for (i = 0; i < 256 * CHANNELS; i++)
-            KT_EQ_F32(buffer[i], expected);
-        KT_EQ_F32(buffer[0], expected_clip(2.0f));
-        kt_detail("full scale at gain 2.0 = %.9g", (double)buffer[0]);
+            KT_EQ_F32(buffer[i], expected_clip(1.8f, 2.0f));
+        kt_detail("0.9 at gain 2.0 = %.9g", (double)buffer[0]);
         kprt_ring_destroy(ring);
     }
 
-    kt_case("nothing reaches full scale however hard it is driven");
+    kt_case("nothing passes full scale however hard it is driven");
     {
         static const float inputs[] = { 0.8f, 1.0f, 4.0f, 100.0f, 100000.0f };
         size_t k;
@@ -171,11 +178,32 @@ int main(void)
             KT_EQ_INT(kprt_ring_render(ring, buffer, 128, 0), 128);
             for (i = 0; i < 128 * CHANNELS; i++) {
                 float actual = buffer[i];
-                KT_CHECKF(actual < 1.0f && actual > -1.0f,
-                          "input %.9g at gain 2.0 rendered %.9g, which is not inside full scale",
+                KT_CHECKF(actual <= 1.0f && actual >= -1.0f,
+                          "input %.9g at gain 2.0 rendered %.9g, which is past full scale",
                           (double)inputs[k], (double)actual);
-                KT_EQ_F32(actual, expected_clip(inputs[k] * 2.0f));
+                KT_EQ_F32(actual, expected_clip(inputs[k] * 2.0f, 2.0f));
             }
+            kprt_ring_destroy(ring);
+        }
+    }
+
+    kt_case("a full-scale peak never gets quieter as the volume rises (#822)");
+    {
+        static const float gains[] = { 1.0001f, 1.01f, 1.1f, 1.5f, 2.0f };
+        size_t k;
+        for (k = 0; k < sizeof(gains) / sizeof(gains[0]); k++) {
+            kprt_ring *ring = ring_at_gain(gains[k]);
+            KT_EQ_INT(feed_constant(ring, 64, 1.0f), 64);
+            KT_EQ_INT(kprt_ring_render(ring, buffer, 64, 0), 64);
+            KT_EQ_F32(buffer[0], 1.0f);
+            kprt_ring_destroy(ring);
+        }
+        /* -1 dBFS at a volume of 1.0001 stays below full scale, so it is the plain multiply. */
+        {
+            kprt_ring *ring = ring_at_gain(1.0001f);
+            KT_EQ_INT(feed_constant(ring, 64, 0.891f), 64);
+            KT_EQ_INT(kprt_ring_render(ring, buffer, 64, 0), 64);
+            KT_EQ_F32(buffer[0], 0.891f * 1.0001f);
             kprt_ring_destroy(ring);
         }
     }
@@ -218,7 +246,7 @@ int main(void)
          * uses those numbers: an unconditional fold would be invisible on a quieter pair. */
         KT_EQ_INT(feed_constant(ring, 1024, 0.95f), 1024);
         KT_EQ_INT(kprt_ring_render(ring, buffer, 8, 0), 8);
-        KT_EQ_F32(buffer[0], expected_clip(0.95f * 2.0f));
+        KT_EQ_F32(buffer[0], expected_clip(0.95f * 2.0f, 2.0f));
         kprt_ring_set_gain(ring, 0.9f);
         real = kprt_ring_render(ring, buffer, REQUEST - 8, 0);
         KT_CHECKF(real > ramp_frames,

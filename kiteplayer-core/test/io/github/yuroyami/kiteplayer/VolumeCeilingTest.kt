@@ -47,24 +47,47 @@ class VolumeCeilingTest {
     @Test
     fun `the saturator is the identity up to the knee`() {
         // Everything an ordinary mix contains passes through untouched, which is what lets a boost
-        // below the knee be exactly the multiply a user expects.
+        // below the knee be exactly the multiply a user expects. At a large boost the knee is 0.75.
         for (value in listOf(0f, 0.1f, 0.5f, 0.74f, 0.75f, -0.75f, -0.3f)) {
-            assertEquals(value, KotlinAudioRing.softClip(value), "softClip($value) must be the identity")
+            assertEquals(value, KotlinAudioRing.softClip(value, 2f), "softClip($value) must be the identity")
+        }
+    }
+
+    /** The knee follows the gain, so a boosted sample that stays below full scale is untouched (#822). */
+    @Test
+    fun aSmallBoostLeavesEverythingBelowFullScaleUntouched() {
+        val gain = 1.0001f
+        for (input in listOf(0.5f, 0.8f, 0.891f, 0.95f, 0.9998f)) {
+            assertEquals(input * gain, KotlinAudioRing.softClip(input * gain, gain), "input $input")
         }
     }
 
     @Test
-    fun `the saturator folds above the knee and never reaches full scale`() {
+    fun `the saturator folds above the knee and never passes full scale`() {
         for (value in listOf(0.76f, 0.9f, 1f, 1.5f, 2f, 8f, 1000f)) {
-            val folded = KotlinAudioRing.softClip(value)
-            assertTrue(folded < 1f, "softClip($value) returned $folded, which is not inside full scale")
+            val folded = KotlinAudioRing.softClip(value, 2f)
+            assertTrue(folded <= 1f, "softClip($value) returned $folded, which is past full scale")
             assertTrue(folded > 0.75f, "softClip($value) returned $folded, which fell below the knee")
             // Monotonic, so a louder input is never quieter after folding: a curve that turned over
             // would invert the waveform's peaks and sound worse than the clipping it replaced.
             assertTrue(
-                folded >= KotlinAudioRing.softClip(value - 0.01f),
+                folded >= KotlinAudioRing.softClip(value - 0.01f, 2f),
                 "softClip is not monotonic around $value",
             )
+        }
+    }
+
+    /** A full-scale peak plays at full scale at every gain, so it never drops as the volume rises (#822). */
+    @Test
+    fun aFullScalePeakNeverGetsQuieterAsTheVolumeRises() {
+        var previous = 1f
+        for (gain in listOf(1.0001f, 1.001f, 1.01f, 1.1f, 1.25f, 1.5f, 2f)) {
+            val peak = KotlinAudioRing.softClip(gain, gain)
+            assertEquals(1f, peak, "full scale at gain $gain")
+            assertTrue(peak >= previous)
+            previous = peak
+            // And a level just below full scale is never turned down below what unity gave it.
+            assertTrue(KotlinAudioRing.softClip(0.9f * gain, gain) >= 0.9f, "0.9 at gain $gain")
         }
     }
 
@@ -74,8 +97,8 @@ class VolumeCeilingTest {
     fun `the saturator is odd-symmetric so a boost adds no DC offset`() {
         for (value in listOf(0.8f, 1f, 3f)) {
             assertEquals(
-                KotlinAudioRing.softClip(value),
-                -KotlinAudioRing.softClip(-value),
+                KotlinAudioRing.softClip(value, 2f),
+                -KotlinAudioRing.softClip(-value, 2f),
                 "softClip is not odd-symmetric at $value",
             )
         }
@@ -83,8 +106,10 @@ class VolumeCeilingTest {
 
     @Test
     fun `full scale at double gain folds to the documented value`() {
-        // The number a consumer will see first, written out longhand: excess over the knee is
-        // (2 - 0.75) / 0.25 = 5, and the fold maps it to 5 / 6 of the remaining headroom.
-        assertEquals(0.75f + 0.25f * (5f / 6f), KotlinAudioRing.softClip(2f))
+        // Written out longhand: 0.9 at gain 2 is 1.8, its excess over the knee of 0.75 is
+        // 1.05 / 1.25 = 0.84 of the way to the boosted full scale, and the fold maps that to
+        // 2 * 0.84 / 1.84 of the remaining headroom. Full scale itself maps to full scale.
+        assertEquals(0.75f + 0.25f * (1.68f / 1.84f), KotlinAudioRing.softClip(1.8f, 2f), 1e-6f)
+        assertEquals(1f, KotlinAudioRing.softClip(2f, 2f))
     }
 }

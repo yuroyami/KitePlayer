@@ -231,16 +231,23 @@ static void publish_anchor(kprt_ring *ring, int64_t last_real_frame, int64_t at_
  * this shape is the reminder.
  *
  * Identical in order and arithmetic to `KotlinAudioRing.softClip`. */
-static float kprt_soft_clip(float x)
+static float kprt_soft_clip(float x, float gain)
 {
-    const float knee = 0.75f;
+    /* The knee follows the gain (#822): a sample whose boosted level stays below full scale passes
+     * untouched, the fold runs from the knee to the boosted full scale, and a full-scale input
+     * always plays at full scale. */
+    const float inverse = 1.0f / gain;
+    const float knee = inverse > 0.75f ? inverse : 0.75f;
     float mag = x < 0.0f ? -x : x;
     float excess;
     float folded;
     if (mag <= knee)
         return x;
-    excess = (mag - knee) / (1.0f - knee);
-    folded = excess / (1.0f + excess);
+    excess = (mag - knee) / (gain - knee);
+    if (excess > 1.0f)
+        excess = 1.0f;
+    folded = excess + excess;
+    folded = folded / (1.0f + excess);
     folded = (1.0f - knee) * folded;
     folded = knee + folded;
     return x < 0.0f ? -folded : folded;
@@ -491,7 +498,7 @@ int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, in
                     /* Boosting. Fold, so a loud passage cannot leave here squared off. */
                     for (i = 0; i < total; i++) {
                         destination[i] *= wanted;
-                        destination[i] = kprt_soft_clip(destination[i]);
+                        destination[i] = kprt_soft_clip(destination[i], wanted);
                     }
                 } else if (wanted != 1.0f) {
                     for (i = 0; i < total; i++)
@@ -516,7 +523,7 @@ int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, in
                     if (gain > 1.0f) {
                         for (i = 0; i < channels; i++) {
                             destination[base + i] *= gain;
-                            destination[base + i] = kprt_soft_clip(destination[base + i]);
+                            destination[base + i] = kprt_soft_clip(destination[base + i], gain);
                         }
                     } else {
                         for (i = 0; i < channels; i++)

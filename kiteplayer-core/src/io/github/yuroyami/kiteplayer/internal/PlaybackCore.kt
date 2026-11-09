@@ -3803,6 +3803,7 @@ internal class PlaybackCore(
                                     atNanos = event.atNanos,
                                     latency = target?.let { (event.atNanos - it).nanoseconds } ?: Duration.ZERO,
                                     exact = event.exact,
+                                    latencyKnown = target != null,
                                 ),
                             )
                         }

@@ -57,6 +57,25 @@ class FramePresentedEventTest {
         harness.close()
     }
 
+    /** A report the schedule has no target for says so, rather than a latency of zero that reads as perfect (#804). */
+    @Test
+    fun aReportWithNoRememberedTargetSaysItsLatencyIsUnknown() = runTest {
+        val renderer = ReportingRenderer()
+        val harness = CoreHarness(this, renderer = null, config = PlayerConfig(frameEvents = true))
+        harness.core.attachRenderer(renderer)
+        harness.open()
+        harness.core.play()
+        harness.run(200.milliseconds)
+
+        renderer.rendererEvents.emit(RendererEvent.FramePresented(Pts(40_000), atNanos = 1_000_000L, exact = true))
+        renderer.rendererEvents.emit(RendererEvent.FramePresented(Pts(987_654_321), atNanos = 2_000_000L, exact = true))
+        harness.run(200.milliseconds)
+
+        val presented = harness.events.filterIsInstance<PlayerEvent.FramePresented>()
+        assertEquals(listOf(true, false), presented.map { it.latencyKnown }, "the schedule remembers the first and not the second")
+        harness.close()
+    }
+
     @Test
     fun `off by default and the reports are still consumed`() = runTest {
         val renderer = ReportingRenderer()

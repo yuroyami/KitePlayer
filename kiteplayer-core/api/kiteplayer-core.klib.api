@@ -1517,7 +1517,7 @@ sealed interface io.github.yuroyami.kiteplayer/PlayerEvent { // io.github.yuroya
     }
 
     final class FramePresented : io.github.yuroyami.kiteplayer/PlayerEvent { // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented|null[0]
-        constructor <init>(io.github.yuroyami.kiteplayer/Pts, kotlin/Long, kotlin.time/Duration, kotlin/Boolean) // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented.<init>|<init>(io.github.yuroyami.kiteplayer.Pts;kotlin.Long;kotlin.time.Duration;kotlin.Boolean){}[0]
+        constructor <init>(io.github.yuroyami.kiteplayer/Pts, kotlin/Long, kotlin.time/Duration, kotlin/Boolean, kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented.<init>|<init>(io.github.yuroyami.kiteplayer.Pts;kotlin.Long;kotlin.time.Duration;kotlin.Boolean;kotlin.Boolean){}[0]
 
         final val atNanos // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented.atNanos|{}atNanos[0]
             final fun <get-atNanos>(): kotlin/Long // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented.atNanos.<get-atNanos>|<get-atNanos>(){}[0]
@@ -1525,6 +1525,8 @@ sealed interface io.github.yuroyami.kiteplayer/PlayerEvent { // io.github.yuroya
             final fun <get-exact>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented.exact.<get-exact>|<get-exact>(){}[0]
         final val latency // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented.latency|{}latency[0]
             final fun <get-latency>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented.latency.<get-latency>|<get-latency>(){}[0]
+        final val latencyKnown // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented.latencyKnown|{}latencyKnown[0]
+            final fun <get-latencyKnown>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented.latencyKnown.<get-latencyKnown>|<get-latencyKnown>(){}[0]
         final val pts // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented.pts|{}pts[0]
             final fun <get-pts>(): io.github.yuroyami.kiteplayer/Pts // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented.pts.<get-pts>|<get-pts>(){}[0]
 
@@ -1532,7 +1534,8 @@ sealed interface io.github.yuroyami.kiteplayer/PlayerEvent { // io.github.yuroya
         final fun component2(): kotlin/Long // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented.component2|component2(){}[0]
         final fun component3(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented.component3|component3(){}[0]
         final fun component4(): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented.component4|component4(){}[0]
-        final fun copy(io.github.yuroyami.kiteplayer/Pts = ..., kotlin/Long = ..., kotlin.time/Duration = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented.copy|copy(io.github.yuroyami.kiteplayer.Pts;kotlin.Long;kotlin.time.Duration;kotlin.Boolean){}[0]
+        final fun component5(): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented.component5|component5(){}[0]
+        final fun copy(io.github.yuroyami.kiteplayer/Pts = ..., kotlin/Long = ..., kotlin.time/Duration = ..., kotlin/Boolean = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented.copy|copy(io.github.yuroyami.kiteplayer.Pts;kotlin.Long;kotlin.time.Duration;kotlin.Boolean;kotlin.Boolean){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlayerEvent.FramePresented.toString|toString(){}[0]

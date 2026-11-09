@@ -10,6 +10,8 @@ import io.github.yuroyami.kiteplayer.internal.SyncLaw
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import kotlinx.atomicfu.atomic
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlin.time.Duration
@@ -129,19 +131,26 @@ public class VideoPlayback(
     private val recentTargets = LongArray(16) { Long.MIN_VALUE }
     private var recentTargetsAt = 0
 
-    internal fun rememberTarget(ptsUs: Long, targetNanos: Long) {
+    /**
+     * The schedule lane writes [recentTargets] and the session lane reads it, so a pts and its
+     * target change together under this, or a late report read the next frame's target (#804).
+     * Each hold is a few array reads.
+     */
+    private val recentTargetsLock = SynchronizedObject()
+
+    internal fun rememberTarget(ptsUs: Long, targetNanos: Long): Unit = synchronized(recentTargetsLock) {
         recentTargets[recentTargetsAt] = ptsUs
         recentTargets[recentTargetsAt + 1] = targetNanos
         recentTargetsAt = (recentTargetsAt + 2) % recentTargets.size
     }
 
-    internal fun targetFor(ptsUs: Long): Long? {
+    internal fun targetFor(ptsUs: Long): Long? = synchronized(recentTargetsLock) {
         var index = 0
         while (index < recentTargets.size) {
-            if (recentTargets[index] == ptsUs) return recentTargets[index + 1]
+            if (recentTargets[index] == ptsUs) return@synchronized recentTargets[index + 1]
             index += 2
         }
-        return null
+        null
     }
 
     /**

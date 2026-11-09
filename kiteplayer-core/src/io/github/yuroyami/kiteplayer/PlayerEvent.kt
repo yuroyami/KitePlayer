@@ -61,16 +61,19 @@ public sealed interface PlayerEvent {
     /**
      * A frame was presented. Emitted per frame only when [PlayerConfig.frameEvents] is on.
      *
-     * [latency] is the presentation instant minus the schedule's target for that frame, zero when
-     * the schedule no longer remembers the target. [exact] carries the renderer's own claim: true
-     * means the platform reported the pixels reaching glass, false means the renderer's clock
-     * right after its blit, which is the closest that path can observe.
+     * [latency] is the presentation instant minus the schedule's target for that frame. When the
+     * schedule no longer remembers the target, as for a report that comes eight or more frames
+     * late, [latencyKnown] is false and [latency] is zero, which then means nothing rather than a
+     * perfect frame (#804). [exact] carries the renderer's own claim: true means the platform
+     * reported the pixels reaching glass, false means the renderer's clock right after its blit,
+     * which is the closest that path can observe.
      */
     public data class FramePresented(
         val pts: Pts,
         val atNanos: Long,
         val latency: Duration,
         val exact: Boolean,
+        val latencyKnown: Boolean = true,
     ) : PlayerEvent
 
     /**

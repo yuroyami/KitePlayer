@@ -42,7 +42,22 @@ internal actual class BlockingMediaIo actual constructor(
 
     actual override fun read(into: ByteArray, offset: Int, length: Int): Int {
         if (interrupted) throw CancellationException("the media source was interrupted")
-        val outcome = runWithoutSuspending { io.read(into, offset, length) }
+        var outcome = runWithoutSuspending { io.read(into, offset, length) }
+        // A reader's 0 is "nothing yet, more may come", which the other targets wait out. A web
+        // reader cannot wait on this thread, so it is asked a few times more and then refused by
+        // name: passed on as it was, FFmpeg read it as a failed read with no cause (#899).
+        var asked = 1
+        while (outcome == 0 && length > 0 && asked < ZERO_READ_RETRIES) {
+            outcome = runWithoutSuspending { io.read(into, offset, length) }
+            asked++
+        }
+        if (outcome == 0 && length > 0) {
+            throw UnsupportedOperationException(
+                "This media source answered a read with no bytes $ZERO_READ_RETRIES times, which means " +
+                    "\"nothing yet\", and the web backend cannot wait for more. A reader on the web answers " +
+                    "with at least one byte, or -1 at the end.",
+            )
+        }
         if (outcome == null) {
             throw UnsupportedOperationException(
                 "This media source suspends while reading, and the web backend cannot wait for it: " +
@@ -132,3 +147,6 @@ private fun runWithoutSuspending(block: suspend () -> Int): Int? {
     val outcome = block.startCoroutineUninterceptedOrReturn(noop)
     return if (outcome === COROUTINE_SUSPENDED) null else outcome as Int
 }
+
+/** How many times a web read that answered 0 is asked again before it is refused (#899). */
+private const val ZERO_READ_RETRIES = 4

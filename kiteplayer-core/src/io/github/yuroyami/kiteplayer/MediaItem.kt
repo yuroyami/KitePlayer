@@ -399,7 +399,9 @@ public interface MediaIo : AutoCloseable {
      *
      * @return the number of bytes read, 0 if none are available yet but more may come, or -1 at
      *         the end of the stream. Returning 0 forever stalls playback, so a source with nothing
-     *         more to give must return -1.
+     *         more to give must return -1. On the web a reader must not answer 0: nothing there can
+     *         wait for more on the reading thread, so a read that answers 0 a few times running
+     *         fails the open with an error that says so (#899).
      */
     public suspend fun read(into: ByteArray, offset: Int, length: Int): Int
 

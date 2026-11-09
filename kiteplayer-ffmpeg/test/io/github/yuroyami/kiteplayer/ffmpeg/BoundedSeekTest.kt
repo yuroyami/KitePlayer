@@ -29,6 +29,17 @@ class BoundedSeekTest {
         assertEquals(listOf(10_000_000L to 8_000_000L, 10_000_000L to null), attempts)
     }
 
+    /** FFmpeg's ENOSYS, which newer KiteFFmpeg releases type as Unsupported, still retries (#967). */
+    @Test
+    fun anUnsupportedWindowRetriesWithoutFloor() {
+        val attempts = mutableListOf<Pair<Long, Long?>>()
+        seekBackward(10_000_000) { target, floor ->
+            attempts += target to floor
+            if (floor != null) throw FFmpegException(FFmpegError.Unsupported(-38, "Function not implemented"))
+        }
+        assertEquals(listOf(10_000_000L to 8_000_000L, 10_000_000L to null), attempts)
+    }
+
     @Test
     fun failureOfBothAttemptsIsReported() {
         var attempts = 0

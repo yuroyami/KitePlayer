@@ -10,7 +10,10 @@ internal inline fun seekBackward(targetMicros: Long, seek: (Long, Long?) -> Unit
         seek(targetMicros, floor)
     } catch (failure: FFmpegException) {
         when (failure.error) {
-            is FFmpegError.InvalidArgument, is FFmpegError.AvError, is FFmpegError.EndOfFile -> Unit
+            // Unsupported is FFmpeg's ENOSYS, which KiteFFmpeg typed as AvError until its #245:
+            // a demuxer that cannot take the floor may still take the plain seek (#967).
+            is FFmpegError.InvalidArgument, is FFmpegError.AvError, is FFmpegError.EndOfFile,
+            is FFmpegError.Unsupported -> Unit
             else -> throw failure
         }
         // Cancellation, interrupted I/O, allocation failures and caller errors never reach here.

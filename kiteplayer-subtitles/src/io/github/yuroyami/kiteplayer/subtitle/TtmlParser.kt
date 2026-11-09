@@ -55,9 +55,13 @@ public object TtmlParser {
      * The cues of [text], sorted by start time, or none for a document this reader cannot read, as
      * every other reader answers a file it cannot read. Never throws on malformed input. A document
      * with more than 100,000 paragraphs keeps the first 100,000 in document order.
+     *
+     * A time expression this reader cannot read costs only its own element, as a bad line costs one
+     * cue in SubRip or WebVTT: an unreadable `begin` skips its paragraph or span, and an unreadable
+     * `end` or `dur` counts as absent (#762). Only a document that is not well formed TTML is none.
      */
     public fun parse(text: String): List<SubtitleCue.Text> = try {
-        read(text)
+        read(text, TtmlWork(), strict = false)
     } catch (_: IllegalArgumentException) {
         emptyList()
     }
@@ -68,19 +72,56 @@ public object TtmlParser {
      */
     public fun read(text: String): List<SubtitleCue.Text> = read(text, TtmlWork())
 
-    internal fun read(text: String, work: TtmlWork, maxCues: Int = MAX_FILE_CUES): List<SubtitleCue.Text> {
+    internal fun read(
+        text: String,
+        work: TtmlWork,
+        maxCues: Int = MAX_FILE_CUES,
+        strict: Boolean = true,
+    ): List<SubtitleCue.Text> {
         val root = try {
             XmlMini.parse(text, XmlMini.Limits(keepContent = true))
         } catch (refusal: XmlSyntaxException) {
             throw IllegalArgumentException("not a well formed TTML document: ${refusal.message}", refusal)
         }
         require(root.name == "tt") { "not a TTML document: the root element is <${root.name}>" }
-        return Reader(root, work, maxCues).cues()
+        return Reader(root, work, maxCues, strict).cues()
     }
 
     /** One document's reading: its clock, its sizes, its styles and its regions. */
-    private class Reader(private val root: XmlElement, work: TtmlWork, private val maxCues: Int) {
+    private class Reader(
+        private val root: XmlElement,
+        work: TtmlWork,
+        private val maxCues: Int,
+        private val strict: Boolean,
+    ) {
         private val clock = Clock(root)
+
+        /** [name] of [element] as a time, null when absent, and [UNREADABLE] when it cannot be read and this reader is not strict. */
+        private fun time(element: XmlElement, name: String): Long? {
+            val expression = element.attr(name) ?: return null
+            if (strict) return clock.micros(expression)
+            return try {
+                clock.micros(expression)
+            } catch (_: IllegalArgumentException) {
+                UNREADABLE
+            }
+        }
+
+        /** [name] of [element] as a time, with an unreadable one counted as absent. */
+        private fun timeOrAbsent(element: XmlElement, name: String): Long? = time(element, name)?.takeIf { it != UNREADABLE }
+
+        /**
+         * Where an element with [begin] ends: the earlier of its `end`, counted from [endBase], and
+         * `begin + dur`, as SMIL and TTML 1 (10.2.3) take it when both are given (#758), else [fallback].
+         */
+        private fun endOf(element: XmlElement, begin: Long, endBase: Long, fallback: Long?): Long? {
+            val byEnd = timeOrAbsent(element, "end")?.let { endBase + it }
+            val byDur = timeOrAbsent(element, "dur")?.let { begin + it }
+            return when {
+                byEnd != null && byDur != null -> minOf(byEnd, byDur)
+                else -> byEnd ?: byDur ?: fallback
+            }
+        }
         private val space = Space(root)
         private val head = root.child("head")
         private val styles = Styles(
@@ -128,10 +169,11 @@ public object TtmlParser {
             preserve: Boolean,
         ): Long? {
             if (paragraphs >= maxCues) return null
-            val begin = parentBegin + (element.attr("begin")?.let(clock::micros) ?: 0L)
-            var end = element.attr("end")?.let { parentBegin + clock.micros(it) }
-                ?: element.attr("dur")?.let { begin + clock.micros(it) }
-                ?: parentEnd
+            val ownBegin = time(element, "begin")
+            // An element whose begin cannot be read is skipped, with what it holds (#762).
+            if (ownBegin == UNREADABLE) return null
+            val begin = parentBegin + (ownBegin ?: 0L)
+            var end = endOf(element, begin, parentBegin, parentEnd)
             if (end != null && parentEnd != null) end = minOf(end, parentEnd)
             val ownChain = chain + effectOf(element)
             val ownRegion = element.attr("region") ?: regionId
@@ -229,11 +271,12 @@ public object TtmlParser {
                         "br" -> out += Run("\n", look, background, begin, end, preserve)
                         "span" -> {
                             val effect = effectOf(node)
-                            // A span's times count from its parent's begin, and stay inside it.
-                            val spanBegin = (begin + (node.attr("begin")?.let(clock::micros) ?: 0L)).coerceIn(begin, end)
-                            val spanEnd = (node.attr("end")?.let { begin + clock.micros(it) }
-                                ?: node.attr("dur")?.let { spanBegin + clock.micros(it) }
-                                ?: end).coerceIn(spanBegin, end)
+                            // A span's times count from its parent's begin, and stay inside it. A
+                            // span whose begin cannot be read is skipped (#762).
+                            val ownBegin = time(node, "begin")
+                            if (ownBegin == UNREADABLE) continue
+                            val spanBegin = (begin + (ownBegin ?: 0L)).coerceIn(begin, end)
+                            val spanEnd = (endOf(node, spanBegin, begin, null) ?: end).coerceIn(spanBegin, end)
                             runs(
                                 node,
                                 look.with(effect, space),
@@ -261,8 +304,8 @@ public object TtmlParser {
             var effect = styles.effectOf(element.attr("style"))
             for (nested in element.children("style")) effect = effect.then(styles.effectOf(nested.attr("style"))).then(Effect.of(nested))
             effect = effect.then(Effect.of(element))
-            val begin = element.attr("begin")?.let(clock::micros)
-            val end = element.attr("end")?.let(clock::micros) ?: element.attr("dur")?.let { (begin ?: 0L) + clock.micros(it) }
+            val begin = timeOrAbsent(element, "begin")
+            val end = endOf(element, begin ?: 0L, 0L, null)
             return RegionDef(space.region(id, effect), effect, effect.zIndex?.trim()?.toIntOrNull() ?: 0, begin, end)
         }
     }
@@ -872,3 +915,6 @@ internal class TtmlWork {
     var styleVisits: Int = 0
         internal set
 }
+
+/** The answer for a time expression a lenient reader cannot read, apart from every real time. */
+private const val UNREADABLE: Long = Long.MIN_VALUE

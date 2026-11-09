@@ -309,4 +309,33 @@ class TtmlParserTest {
         // s0_0, then the four styles of each layer below it.
         assertEquals(1 + (layers - 1) * 4, work.styleVisits, "each style is read once, for every cue together")
     }
+
+    /** One unreadable time costs its own paragraph or span, not the document (#762). */
+    @Test
+    fun anUnreadableTimeCostsOnlyItsOwnElement() {
+        val doc = tt(
+            """<div><p begin="1s" end="2s">One</p><p begin="00:00:01,500" end="3s">Bad</p>""" +
+                """<p begin="4s" end="xyz" dur="1s">Four</p>""" +
+                """<p begin="6s" end="8s">Six <span begin="oops">gone</span><span begin="1s">kept</span></p></div>""",
+        )
+        assertEquals(
+            listOf(
+                Triple(1_000_000L, 2_000_000L, "One"),
+                Triple(4_000_000L, 5_000_000L, "Four"),
+                // The timed span shows from 7 s, and the one whose begin is unreadable never does.
+                Triple(6_000_000L, 7_000_000L, "Six"),
+                Triple(7_000_000L, 8_000_000L, "Six kept"),
+            ),
+            timed(TtmlParser.parse(doc)).map { Triple(it.first, it.second, it.third.replace(Regex("\\s+"), " ").trim()) },
+        )
+        // The strict reader still refuses the document, and says why.
+        assertFailsWith<IllegalArgumentException> { TtmlParser.read(doc) }
+    }
+
+    /** With both end and dur, the earlier of the two ends the element (#758). */
+    @Test
+    fun theEarlierOfEndAndDurEndsAnElement() {
+        val cues = TtmlParser.parse(tt("""<p begin="1s" dur="2s" end="10s">A</p><p begin="5s" dur="9s" end="7s">B</p>"""))
+        assertEquals(listOf(Triple(1_000_000L, 3_000_000L, "A"), Triple(5_000_000L, 7_000_000L, "B")), timed(cues))
+    }
 }

@@ -156,6 +156,18 @@ internal fun preOpenOptions(media: MediaItem): Map<String, String> {
     // Each typed option with the name of the item field that sets it.
     val typed = LinkedHashMap<String, Pair<String, String>>()
     if (media.headers.isNotEmpty()) {
+        // The block is joined by line breaks, so one inside a key or a value would add a request
+        // header the application never meant to send (#867).
+        for ((key, value) in media.headers) {
+            if (key.any { it == '\r' || it == '\n' } || value.any { it == '\r' || it == '\n' }) {
+                throw PlaybackException(
+                    PlaybackError.ConfigurationInvalid(
+                        "MediaItem.headers holds a line break in the header \"${key.filterNot { it == '\r' || it == '\n' }}\". " +
+                            "A header name or value cannot hold CR or LF.",
+                    ),
+                )
+            }
+        }
         val block = media.headers.entries.joinToString(separator = "") { (key, value) -> "$key: $value\r\n" }
         typed["headers"] = block to "headers"
     }

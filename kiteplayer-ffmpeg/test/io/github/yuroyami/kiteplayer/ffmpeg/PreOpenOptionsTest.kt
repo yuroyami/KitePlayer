@@ -25,6 +25,21 @@ import kotlin.test.assertTrue
 class PreOpenOptionsTest {
 
     @Test
+    fun aHeaderWithALineBreakIsRefused() {
+        val headers = listOf(
+            mapOf("X-Session" to "42\r\nX-Admin: 1"),
+            mapOf("X-Session" to "42\nX-Admin: 1"),
+            mapOf("X-Bad\r\nX-Admin" to "1"),
+        )
+        for (header in headers) {
+            val failure = assertFailsWith<PlaybackException> {
+                preOpenOptions(MediaItem("https://example.test/movie.mkv", headers = header))
+            }
+            assertIs<PlaybackError.ConfigurationInvalid>(failure.error)
+        }
+    }
+
+    @Test
     fun headersBecomeOneCrlfJoinedHttpOptionBlock() {
         val options = preOpenOptions(
             MediaItem(

@@ -977,6 +977,10 @@ public object DashManifestParser {
                 if (span <= 0) 0 else (span - 1) / entry.d
             }
             val durationMicros = micros(entry.d)
+            // A segment shorter than a microsecond truncates to none, which turned off the step over
+            // a live window and left the loop one segment a pass through some 1e16 repeats (#746).
+            // The template path refuses the same case.
+            require(durationMicros > 0) { "degenerate segment duration: ${entry.d} at timescale $timescale is under a microsecond" }
             var repeat = 0L
             while (repeat <= repeats) {
                 if (limit != null && index >= limit) return out

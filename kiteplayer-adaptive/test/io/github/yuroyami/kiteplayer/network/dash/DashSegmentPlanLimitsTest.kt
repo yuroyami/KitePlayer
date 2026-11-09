@@ -373,4 +373,20 @@ class DashSegmentPlanLimitsTest {
         assertEquals(null, tiles("65536x65536"), "the tile count overflowed to zero")
         assertEquals(null, tiles("100x101"))
     }
+
+    /** A timeline segment shorter than a microsecond is refused, as a template one is (#746). */
+    @Test
+    fun aTimelineSegmentUnderAMicrosecondIsRefused() {
+        fun timed(timescale: String): DashTimedPlan? {
+            val parsed = manifest(
+                "<SegmentTemplate media=\"s-${d}Number${d}.m4s\" timescale=\"$timescale\">" +
+                    "<SegmentTimeline><S t=\"0\" d=\"1\" r=\"5\"/></SegmentTimeline></SegmentTemplate>",
+            )
+            val period = parsed.periods.single()
+            return DashManifestParser.timedPlan(parsed, period, period.adaptationSets.single().representations.single(), DashUrlPolicy.Default, null)
+        }
+        assertRefused("degenerate segment duration") { timed("1000000000") }
+        // A microsecond itself still plans.
+        assertEquals(6, timed("1000000")?.segments?.size)
+    }
 }

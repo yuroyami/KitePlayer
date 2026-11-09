@@ -12,7 +12,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.math.abs
 
-/**
+/*
  * Moving an HLS stream to another variant without opening it again (#464).
  *
  * FFmpeg reads the playlist of a stream that has ended once and never again, so a playlist that

@@ -347,6 +347,21 @@ internal class KotlinAudioRing(
     }
 
     /**
+     * [a] plus [b], saturating at the ends of the range rather than wrapping.
+     *
+     * Kotlin's `Long` addition wraps where C's is undefined, so this is not a crash on this side. It is
+     * still the wrong number, and it dates every anchor the media clock is built from. The two rings
+     * have to agree at every input, including the two the differential oracle now drives at the ends of
+     * the range, and "both wrapped the same way" is agreement that proves nothing.
+     * `add_saturating` in `kite_rt_render.c` is the same three lines.
+     */
+    private fun addSaturating(a: Long, b: Long): Long {
+        val sum = a + b
+        if (((a xor sum) and (b xor sum)) < 0) return if (b < 0) Long.MIN_VALUE else Long.MAX_VALUE
+        return sum
+    }
+
+    /**
      * Is [ptsUs] where continuity from [basePtsUs] plus [micros] says it should be, within the
      * tolerance?
      *
@@ -363,21 +378,6 @@ internal class KotlinAudioRing(
      * negative in Kotlin, which would read as a distance below every tolerance. `kite_rt_ring.c`'s
      * `drift_within_tolerance` is the same three decisions in the same order.
      */
-    /**
-     * [a] plus [b], saturating at the ends of the range rather than wrapping.
-     *
-     * Kotlin's `Long` addition wraps where C's is undefined, so this is not a crash on this side. It is
-     * still the wrong number, and it dates every anchor the media clock is built from. The two rings
-     * have to agree at every input, including the two the differential oracle now drives at the ends of
-     * the range, and "both wrapped the same way" is agreement that proves nothing.
-     * `add_saturating` in `kite_rt_render.c` is the same three lines.
-     */
-    private fun addSaturating(a: Long, b: Long): Long {
-        val sum = a + b
-        if (((a xor sum) and (b xor sum)) < 0) return if (b < 0) Long.MIN_VALUE else Long.MAX_VALUE
-        return sum
-    }
-
     private fun driftWithinTolerance(basePtsUs: Long, micros: Long, ptsUs: Long): Boolean {
         val predicted = basePtsUs + micros
         // The sum overflowed when both addends have the sign the result does not.
@@ -805,8 +805,7 @@ internal class KotlinAudioRing(
      *
      * Read by the core to anchor the audio clock. Null before the device has played anything, and
      * after a flush.
-     */
-    /**
+     *
      * The anchor the callback last published. Bounded as kprt_ring_anchor is: at most
      * [ANCHOR_READ_ATTEMPTS] tries, then the last good reading, counted in [anchorGiveups]. An
      * unbounded spin held the caller, and every thread waiting on its lock, for as long as the

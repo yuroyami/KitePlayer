@@ -30,12 +30,6 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
- * Ownership, validation, swizzle and event arms of the surface renderer, over the [CanvasTarget] seam
- * with no Android graphics anywhere. The frame ledger ends at zero in every arm, exactly like
- * the fallback suite's, and pending work never exceeds one frame by construction of the slot.
- */
-
-/**
  * The placement contract on the Android surface renderer, through a canvas that records every draw.
  * The canvas seam takes an overlay image's rectangle in canvas pixels and never turns it, so the
  * recorded rectangle is where the image lands.
@@ -286,6 +280,11 @@ private fun awaitPresented(r: AndroidSurfaceVideoRenderer, atLeast: Long, timeou
     }
 }
 
+/**
+ * Ownership, validation, swizzle and event arms of the surface renderer, over the [CanvasTarget] seam
+ * with no Android graphics anywhere. The frame ledger ends at zero in every arm, exactly like
+ * the fallback suite's, and pending work never exceeds one frame by construction of the slot.
+ */
 class AndroidSurfaceVideoRendererTest {
 
     /** What the variant choice hears about HDR (#447): only a direct path, on an HDR display, under Auto. */

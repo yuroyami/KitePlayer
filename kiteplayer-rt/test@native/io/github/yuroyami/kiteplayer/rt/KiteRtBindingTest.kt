@@ -319,13 +319,13 @@ class KiteRtBindingTest {
         assertTrue(KPRT_SINK_UNSUPPORTED_PLATFORM.toInt() != 0, "an unsupported platform is not a success")
     }
 
-    /** Writes a ramp through the reservation API, the way `NativeAudioRing` does. */
     /**
      * Frame [frame]'s value in a ramp: exact and distinct below 2^24, and within full scale, because
      * the render's peak limiter turns down anything above it (#504).
      */
     private fun value(frame: Long): Float = frame.toFloat() * (1f / 16_777_216f)
 
+    /** Writes a ramp through the reservation API, the way `NativeAudioRing` does. */
     private fun writeRamp(ring: CPointer<kprt_ring>, frames: Int, from: Long, ptsUs: Long?): Int = memScoped {
         val window = alloc<kprt_ring_write_window>()
         val granted = kprt_ring_begin_write(ring, frames, window.ptr)

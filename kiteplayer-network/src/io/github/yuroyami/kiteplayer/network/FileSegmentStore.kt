@@ -258,7 +258,6 @@ internal class DirectorySegmentStore(
         return true
     }
 
-    /** Reads the directory [name] of an earlier process into the index, or removes it when it is not a whole entry. */
     /**
      * True when [path] holds exactly [length] bytes, the length its name gives. A span is renamed
      * into place without a sync, so after a power loss the name can survive while the bytes do
@@ -269,6 +268,9 @@ internal class DirectorySegmentStore(
         files.read(path, length - 1, probe, 0, 1) == 1 && files.read(path, length, probe, 0, 1) <= 0
     }.getOrDefault(false)
 
+    /**
+     * Reads the directory [name] of an earlier process into the index, or removes it when it is not a whole entry.
+     */
     private fun recover(name: String) {
         val directory = "$base/$name"
         val key = name.substringBeforeLast('.')

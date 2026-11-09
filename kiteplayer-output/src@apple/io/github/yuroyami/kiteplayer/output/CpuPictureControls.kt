@@ -4,7 +4,7 @@ import io.github.yuroyami.kiteplayer.VideoAdjustments
 import io.github.yuroyami.kiteplayer.VideoTransform
 import kotlin.math.pow
 
-/**
+/*
  * The picture controls and framing law for the UIKit and AppKit CPU fallbacks.
  *
  * Both fallbacks draw with Core Graphics rather than a shader, so the same law the Metal path

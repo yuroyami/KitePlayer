@@ -6,7 +6,7 @@ import java.awt.image.BufferStrategy
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
-/**
+/*
  * What both interop spikes share: the self-painting canvas and the two frame counters.
  *
  * The two spikes differ only in who hosts what (Compose hosting a `SwingPanel`, or Swing hosting

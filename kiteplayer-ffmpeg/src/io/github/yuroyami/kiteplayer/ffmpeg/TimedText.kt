@@ -5,7 +5,7 @@ import io.github.yuroyami.kiteplayer.subtitle.StyledSpan
 import io.github.yuroyami.kiteplayer.subtitle.SubRipParser
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 
-/**
+/*
  * MPEG-4 timed text, the `mov_text` (tx3g) subtitles of an MP4 or MOV file, as 3GPP TS 26.245
  * lays it out (#512). A sample is a 2-byte big-endian text length, that many bytes of text, then
  * boxes. The `styl` box gives runs of characters their face and colour; the track's sample

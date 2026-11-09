@@ -140,7 +140,6 @@ internal fun hardwareKindFor(pixelFormatName: String): HwSurfaceKind? = when (pi
     else -> null
 }
 
-/** Converts the tightly packed plane layout returned by KiteFFmpeg's copying API to RGBA. */
 /**
  * Runs a row range on every core there is, or on this one when that would cost more.
  *

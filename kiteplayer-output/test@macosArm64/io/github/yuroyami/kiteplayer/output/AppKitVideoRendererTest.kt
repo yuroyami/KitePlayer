@@ -441,14 +441,6 @@ class AppKitVideoRendererTest {
     }
 
     /**
-     * The pixels of a drawn image, read back through a bitmap this test owns.
-     *
-     * Reading the bytes rather than trusting the size is what makes the rotation assertions real. The
-     * read-back context is device RGB, the same as the renderer's, and it is the image's own pixel size,
-     * so nothing is scaled and no colour is converted on the way in: the bytes that come out are the
-     * bytes that were drawn.
-     */
-    /**
      * The CG compositor's transform math (the Apple twin of the Android 885ccc0 arm): an
      * overlay authored against a 4x2 viewport lands on the drawn image at the same spot, above
      * the picture. Red carries proof the picture is underneath; white proves the overlay won.
@@ -949,6 +941,14 @@ class AppKitVideoRendererTest {
         assertEquals(0, ledger.doubleCloseCount)
     }
 
+    /**
+     * The pixels of a drawn image, read back through a bitmap this test owns.
+     *
+     * Reading the bytes rather than trusting the size is what makes the rotation assertions real. The
+     * read-back context is device RGB, the same as the renderer's, and it is the image's own pixel size,
+     * so nothing is scaled and no colour is converted on the way in: the bytes that come out are the
+     * bytes that were drawn.
+     */
     private fun readBack(image: NSImage): DrawnPixels {
         val cgImage = image.CGImageForProposedRect(null, null, null) ?: fail("the drawn image has no bitmap")
         val pixelWidth = CGImageGetWidth(cgImage).toInt()

@@ -428,11 +428,11 @@ public class SpectrumFrame internal constructor(
     public companion object {
         private val EMPTY_CHROMA = FloatArray(12)
 
-        /** What a visualiser draws before any audio has arrived. */
         /** Below this height nothing is heard; a quiet pad reads about 0.10, well above the ramp. */
         private const val AUDIBLE_FLOOR = 0.015f
         private const val AUDIBLE_RAMP = 0.045f
 
+        /** What a visualiser draws before any audio has arrived. */
         public fun silent(bandCount: Int, scopePoints: Int): SpectrumFrame {
             val empty = FloatArray(bandCount)
             return SpectrumFrame(

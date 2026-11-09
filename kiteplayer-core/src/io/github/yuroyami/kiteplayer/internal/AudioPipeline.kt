@@ -143,8 +143,7 @@ internal class AudioPipeline(
      *
      * Only the first `frames * targetFormat.channels` values are the answer, where `frames` is what
      * [process] returned. The array is longer than that whenever an earlier buffer was longer.
-     */
-    /**
+     *
      * The processed samples. When every stage passes through, this ALIASES the last
      * [process] call's input rather than copying it, so the caller reads it before it changes
      * that array again. No stage ever writes into the input: an in-place stage that has work to do

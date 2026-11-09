@@ -391,13 +391,13 @@ public class KtorMediaIo private constructor(
         return rule?.isRefusal(failure) != true
     }
 
+    /** The newest refusal this reader, or one it opened, was answered after the item opened (#453). */
+    override fun takeRefusal(): SourceRefusal? = related.takeRefusal()
+
     /**
      * The tags the last read brought (#423): the station's headers with the first, and then each
      * change of a song's fields, from the title block the read began after.
      */
-    /** The newest refusal this reader, or one it opened, was answered after the item opened (#453). */
-    override fun takeRefusal(): SourceRefusal? = related.takeRefusal()
-
     override fun takeTags(): Map<String, String>? {
         val station = stationPending
         val song = icy?.take()

@@ -1069,7 +1069,6 @@ internal fun mediaCodecColorHints(color: ColorSpaceInfo): MediaCodecColorHints =
     },
 )
 
-/** A declared value must either have an exact Android key or stay on the software decoder. */
 /**
  * The stream's static HDR metadata as `MediaFormat.KEY_HDR_STATIC_INFO` takes it: the CTA-861.3
  * Static Metadata Descriptor, type 1, in 25 little-endian bytes. Byte 0 is the type, then the red,
@@ -1098,6 +1097,7 @@ internal fun hdrStaticInfo(stream: PlayerStreamInfo): ByteBuffer? {
     return buffer
 }
 
+/** A declared value must either have an exact Android key or stay on the software decoder. */
 internal fun canRepresentMediaCodecColorExactly(color: ColorSpaceInfo?): Boolean {
     color ?: return true
     val hints = mediaCodecColorHints(color)

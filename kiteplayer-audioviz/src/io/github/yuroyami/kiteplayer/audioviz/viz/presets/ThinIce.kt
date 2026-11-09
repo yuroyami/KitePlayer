@@ -1333,7 +1333,7 @@ internal class ThinIce : Layered(
         const val PROFILE = 64
         const val SHADES = 24
 
-        /** Shorter sides of the screen: a new ring's radius, the distance a ring spreads in a beat, and ring widths. */
+        /* Shorter sides of the screen: a new ring's radius, the distance a ring spreads in a beat, and ring widths. */
         /** The small ring at a well that trembles with the waveform as it plays. */
         const val WELL_RING = 0.06f
         const val WELL_WIDTH = 0.003f

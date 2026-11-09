@@ -3,7 +3,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.Playlists
 
-/**
+/*
  * The text work of a list of stream addresses, with no FFmpeg and no network (#450): the Shoutcast
  * PLS file a radio directory hands out, and a plain M3U list of streams, as opposed to an HLS
  * playlist. FFmpeg has no reader for either, and its probe takes a PLS file for LRC lyrics.

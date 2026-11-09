@@ -535,12 +535,6 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
 }
 
 
-/**
- * The actor and worker line out of a live diagnostics dump.
- *
- * The stats flow is published by the actor, so it freezes while the actor sits inside a long open.
- * This reads the same state directly, which is the only way to see WHICH side is starving there.
- */
 /** Hands the first picked URL to [onPick]. A cancelled picker calls nothing. */
 private class PickerDelegate(private val onPick: (NSURL) -> Unit) : NSObject(), UIDocumentPickerDelegateProtocol {
     override fun documentPicker(controller: UIDocumentPickerViewController, didPickDocumentsAtURLs: List<*>) {
@@ -548,6 +542,12 @@ private class PickerDelegate(private val onPick: (NSURL) -> Unit) : NSObject(), 
     }
 }
 
+/**
+ * The actor and worker line out of a live diagnostics dump.
+ *
+ * The stats flow is published by the actor, so it freezes while the actor sits inside a long open.
+ * This reads the same state directly, which is the only way to see WHICH side is starving there.
+ */
 private fun liveActorState(player: KitePlayer): String =
     runCatching {
         player.diagnosticsDump().lineSequence().first { it.contains("actor passes=") }.trim()

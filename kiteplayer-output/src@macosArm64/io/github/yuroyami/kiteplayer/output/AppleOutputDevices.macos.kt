@@ -57,13 +57,6 @@ import platform.CoreFoundation.kCFStringEncodingUTF8
 internal actual fun platformAppleOutputDevices(): AppleOutputDevices = MacOutputDevices
 
 /**
- * The macOS answers, through the CoreAudio hardware API.
- *
- * An unbound sink plays through the DefaultOutput unit, which moves to a new system default output
- * by itself. So a change of default is a notice to the application, not a reason to rebuild the
- * sink. A sink bound to one device stays on it, so it watches that device for its removal instead.
- */
-/**
  * What a change of the system default output means for an unbound sink. Device 0 is CoreAudio's
  * unknown object, which the default becomes when no output is left, so nothing is followed then.
  */
@@ -74,6 +67,13 @@ internal fun defaultOutputChange(device: UInt, nameOf: (UInt) -> String?): Strin
         "the default output changed to ${nameOf(device) ?: "device $device"}, and playback follows it"
     }
 
+/**
+ * The macOS answers, through the CoreAudio hardware API.
+ *
+ * An unbound sink plays through the DefaultOutput unit, which moves to a new system default output
+ * by itself. So a change of default is a notice to the application, not a reason to rebuild the
+ * sink. A sink bound to one device stays on it, so it watches that device for its removal instead.
+ */
 internal object MacOutputDevices : AppleOutputDevices {
 
     override fun watchDefaultOutput(onChange: (detail: String) -> Unit): AutoCloseable? =

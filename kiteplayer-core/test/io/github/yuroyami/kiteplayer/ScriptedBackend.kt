@@ -501,14 +501,6 @@ internal class ScriptedSubtitlePacket(
     val payload: ByteArray = ByteArray(0),
 )
 
-/**
- * Operation-counting probe for subtitle tests.
- *
- * Virtual time cannot reveal CPU monopolisation. These counters instead expose the algorithmic
- * work: every packet must perform exactly one keyed lookup, however many cues the whole file has.
- * [onPacketSent] also lets a test enqueue a real player command from inside the actor's subtitle
- * drain, reproducing a command that arrives concurrently on a device without thread races.
- */
 /** The packet times the scripted video decoder decoded and skipped, in microseconds, in order. */
 internal class ScriptedVideoProbe {
     val decodedUs: MutableList<Long> = mutableListOf()
@@ -520,6 +512,14 @@ internal class ScriptedVideoProbe {
     }
 }
 
+/**
+ * Operation-counting probe for subtitle tests.
+ *
+ * Virtual time cannot reveal CPU monopolisation. These counters instead expose the algorithmic
+ * work: every packet must perform exactly one keyed lookup, however many cues the whole file has.
+ * [onPacketSent] also lets a test enqueue a real player command from inside the actor's subtitle
+ * drain, reproducing a command that arrives concurrently on a device without thread races.
+ */
 internal class ScriptedSubtitleProbe {
     /** How many end-of-stream drains the scripted subtitle decoders took. */
     var drains: Int = 0

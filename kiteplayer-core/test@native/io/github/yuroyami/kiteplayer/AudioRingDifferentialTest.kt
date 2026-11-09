@@ -115,7 +115,7 @@ class AudioRingDifferentialTest {
      */
     private class FeedAtDrift(val frames: Int, val driftUs: Long) : Step
 
-    /** The device asks for [frames] frames at [deadlineOffsetNanos] after the scenario's first pull. */
+    /* The device asks for [frames] frames at [deadlineOffsetNanos] after the scenario's first pull. */
     /**
      * The feeder hands over [frames] frames whose every sample is [value].
      *

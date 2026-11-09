@@ -100,13 +100,6 @@ internal fun interface SourceDataLineDriverFactory {
  */
 internal const val WIRE_BYTES_PER_SAMPLE: Int = 2
 
-/**
- * The production driver: one `SourceDataLine`, on the default mixer or on a chosen one, 16-bit
- * signed little-endian, with a buffer of [BUFFER_FRAMES] frames.
- *
- * `SourceDataLine` has no presentation-timestamp API at all, which is why [DesktopMonotonicClock]
- * is the sink's only "now" and why the sink declares `LatencyQuality.Estimated`.
- */
 /** The wire shape one engine format takes on a `SourceDataLine`. One spelling, two readers. */
 internal fun wireFormatFor(accepted: AudioFormat): WireFormat = WireFormat(
     WireFormat.Encoding.PCM_SIGNED,
@@ -176,6 +169,13 @@ private fun outputMixerInfos(): List<Mixer.Info> = AudioSystem.getMixerInfo().fi
 private fun outputMixerNamed(name: String): Mixer? =
     outputMixerInfos().firstOrNull { it.name == name }?.let(AudioSystem::getMixer)
 
+/**
+ * The production driver: one `SourceDataLine`, on the default mixer or on a chosen one, 16-bit
+ * signed little-endian, with a buffer of [BUFFER_FRAMES] frames.
+ *
+ * `SourceDataLine` has no presentation-timestamp API at all, which is why [DesktopMonotonicClock]
+ * is the sink's only "now" and why the sink declares `LatencyQuality.Estimated`.
+ */
 internal class PlatformSourceDataLineDriver(
     accepted: AudioFormat,
     /** The mixer to take the line from, or null for the system default. */

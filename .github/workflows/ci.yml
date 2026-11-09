@@ -523,6 +523,10 @@ jobs:
             exit 1
           fi
 
+      # Kotlin keeps only the last KDoc block before a declaration (#921, #965).
+      - name: No KDoc block followed by another
+        run: python3 scripts/check-lost-kdoc.py
+
       - name: JVM tests, media-free modules
         run: |
           . scripts/test-env.sh

@@ -1461,6 +1461,14 @@ private class KiteFFmpegVideoDecoder(
     }
 
     /**
+     * The stream's crop when it leaves something of a [width] by [height] frame, else null. A crop
+     * that leaves nothing is the file's mistake, and showing the whole picture beats showing none;
+     * the engine, which sees the stream's crop beside each frame, says so once.
+     */
+    private fun cropFitting(width: Int, height: Int): PictureCrop? =
+        stream.crop?.takeIf { it.fits(width, height) }
+
+    /**
      * Says once, out loud, that this stream's colour will be APPROXIMATED and shown anyway.
      *
      * One cause now, not two. BT.2020 constant luminance encodes
@@ -1476,14 +1484,6 @@ private class KiteFFmpegVideoDecoder(
      * only ever have been right by accident. Tone mapping now announces itself where it ENGAGES,
      * as `RendererEvent.ToneMapEngaged` from the renderer that did it.
      */
-    /**
-     * The stream's crop when it leaves something of a [width] by [height] frame, else null. A crop
-     * that leaves nothing is the file's mistake, and showing the whole picture beats showing none;
-     * the engine, which sees the stream's crop beside each frame, says so once.
-     */
-    private fun cropFitting(width: Int, height: Int): PictureCrop? =
-        stream.crop?.takeIf { it.fits(width, height) }
-
     private fun warnIfColorIsApproximated(color: ColorSpaceInfo) {
         val detail = when (color.matrix) {
             ColorMatrix.Bt2020Cl ->

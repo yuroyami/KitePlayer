@@ -114,13 +114,6 @@ public class VideoPlayback(
     }
 
     /**
-     * The wall time at which the frame currently on screen was nominally shown.
-     *
-     * One scalar is the whole presentation schedule. Advancing it by each frame's corrected duration
-     * is what paces playback, and resetting it when it falls too far behind is what stops a stall from
-     * becoming a burst of frames the viewer sees as a fast-forward glitch.
-     */
-    /**
      * The display's refresh interval, seeded at renderer attach and moved by
      * [io.github.yuroyami.kiteplayer.spi.RendererEvent.VsyncChanged]. Advisory, exactly as the
      * SPI says: null costs smoothness on a high-refresh display and nothing else. Held here
@@ -151,6 +144,13 @@ public class VideoPlayback(
         return null
     }
 
+    /**
+     * The wall time at which the frame currently on screen was nominally shown.
+     *
+     * One scalar is the whole presentation schedule. Advancing it by each frame's corrected duration
+     * is what paces playback, and resetting it when it falls too far behind is what stops a stall from
+     * becoming a burst of frames the viewer sees as a fast-forward glitch.
+     */
     private var frameTimerNanos: Long = 0
     private var started = false
 
@@ -455,14 +455,6 @@ public class VideoPlayback(
         return ShownSlot(shown.pts.micros, frameTimerNanos + (durationUs * 1_000L / appliedSpeed).toLong())
     }
 
-    /**
-     * Hands the next frame over, aimed at [targetNanos].
-     *
-     * [targetNanos] is the schedule's own instant for the frame, never the moment the scheduler woke
-     * up to hand it over. The two differ by however late the wake-up was, and a renderer that can aim
-     * at a time (a display link, a present-time extension) needs the intended one: given the current
-     * instant it draws every frame as late as the scheduler happened to be.
-     */
     /** One-shot: the next presented frame is plane-copied for captureFrame. */
     internal val captureRequest: kotlinx.atomicfu.AtomicRef<kotlinx.coroutines.CompletableDeferred<CapturedFrame>?> =
         kotlinx.atomicfu.atomic(null)
@@ -474,6 +466,14 @@ public class VideoPlayback(
      */
     internal var sampleCaptureMoment: (() -> Any?)? = null
 
+    /**
+     * Hands the next frame over, aimed at [targetNanos].
+     *
+     * [targetNanos] is the schedule's own instant for the frame, never the moment the scheduler woke
+     * up to hand it over. The two differ by however late the wake-up was, and a renderer that can aim
+     * at a time (a display link, a present-time extension) needs the intended one: given the current
+     * instant it draws every frame as late as the scheduler happened to be.
+     */
     private suspend fun present(targetNanos: Long, masterClock: Pts?): Duration {
         val frame = queue.advance() ?: return IDLE_WAIT
         videoClock.set(frame.pts, generation)

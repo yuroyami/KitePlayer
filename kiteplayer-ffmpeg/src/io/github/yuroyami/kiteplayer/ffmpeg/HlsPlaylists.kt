@@ -3,7 +3,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 import io.github.yuroyami.kiteplayer.VariantFit
 import io.github.yuroyami.kiteplayer.VideoSize
 
-/**
+/*
  * The text work of the HLS path, with no FFmpeg and no network: recognising a playlist, keeping
  * one variant of a master playlist, and resolving the addresses a playlist names. RFC 8216 is the
  * HLS specification, and RFC 3986 defines how a relative address resolves.

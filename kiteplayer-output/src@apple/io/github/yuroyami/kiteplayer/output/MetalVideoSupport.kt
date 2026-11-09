@@ -980,10 +980,6 @@ internal fun MTLDeviceProtocol.makeTargetTexture(
 }
 
 /**
- * The per-format plane recipe: which Metal formats hold each plane, how chroma dimensions derive
- * from the picture's, the 10-bit normalization, and the shader mode.
- */
-/**
  * What a ten-bit sample, read from a sixteen-bit texture as 0 to 1, is multiplied by before the
  * shader multiplies by 255, for a sample in the low ten bits. Studio levels scale by exactly four
  * between eight and ten bits (64, 940 and 512 against 16, 235 and 128), as BT.709 and BT.2100 define
@@ -994,6 +990,10 @@ internal const val TEN_BIT_LOW_SCALE: Float = 65535f / 1020f
 /** The same for a sample in the high ten bits, P010 and VideoToolbox's ten-bit buffers: a shift of eight. */
 internal const val TEN_BIT_HIGH_SCALE: Float = 65535f / 65280f
 
+/**
+ * The per-format plane recipe: which Metal formats hold each plane, how chroma dimensions derive
+ * from the picture's, the 10-bit normalization, and the shader mode.
+ */
 internal data class PlaneRecipe(
     val formats: List<ULong>,
     val chromaShiftX: Int,

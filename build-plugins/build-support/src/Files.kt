@@ -33,16 +33,16 @@ fun writeIfChanged(file: File, text: String) {
 }
 
 /**
- * The text of a cinterop definition [template] with [extraProperties] added before the `---` line
- * that starts the C code, or at the end when there is none.
- */
-/**
  * [path] as a cinterop def writes it, with forward slashes. A def is read as a properties file, where
  * a backslash escapes the next character, so a Windows path written as it is lost its separators and
  * cinterop found no header in the folder it named.
  */
 fun defPath(path: java.io.File): String = path.absolutePath.replace('\\', '/')
 
+/**
+ * The text of a cinterop definition [template] with [extraProperties] added before the `---` line
+ * that starts the C code, or at the end when there is none.
+ */
 fun defWithProperties(template: String, extraProperties: List<String>): String {
     val lines = template.trimEnd().lines()
     val separator = lines.indexOfFirst { it.trim() == "---" }

@@ -472,7 +472,6 @@ class MatroskaEditionsTest {
         }
     }
 
-    /** A position as the sound lands it, within a millisecond of [expected]. */
     /**
      * The time of the first picture [pictures] is handed after its list was last cleared, waiting up
      * to five seconds for it, or null when none comes.
@@ -483,6 +482,7 @@ class MatroskaEditionsTest {
             pictures.times.first()
         }
 
+    /** A position as the sound lands it, within a millisecond of [expected]. */
     private fun assertNear(expected: Duration, actual: Duration, within: Duration = 1.milliseconds) {
         assertTrue((actual - expected).absoluteValue <= within, "expected $expected, the position is $actual")
     }

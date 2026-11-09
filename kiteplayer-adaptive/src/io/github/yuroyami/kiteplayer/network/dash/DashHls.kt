@@ -409,7 +409,6 @@ internal object DashHls {
     /** An HLS byte range, `length@offset`. */
     private fun byteRange(range: LongRange): String = "${range.last - range.first + 1}@${range.first}"
 
-    /** Microseconds as seconds with six decimals, with no locale anywhere near it. */
     /** The size of one tile of a thumbnail [representation], from the size of its whole grid image. */
     private fun tileSize(representation: DashRepresentation): Pair<Int, Int>? {
         val grid = representation.tiles ?: return null
@@ -438,6 +437,7 @@ internal object DashHls {
             "${two(ofDay / 60_000 % 60)}:${two(ofDay / 1_000 % 60)}.${(ofDay % 1_000).toString().padStart(3, '0')}Z"
     }
 
+    /** Microseconds as seconds with six decimals, with no locale anywhere near it. */
     private fun seconds(micros: Long): String =
         "${micros / 1_000_000}.${(micros % 1_000_000).toString().padStart(6, '0')}"
 

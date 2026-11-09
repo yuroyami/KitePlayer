@@ -106,9 +106,14 @@ public class AudioVizState internal constructor(feed: AudioVizFeed? = null, priv
      * Keeps the spectrum, the colours and the shapes, and damps what throws the picture about.
      *
      * The camera stops punching, shaking and cutting, the trail stops swimming, every change of
-     * drawing becomes a plain fade, and the flash limit drops to none at all. A way of changing that
-     * the director's `preferred` names still wins, except the strobe, which is never used. Follow
-     * the host's own reduced-motion setting where the platform has one.
+     * drawing becomes a plain fade, and the flash guard allows no flash of the shared light. A way
+     * of changing that the director's `preferred` names still wins, except the strobe, which is
+     * never used. Follow the host's own reduced-motion setting where the platform has one.
+     *
+     * This is not a promise of no flashing at all. The guard scales only the shared light: a
+     * drawing's own bright marks and the finishing pass are outside it. What is measured is that the
+     * captured output of every drawing stays inside the general policy of at most three flashes a
+     * second, as it does without reduced motion. Do not label this setting "no flashing".
      */
     public var reducedMotion: Boolean by mutableStateOf(false)
 

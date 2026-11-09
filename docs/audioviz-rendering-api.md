@@ -586,8 +586,11 @@ that decision.
 ## Reduced motion, and turning the picture off
 
 `AudioVizState.reducedMotion` keeps the spectrum, the colours and the shapes, and damps what throws
-the picture about: the camera's punch, shake, roll and cuts, the trail's swim, and the flash limit
-drops to none at all. Every change of drawing becomes a plain fade. A preferred way that a caller
+the picture about: the camera's punch, shake, roll and cuts, the trail's swim, and the flash
+guard's allowance, which drops to none for the shared light. Every change of drawing becomes a plain
+fade. That is not a promise of no flashing: a drawing's own marks and the finishing pass are outside
+the guard, and what the flash capture test measures is that the output stays inside the general
+policy of at most three flashes a second. A preferred way that a caller
 sets still wins, except the strobe, which is never used. The camera still wanders slowly, because a
 still picture with a moving spectrum in it reads as broken rather than as calm.
 

@@ -401,8 +401,9 @@ Image-change scores and source-text lint alone do not establish musical correspo
 - Reuse audioviz-owned buffers and hot-loop objects after warm-up. Measure allocations per
   analysis hop and per presented frame, including native wrappers. Framework allocations must
   be reported separately; a blanket zero-allocation claim needs a profiler.
-- Provide reduced-motion and disable-visualisation controls. Reduced motion suppresses flashes,
-  aggressive zoom, shake and rapid cuts while retaining a useful spectrum or restrained scene.
+- Provide reduced-motion and disable-visualisation controls. Reduced motion damps flashes of the
+  shared light, aggressive zoom, shake and rapid cuts while retaining a useful spectrum or
+  restrained scene. It keeps the output inside the general flash policy; it does not promise none.
   Stopping visualisation must not stop audio playback.
 
 Checked by: full-resolution still/detail checks and captured motion at every quality level;

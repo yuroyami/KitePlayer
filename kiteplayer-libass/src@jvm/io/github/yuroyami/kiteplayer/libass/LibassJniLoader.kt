@@ -141,8 +141,13 @@ private fun removeStale(temp: File, keep: File, nowMillis: Long) {
         }.getOrNull() ?: continue
         if (!attributes.isDirectory || attributes.isSymbolicLink) continue
         if (nowMillis - attributes.lastModifiedTime().toMillis() <= STALE_AFTER_MILLIS) continue
-        val owner = runCatching { Files.getOwner(path, LinkOption.NOFOLLOW_LINKS).name }.getOrNull()
-        if (owner != null && owner != System.getProperty("user.name")) continue
+        // Only where the folder is shared between users, which is POSIX: Windows names an owner
+        // DOMAIN\user, or the Administrators group for an elevated process, never user.name, so
+        // the check there kept every old copy. Its temporary folder is each user's own.
+        if ("posix" in path.fileSystem.supportedFileAttributeViews()) {
+            val owner = runCatching { Files.getOwner(path, LinkOption.NOFOLLOW_LINKS).name }.getOrNull()
+            if (owner != null && owner != System.getProperty("user.name")) continue
+        }
         val inside = other.listFiles().orEmpty()
         if (inside.all { Files.isRegularFile(it.toPath(), LinkOption.NOFOLLOW_LINKS) } && inside.all { it.delete() }) {
             other.delete()

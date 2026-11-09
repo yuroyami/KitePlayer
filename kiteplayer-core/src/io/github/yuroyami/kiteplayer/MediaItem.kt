@@ -420,6 +420,11 @@ public interface MediaIo : AutoCloseable {
      * The address these bytes came from, after any redirect, or null when the reader has none.
      * The backend resolves the relative addresses inside the media against it, such as the
      * segments of an HLS playlist. A reader that sets it should implement [openRelated] too.
+     *
+     * It is also what turns [openRelated] on: while it is null, the FFmpeg backend fetches an HLS
+     * playlist's segments, variants and keys with FFmpeg's own http, with none of this reader's
+     * headers or transport, so a reader that wants them fetched through [openRelated] reports its
+     * location (#865).
      */
     public val location: String? get() = null
 
@@ -436,6 +441,10 @@ public interface MediaIo : AutoCloseable {
      * backend opens each one through here. The addresses come from the media, which is untrusted
      * input, so open only the schemes and hosts you expect. The caller closes the reader. The
      * default refuses every address.
+     *
+     * The FFmpeg backend calls it only while [location] is not null. A reader that reports no
+     * location has its HLS addresses fetched by FFmpeg's own http instead, so one that implements
+     * this reports its location too (#865).
      */
     public suspend fun openRelated(uri: String): MediaIo? = null
 

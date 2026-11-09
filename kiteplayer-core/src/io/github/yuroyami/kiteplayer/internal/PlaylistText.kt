@@ -322,28 +322,37 @@ private fun compose(scheme: String?, authority: String?, path: String, query: St
 
 /** RFC 3986, section 5.2.4, step by step. */
 private fun removeDotSegments(path: String): String {
-    var input = path
-    val output = StringBuilder()
+    // Walked with an index, as the DASH resolver is. Cutting the front off the input with
+    // substring copied what was left at every step, so a long segment line cost the square of its
+    // length: minutes for a few megabytes, in a playlist that may hold 16 MiB (#854).
+    val output = StringBuilder(path.length)
     fun dropLastSegment() = output.setLength(output.lastIndexOf('/').coerceAtLeast(0))
-    while (input.isNotEmpty()) {
+    val n = path.length
+    var i = 0
+    while (i < n) {
         when {
-            input.startsWith("../") -> input = input.substring(3)
-            input.startsWith("./") -> input = input.substring(2)
-            input.startsWith("/./") -> input = input.substring(2)
-            input == "/." -> input = "/"
-            input.startsWith("/../") -> {
-                input = input.substring(3)
+            path.startsWith("../", i) -> i += 3
+            path.startsWith("./", i) -> i += 2
+            path.startsWith("/./", i) -> i += 2
+            i + 2 == n && path.startsWith("/.", i) -> {
+                output.append('/')
+                i = n
+            }
+            path.startsWith("/../", i) -> {
+                i += 3
                 dropLastSegment()
             }
-            input == "/.." -> {
-                input = "/"
+            i + 3 == n && path.startsWith("/..", i) -> {
                 dropLastSegment()
+                output.append('/')
+                i = n
             }
-            input == "." || input == ".." -> input = ""
+            (i + 1 == n && path[i] == '.') || (i + 2 == n && path.startsWith("..", i)) -> i = n
             else -> {
-                val next = input.indexOf('/', startIndex = if (input.startsWith("/")) 1 else 0).let { if (it < 0) input.length else it }
-                output.append(input, 0, next)
-                input = input.substring(next)
+                val end = path.indexOf('/', i + 1).let { if (it < 0) n else it }
+                // Not append(path, i, end): on the web that converts all of [path] each time.
+                output.append(path.substring(i, end))
+                i = end
             }
         }
     }

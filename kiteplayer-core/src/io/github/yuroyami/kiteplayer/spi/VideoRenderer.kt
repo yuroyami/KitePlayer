@@ -21,8 +21,9 @@ import kotlinx.coroutines.flow.Flow
  * 3. A renderer must never call synchronously back into the player from inside [present].
  * 4. [vsyncIntervalNanos] is advisory. Returning null costs smoothness on a high refresh display
  *    and nothing else.
- * 5. Losing a surface is an event, not an exception. Playback continues, video frames are counted as
- *    dropped, and audio keeps playing, because a minimised window should not stop the sound.
+ * 5. Losing a surface is an event, not an exception. Playback continues, the video frames not
+ *    presented are counted as refused in `PlaybackStats.refusedFrames`, not as dropped, and audio
+ *    keeps playing, because a minimised window should not stop the sound.
  * 6. A renderer may be attached and detached at any time, including while playing. Ordinary video
  *    decoding does not depend on one existing. A renderer-coupled decoder is considered only when
  *    its renderer is attached before the media session opens; attaching later does not replace the
@@ -65,7 +66,8 @@ public interface VideoRenderer : AutoCloseable {
      * Presents [frame], aiming for [targetNanos] on the engine's monotonic clock.
      *
      * @return false when the frame was not presented, for example because the surface is gone. The
-     *         engine counts that as a drop. The frame is closed either way.
+     *         engine counts that as a refusal in `PlaybackStats.refusedFrames`, not as a drop. The
+     *         frame is closed either way.
      */
     public suspend fun present(frame: VideoFrame, targetNanos: Long): Boolean
 

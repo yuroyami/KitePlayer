@@ -2532,7 +2532,14 @@ internal class PlaybackCore(
             }
             if (displaced != null) return Enqueued.Queued
             if (commands.trySend(CoreCommand.ApplyLatest(kind)).isSuccess) return Enqueued.Queued
-            kotlinx.atomicfu.locks.synchronized(latestLock) { if (latestSettings[kind] === command) latestSettings.remove(kind) }
+            // The mailbox closed. Whatever the slot holds now has no token to apply it: this call,
+            // or a later one that displaced it in between and was told it was queued, which then
+            // waited for ever (#790). It is answered here, with every call it took over.
+            val orphan = kotlinx.atomicfu.locks.synchronized(latestLock) { latestSettings.remove(kind) }
+            if (orphan != null && orphan !== command) {
+                orphan.answerReplacedWithThis()
+                orphan.fail(closedCommand(orphan.name))
+            }
             return Enqueued.Closed
         }
         if (waitingRequests.incrementAndGet() > MAX_WAITING_REQUESTS) {
@@ -12846,6 +12853,15 @@ internal class PlaybackCore(
             if (pending !is CoreCommand.Close) {
                 pending.fail(IllegalStateException("the player was closed before ${pending.name} could run"))
             }
+        }
+        // And every setting left in a slot whose token the drain did not meet: one put there after
+        // its kind's token was taken, as close raced it, would otherwise wait for ever (#790).
+        val stranded = kotlinx.atomicfu.locks.synchronized(latestLock) {
+            latestSettings.values.toList().also { latestSettings.clear() }
+        }
+        for (setting in stranded) {
+            setting.answerReplacedWithThis()
+            setting.fail(IllegalStateException("the player was closed before ${setting.name} could run"))
         }
     }
 

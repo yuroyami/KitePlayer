@@ -13,8 +13,10 @@ import kotlinx.coroutines.CancellationException
  * itself, `http-xsdate` and `http-iso`, whose address answers with the time as text, and
  * `http-head`, whose address answers with the time in its `Date` header, to the second. The
  * schemes that need a socket of their own, NTP among them, are passed over. The difference is
- * read once, on the first call, and kept. When nothing answers, the device's clock stands, and the
- * log says so once. A browser hides a response's `Date` header from the page unless the server
+ * read on the first call and kept once one answers. When nothing answers, the device's clock
+ * stands for now, the log says so once, and a later call asks again, five seconds on and then at
+ * twice the wait each time up to a minute (#749): a timeout or a refusal at the open used to be
+ * kept like a measurement, and a slow device then sat behind the live edge for the whole session. A browser hides a response's `Date` header from the page unless the server
  * exposes it, so there `http-head` answers only from a server that does.
  */
 internal class DashLiveClock(
@@ -27,15 +29,35 @@ internal class DashLiveClock(
     private val fetchDate: suspend (url: String) -> String?,
 ) {
     private var offsetMicros: Long? = null
+    private var retryAtMicros = Long.MIN_VALUE
+    private var retryWaitMicros = FIRST_RETRY_MICROS
+    private var failureLogged = false
 
     /** The time of day now, in microseconds since 1970 UTC, on the packager's clock when one answered. */
     suspend fun nowMicros(): Long {
-        val offset = offsetMicros ?: offset().also { offsetMicros = it }
-        return deviceMicros() + offset
+        offsetMicros?.let { return deviceMicros() + it }
+        if (timings.isEmpty()) {
+            KiteLog.log("KiteDash", "the live manifest names no UTCTiming; its window follows the device's clock")
+            offsetMicros = 0L
+            return deviceMicros()
+        }
+        if (deviceMicros() >= retryAtMicros) {
+            offset()?.let { measured ->
+                offsetMicros = measured
+                return deviceMicros() + measured
+            }
+            if (!failureLogged) {
+                failureLogged = true
+                KiteLog.log("KiteDash", "no UTCTiming of the live manifest answered; its window follows the device's clock until one does")
+            }
+            retryAtMicros = deviceMicros() + retryWaitMicros
+            retryWaitMicros = minOf(retryWaitMicros * 2, MAX_RETRY_MICROS)
+        }
+        return deviceMicros()
     }
 
-    /** How far the time the manifest names is ahead of the device's, or 0 when nothing names it. */
-    private suspend fun offset(): Long {
+    /** How far the time the manifest names is ahead of the device's, or null when nothing answered. */
+    private suspend fun offset(): Long? {
         for (timing in timings) {
             val scheme = timing.schemeIdUri.lowercase()
             val kind = SCHEMES.entries.firstOrNull { (prefix, _) -> scheme == "$prefix:2014" || scheme == "$prefix:2012" }?.value ?: continue
@@ -60,15 +82,7 @@ internal class DashLiveClock(
                 return server - (before + deviceMicros()) / 2
             }
         }
-        KiteLog.log(
-            "KiteDash",
-            if (timings.isEmpty()) {
-                "the live manifest names no UTCTiming; its window follows the device's clock"
-            } else {
-                "no UTCTiming of the live manifest answered; its window follows the device's clock"
-            },
-        )
-        return 0L
+        return null
     }
 
     private fun shownUrl(url: String): String = url.substringBefore('?')
@@ -76,6 +90,10 @@ internal class DashLiveClock(
     private enum class Kind { Direct, Text, Head }
 
     internal companion object {
+        /** The wait before the clock asks again after nothing answered, doubled each time. */
+        private const val FIRST_RETRY_MICROS = 5_000_000L
+        private const val MAX_RETRY_MICROS = 60_000_000L
+
         private val SCHEMES = mapOf(
             "urn:mpeg:dash:utc:direct" to Kind.Direct,
             "urn:mpeg:dash:utc:http-xsdate" to Kind.Text,

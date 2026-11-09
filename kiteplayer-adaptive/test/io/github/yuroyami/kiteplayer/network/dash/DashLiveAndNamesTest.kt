@@ -154,6 +154,36 @@ class DashLiveAndNamesTest {
         assertEquals(784_111_777_000_000L, DashLiveClock.parseHttpDateMicros("Sun, 06 Nov 1994 08:49:37 GMT"))
     }
 
+    /** A clock that nothing answered asks again later rather than keeping the device's time (#749). */
+    @Test
+    fun aClockThatNothingAnsweredAsksAgainLater() = runTest {
+        var device = 0L
+        var asks = 0
+        var answering = false
+        val clock = DashLiveClock(
+            listOf(DashUtcTiming("urn:mpeg:dash:utc:http-xsdate:2014", "https://time.test/now")),
+            deviceMicros = { device },
+            fetchText = {
+                asks++
+                if (!answering) error("timed out")
+                // Forty seconds ahead of the device, which runs slow.
+                "1970-01-01T00:01:40Z"
+            },
+            fetchDate = { error("not asked") },
+        )
+        device = 60_000_000L
+        assertEquals(60_000_000L, clock.nowMicros(), "the device's clock stands while nothing answers")
+        assertEquals(60_000_000L, clock.nowMicros(), "and the clock does not ask again at once")
+        assertEquals(1, asks)
+        answering = true
+        device = 65_000_000L
+        assertEquals(65_000_000L + 40_000_000L - 5_000_000L, clock.nowMicros(), "five seconds on it asks again")
+        assertEquals(2, asks)
+        device = 70_000_000L
+        clock.nowMicros()
+        assertEquals(2, asks, "an answer is kept")
+    }
+
     private val live = """
         <MPD type="dynamic" availabilityStartTime="1970-01-01T00:01:00Z" minimumUpdatePeriod="PT2S" timeShiftBufferDepth="PT10S">
             <Location>https://cdn.test/live/next.mpd</Location>

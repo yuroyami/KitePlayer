@@ -44,6 +44,19 @@ class MarkersTest {
         harness.close()
     }
 
+    /** A marker at the position an item opens at fires as playback starts from it (#810). */
+    @Test
+    fun aMarkerAtTheStartPositionFiresOnPlay() = runTest {
+        val harness = harness(this)
+        harness.openWithRenderer()
+        harness.core.setMarkers(listOf(Marker(0.seconds, "intro"), Marker(1.seconds, "one")))
+        harness.run(50.milliseconds)
+        harness.core.play()
+        harness.run(2.seconds)
+        assertEquals(listOf("intro", "one"), harness.reached())
+        harness.close()
+    }
+
     @Test
     fun `a seek past a marker does not fire it and a seek back re-arms it`() = runTest {
         val harness = harness(this)

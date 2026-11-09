@@ -7903,8 +7903,12 @@ internal class PlaybackCore(
         if (markers.isNotEmpty() && pendingSeek == null) {
             val positionUs = itemPositionUs
             if (markerCursorEpoch != requestedEpoch || markerCursorUs == NO_POSITION) {
+                // Seeded by an open, the cursor starts just below the first reading, so a marker at
+                // the start position fires as playback leaves it, as an intro marker at 0 must
+                // (#810). Seeded by a seek, the landing stays excluded.
+                val opened = markerCursorUs == NO_POSITION && markerCursorEpoch == null
                 markerCursorEpoch = requestedEpoch
-                markerCursorUs = positionUs
+                markerCursorUs = if (opened) positionUs - 1 else positionUs
             } else if (status == PlaybackStatus.Playing && positionUs > markerCursorUs) {
                 for (marker in markers) {
                     val markerUs = marker.position.inWholeMicroseconds

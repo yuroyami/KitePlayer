@@ -71,8 +71,9 @@ internal class NeonLoFiRegions {
     private val velocity = FloatArray(4)
     var target = 0; private set
     var starts = 0; private set
-    var clock = 0f; private set
-    var lastStart = -60f; private set
+    /** Heard seconds, in a Double so a 144 Hz step still adds after days of play (#960). */
+    var clock = 0.0; private set
+    var lastStart = -60.0; private set
     private var recent = -1
     private var previousManual = -1
     private var initialized = false
@@ -87,11 +88,11 @@ internal class NeonLoFiRegions {
             baseline[0] = level; baseline[1] = density; baseline[2] = centroid
             initialized = true; previousManual = manual
         }
-        clock += dt * audible
+        clock += (dt * audible).toDouble()
         val contrast = abs(level - baseline[0]) > 0.19f &&
             (abs(density - baseline[1]) > 0.17f || abs(centroid - baseline[2]) > 0.16f)
         contrastTime = if (contrast && audible > 0f) contrastTime + dt else max(0f, contrastTime - dt * 2f)
-        val eligible = manual < 0 && clock - lastStart >= 60f && (structure || contrastTime >= 8f / pace)
+        val eligible = manual < 0 && clock - lastStart >= 60.0 && (structure || contrastTime >= 8f / pace)
         if ((manual >= 0 && manual != previousManual && manual != target) || eligible) {
             var next = manual
             if (next < 0) {
@@ -116,7 +117,7 @@ internal class NeonLoFiRegions {
         }
     }
     fun reset() {
-        weights.fill(0f); weights[0] = 1f; velocity.fill(0f); target = 0; starts = 0; clock = 0f
-        lastStart = -60f; recent = -1; previousManual = -1; initialized = false; contrastTime = 0f; decisions = 0
+        weights.fill(0f); weights[0] = 1f; velocity.fill(0f); target = 0; starts = 0; clock = 0.0
+        lastStart = -60.0; recent = -1; previousManual = -1; initialized = false; contrastTime = 0f; decisions = 0
     }
 }

@@ -162,7 +162,7 @@ class NeonLoFiWorldTest {
             assertTrue(w.lanes.sum() > 1f); assertTrue(w.history.count > 10)
         }
         val still = NeonLoFiWorld(); run(still, 5f, motion = 0f)
-        assertEquals(0.0, still.flight.travel); assertEquals(0f, still.time); assertEquals(0f, still.flight.bank)
+        assertEquals(0.0, still.flight.travel); assertEquals(0.0, still.time); assertEquals(0f, still.flight.bank)
         val reduced = NeonLoFiWorld(); run(reduced, 5f, motion = 0.3f)
         val full = NeonLoFiWorld(); run(full, 5f)
         assertEquals(full.flight.travel * 0.3, reduced.flight.travel, 0.001)
@@ -237,7 +237,7 @@ class NeonLoFiWorldTest {
         fun replay(): List<Float> {
             for (i in 0..900) w.advance(state(neonFrame(i * 16_667L), i / 60f), w.controls, 0.84f)
             return w.lanes.toList() + w.profile.toList() + w.regions.weights.toList() +
-                listOf(w.flight.travel.toFloat(), w.flight.bank, w.flight.layout, w.time)
+                listOf(w.flight.travel.toFloat(), w.flight.bank, w.flight.layout, w.time.toFloat())
         }
         val first = replay(); w.reset(); assertEquals(first, replay())
     }

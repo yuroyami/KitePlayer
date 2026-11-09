@@ -64,7 +64,17 @@ internal class NeonLoFiWorld {
     var retreat = 0f; private set
     private var projectedRevision = -1L
     var rain = 0f; private set
-    var time = 0f; private set
+    /**
+     * Heard seconds, in a Double: a Float clock stops adding a 144 Hz step after about 36 hours
+     * (#349, #960). The shader takes [shaderTime] instead.
+     */
+    var time = 0.0; private set
+
+    /**
+     * [time] wrapped at [SHADER_TIME_PERIOD], for the shader, which reads it only through
+     * sin(t * 0.5) and sin(t * 0.4). Both repeat every 20 pi seconds, so the wrap shows nothing.
+     */
+    val shaderTime: Float get() = (time % SHADER_TIME_PERIOD).toFloat()
     var eventCount = 0L; private set
     var compoundCount = 0L; private set
     var acceptedStrength = 0f; private set
@@ -221,7 +231,7 @@ internal class NeonLoFiWorld {
         }
         if (available && audible > 0f) regions.advance(dt, audible, controls[0].toInt() - 1,
             controls[5], layout, f.energy, f.density, f.centroid, structural)
-        time += dt * audible * state.motionScale
+        time += (dt * audible * state.motionScale).toDouble()
         if (available && audible > 0f && f.energy < 0.22f && f.density < 0.2f && layout > 0.45f) rainWanted = true
         if (available && f.energy > 0.42f) rainWanted = false
         val targetRain = if (audible > 0f && (rainWanted || breakdownRain)) 0.65f else 0f
@@ -323,7 +333,7 @@ internal class NeonLoFiWorld {
         lanes.fill(0f); slowLanes.fill(0f); impulses.fill(0f); profile.fill(0f)
         terrace.fill(0f); terraceHead = 0; terraceRows = 0; terraceClock = 0f
         accents.forEach { it.age = 10f; it.timestamp = Long.MIN_VALUE }
-        seen.fill(null); seenAt = 0; flight.reset(); regions.reset(); quiet = 0f; time = 0f
+        seen.fill(null); seenAt = 0; flight.reset(); regions.reset(); quiet = 0f; time = 0.0
         eventCount = 0; compoundCount = 0; acceptedStrength = 0f; rain = 0f; rainWanted = false
         slowLevel = 0f; bass = 0f; air = 0f; body = 0f; texture = 0f; retreat = 0f; wanted.fill(0f)
         gaps.fill(0f); notes.fill(0f); wave.fill(0.5f); kick = 0f; hat = 0f; starAge = -1f; sinceStar = 99f
@@ -337,3 +347,6 @@ internal class NeonLoFiWorld {
         slowLevel = 0f; air = 0f; body = 0f; settingsInitialized = false
     }
 }
+
+/** The period both of the shader's uses of the world time repeat at: 4 pi and 5 pi divide 20 pi. */
+internal const val SHADER_TIME_PERIOD: Double = 20.0 * kotlin.math.PI

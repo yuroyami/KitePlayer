@@ -78,8 +78,12 @@ internal class NeonLoFiDecor {
             val admission = (density * rainCount - i).coerceIn(0f, 1f)
             if (admission <= 0f) continue
             val z = hash(i.toFloat(), 4f)
-            val x = fract(hash(i + 0.7f, 7f) + seed * 0.13f + world.time * 0.007f * (1f + z)) * width
-            val y = fract(hash(i + 2f, 11f) + world.time * (0.12f + z * 0.22f)) * height
+            // The time terms taken whole in a Double, then their fraction: fract repeats every 1,
+            // and a Float product of a long clock loses the step (#960).
+            val drift = ((world.time * 0.007 * (1f + z)) % 1.0).toFloat()
+            val fall = ((world.time * (0.12f + z * 0.22f)) % 1.0).toFloat()
+            val x = fract(hash(i + 0.7f, 7f) + seed * 0.13f + drift) * width
+            val y = fract(hash(i + 2f, 11f) + fall) * height
             val length = height * (0.005f + z * 0.017f)
             rain.streak(x, y, x - length * 0.13f, y + length, max(0.6f, width / 1400f),
                 paint.mix(NeonLoFiPaint.NEAR, NeonLoFiPaint.WHITE, 0.6f, 0.22f + world.air * 0.15f, admission * 0.7f).toArgb())

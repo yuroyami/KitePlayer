@@ -136,7 +136,7 @@ internal class NeonLoFi : ShaderPreset(NeonLoFiSky.SOURCE, "Night Drive", VizEne
             "nCap" to role(NeonLoFiPaint.CAP), "nInk" to role(NeonLoFiPaint.INK),
             "nNear" to role(NeonLoFiPaint.NEAR), "nFar" to role(NeonLoFiPaint.FAR),
             "nCamera" to floatArrayOf(cos(f.bank), sin(f.bank), f.height, f.travel.toFloat()),
-            "nLife" to floatArrayOf(world.time, f.layout, world.air, world.slowLevel),
+            "nLife" to floatArrayOf(world.shaderTime, f.layout, world.air, world.slowLevel),
             "nStyle" to floatArrayOf(world.controls[11], world.controls[8], world.controls[2], world.regions.weights[3]),
             "nRegions" to world.regions.weights.copyOf(),
             "nSun" to view.sun.copyOf(),

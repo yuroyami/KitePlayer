@@ -153,11 +153,17 @@ public object LrcParser {
         if ('<' !in text) return text
         val out = StringBuilder(text.length)
         var at = 0
+        // The next '>' at or after the cursor, found once and reused while it is still ahead, and
+        // a stamp candidate measured before it is copied: searched and copied at every '<', a line
+        // full of them cost quadratic time and memory (#878). -1 means there is no '>' left.
+        var close = text.indexOf('>')
         while (at < text.length) {
             val char = text[at]
-            if (char == '<') {
-                val close = text.indexOf('>', at)
-                if (close > at && stampMicros(text.substring(at + 1, close)) != null) {
+            if (char == '<' && close != -1) {
+                if (close < at) close = text.indexOf('>', at)
+                if (close > at && close - at - 1 <= MAX_STAMP_LENGTH &&
+                    stampMicros(text.substring(at + 1, close)) != null
+                ) {
                     at = close + 1
                     continue
                 }
@@ -173,4 +179,7 @@ public object LrcParser {
     }
 
     private val LINE_BREAK = Regex("\r\n|\n|\r")
+
+    /** Longer than any word stamp, spaces around it included: `<mmmm:ss.xxxxxx>` is 15. */
+    private const val MAX_STAMP_LENGTH = 32
 }

@@ -114,4 +114,13 @@ class LrcParserTest {
     fun malformedTextGivesNoCuesAndNeverThrows() {
         assertEquals(emptyList(), LrcParser.parse("[00:xx.00]not a time\n[00:01.00\n[]\n[:]x\n<00:01.00>"))
     }
+
+    /** A line full of '<' that starts no stamp is read in linear time and kept as it is (#878). */
+    @Test
+    fun aLineFullOfOpeningBracketsIsKeptWhole() {
+        val brackets = "<".repeat(200_000)
+        val cues = LrcParser.parse("[00:01.00]$brackets>tail <00:02.00>word")
+        assertEquals(1, cues.size)
+        assertEquals("$brackets>tail word", cues.single().plainText)
+    }
 }

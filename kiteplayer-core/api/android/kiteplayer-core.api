@@ -1090,6 +1090,7 @@ public final class io/github/yuroyami/kiteplayer/MediaItemBuilder {
 	public final fun externalSubtitles (Ljava/util/List;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
 	public final fun formatHint (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
 	public final fun generateTimestamps ()Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
+	public final fun growth (Lio/github/yuroyami/kiteplayer/FileGrowth;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
 	public final fun header (Ljava/lang/String;Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
 	public final fun headers (Ljava/util/Map;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;
 	public final fun headers ([Lkotlin/Pair;)Lio/github/yuroyami/kiteplayer/MediaItemBuilder;

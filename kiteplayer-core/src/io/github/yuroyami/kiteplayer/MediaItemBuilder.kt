@@ -36,6 +36,7 @@ public class MediaItemBuilder(private val uri: String) {
     private var album: String? = null
     private var audioContent = AudioContent.Automatic
     private var clip: MediaClip? = null
+    private var growth: FileGrowth? = null
     private var runsIntoNext = false
 
     /** Adds one request header. See [MediaItem.headers]. */
@@ -117,6 +118,14 @@ public class MediaItemBuilder(private val uri: String) {
     @kotlin.jvm.JvmOverloads
     public fun clipMillis(startMillis: Long, endMillis: Long? = null): MediaItemBuilder = apply {
         clip = MediaClip.ofMillis(startMillis, endMillis)
+    }
+
+    /**
+     * See [MediaItem.growth]: plays a file that is still being written. For Java, make the value
+     * with [FileGrowth.ofMillis].
+     */
+    public fun growth(growth: FileGrowth?): MediaItemBuilder = apply {
+        this.growth = growth
     }
 
     /** See [MediaItem.io]. */
@@ -216,6 +225,7 @@ public class MediaItemBuilder(private val uri: String) {
         audioFilter = audioFilter,
         audioContent = audioContent,
         clip = clip,
+        growth = growth,
         thumbnails = thumbnails,
         runsIntoNext = runsIntoNext,
         externalAudio = externalAudio.toList(),

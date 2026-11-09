@@ -25,6 +25,8 @@ class PlayerConfigBuilderCoverageTest {
             IoCachePolicy::class to IoCachePolicyBuilder::class,
             BufferPolicy::class to BufferPolicyBuilder::class,
             QueueConfig::class to QueueConfigBuilder::class,
+            // The builder Java uses for an item, which had no growth (#911).
+            MediaItem::class to MediaItemBuilder::class,
         )
         // Two empty sets would also be equal, so first prove that the fields are really seen.
         assertTrue("hdrPolicy" in fields(PlayerConfig::class), "no fields read from PlayerConfig: ${fields(PlayerConfig::class)}")

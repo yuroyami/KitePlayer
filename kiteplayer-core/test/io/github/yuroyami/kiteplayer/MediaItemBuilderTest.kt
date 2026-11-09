@@ -115,4 +115,13 @@ class MediaItemBuilderTest {
         assertEquals(1_500L, MediaClip.ofMillis(0, 1_500).length?.inWholeMilliseconds)
         assertEquals(null, MediaClip.ofMillis(1_000).endMillis)
     }
+
+    /** A growing file can be built without a Duration, as Java builds one (#911). */
+    @Test
+    fun theBuilderSetsGrowth() {
+        val item = MediaItemBuilder("recording.ts").growth(FileGrowth.ofMillis(5_000)).build()
+        assertEquals(FileGrowth(5.seconds), item.growth)
+        assertEquals(5_000L, item.growth?.endsAfterMillis)
+        assertEquals(null, MediaItemBuilder("recording.ts").build().growth)
+    }
 }

@@ -23,8 +23,9 @@ import kotlin.coroutines.intrinsics.startCoroutineUninterceptedOrReturn
  * genuinely needs to await bytes is REFUSED here, loudly, rather than served by a busy-wait that
  * would freeze the page.
  *
- * The general fix is a Worker, where blocking IS legal, and at that point this class
- * becomes the blocking bridge again.
+ * A source that waits for the network plays in the worker player, `KitePlayerWorker.start(canvas)`
+ * in `kiteplayer-web-worker`, which runs the player in a web worker. Its reader waits inside a
+ * synchronous request there, so each read reaches this class already answered.
  */
 internal actual class BlockingMediaIo actual constructor(
     private val io: MediaIo,
@@ -47,8 +48,8 @@ internal actual class BlockingMediaIo actual constructor(
                 "This media source suspends while reading, and the web backend cannot wait for it: " +
                     "Kotlin/Wasm has no runBlocking and a browser forbids blocking the main thread. " +
                     "Supply a source whose bytes are already resident (a File, a fetch response or " +
-                    "an ArrayBuffer), or run the player in a Worker where blocking is legal " +
-                    "and is tracked as an issue.",
+                    "an ArrayBuffer), or play it with KitePlayerWorker.start(canvas), which runs " +
+                    "the player in a web worker.",
             )
         }
         return outcome
@@ -96,7 +97,8 @@ internal actual fun <T> blockingIn(lifetime: Job, block: suspend () -> T): T {
         call.cancel(CancellationException("the web backend cannot wait for a related address"))
         throw UnsupportedOperationException(
             "A related address did not open at once, and the web backend cannot wait for it. " +
-                "Run the player in a Worker, where a reader may wait for the network, or supply a reader " +
+                "Play it with KitePlayerWorker.start(canvas), which runs the player in a web worker where a " +
+                "reader may wait for the network, or supply a reader " +
                 "whose related addresses are already resident.",
         )
     }

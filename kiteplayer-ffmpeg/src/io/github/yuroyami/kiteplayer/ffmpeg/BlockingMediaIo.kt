@@ -53,5 +53,8 @@ internal expect class BlockingMediaIo(io: MediaIo, lifetime: Job) : MediaByteSou
  */
 internal expect fun <T> blockingIn(lifetime: Job, block: suspend () -> T): T
 
-/** False on the web, whose binding of KiteFFmpeg refuses a nested opener and which cannot block. */
+/**
+ * Whether the HLS opener may hand FFmpeg a nested opener. True on every target; on the web a related
+ * address must open without suspending, which [blockingIn] refuses otherwise.
+ */
 internal expect val nestedOpensSupported: Boolean

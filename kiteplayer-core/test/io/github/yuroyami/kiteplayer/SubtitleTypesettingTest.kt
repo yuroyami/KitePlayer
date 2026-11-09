@@ -17,6 +17,7 @@ import io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap
 import io.github.yuroyami.kiteplayer.subtitle.StyledSpan
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleFont
+import kotlinx.coroutines.Runnable
 import kotlinx.coroutines.test.runTest
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -27,6 +28,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -303,6 +305,48 @@ class SubtitleTypesettingTest {
         // differ on every publish, so counting publications counts republications.
         assertEquals(1, published.size, "a static cue was republished ${published.size} times")
         second.close()
+    }
+
+    /** A dispatcher whose work waits while [held], as a raster lane another user holds does. */
+    private class GatedDispatcher(private val inner: kotlinx.coroutines.CoroutineDispatcher) : kotlinx.coroutines.CoroutineDispatcher() {
+        var held = false
+            set(value) {
+                field = value
+                if (!value) waiting.toList().also { waiting.clear() }.forEach { (context, block) -> inner.dispatch(context, block) }
+            }
+        private val waiting = ArrayList<Pair<kotlin.coroutines.CoroutineContext, Runnable>>()
+
+        override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) {
+            if (held) waiting += context to block else inner.dispatch(context, block)
+        }
+    }
+
+    /**
+     * Reaching an item's clip end withdraws the overlay and cancels the render job, and keeps the
+     * lane. A job cancelled before it ran, here because the raster lane was held, left the lane
+     * marked as running, so after a seek back no request started a render again (#884).
+     */
+    @Test
+    fun typesettingGoesOnAfterAClipEndCancelsARenderThatHadNotStarted() = runTest {
+        val animated = FakeTypesetter(animationStepMillis = 40)
+        SubtitleTypesetters.register(FakeProvider { animated })
+        val raster = GatedDispatcher(kotlinx.coroutines.test.StandardTestDispatcher(testScheduler))
+        val harness = CoreHarness(this, script = assScript(), config = config(), rasterDispatcher = raster)
+        harness.attachRenderer()
+        harness.core.open(MediaItem("scripted://media", clip = MediaClip(Duration.ZERO, 2_000.milliseconds)))
+        harness.core.play()
+        harness.run(1_800.milliseconds)
+        assertTrue(animated.renders > 0, "nothing was typeset before the clip's end")
+        raster.held = true
+        harness.run(400.milliseconds)
+        raster.held = false
+        harness.run(50.milliseconds)
+        harness.core.seek(Pts(1_200_000L), SeekMode.Precise)
+        harness.core.play()
+        val before = animated.renders
+        harness.run(600.milliseconds)
+        assertTrue(animated.renders > before, "no render ran after the seek back: ${animated.renders} renders in all")
+        harness.close()
     }
 
     @Test

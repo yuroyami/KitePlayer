@@ -9069,7 +9069,10 @@ internal class PlaybackCore(
         if (lane.failed.value != null) return
         lane.requested.value = request
         if (lane.running.compareAndSet(expect = false, update = true)) {
-            lane.job = scope.launch(dispatchers.raster) { typesetLoop(session, lane) }
+            // ATOMIC, so the body runs even when a withdrawal cancels the job before it starts, and
+            // the loop hands the lane back. A job cancelled unstarted left running set for ever,
+            // and no later request started a render (#884).
+            lane.job = scope.launch(dispatchers.raster, start = CoroutineStart.ATOMIC) { typesetLoop(session, lane) }
         }
     }
 
@@ -9083,6 +9086,17 @@ internal class PlaybackCore(
      * new job does.
      */
     private suspend fun typesetLoop(session: OpenSession, lane: TypesetLane) {
+        try {
+            typesetPasses(session, lane)
+        } catch (cancellation: CancellationException) {
+            // A withdrawal cancelled this job. Its requests are orphaned by the epoch it bumped, so
+            // the lane goes back to the actor, whose next request starts a new job (#884).
+            lane.running.value = false
+            throw cancellation
+        }
+    }
+
+    private suspend fun typesetPasses(session: OpenSession, lane: TypesetLane) {
         while (true) {
             val request = lane.requested.getAndSet(null)
             if (request == null) {
@@ -9100,8 +9114,10 @@ internal class PlaybackCore(
                 lane.running.value = false
                 return
             }
+            // "Unchanged" means the picture on the glass still stands, which holds only while this
+            // lane has one there: after a withdrawal it republishes the last images (#884).
             if (
-                images == null && request.otherCues == lane.publishedOthers &&
+                images == null && lane.published.value && request.otherCues == lane.publishedOthers &&
                 request.otherSafeArea == lane.publishedSafeArea
             ) continue
             if (images != null) lane.lastImages = images

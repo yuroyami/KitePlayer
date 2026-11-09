@@ -60,6 +60,8 @@ internal class CoreHarness(
      * on [engineDispatcher] with every other lane.
      */
     releaseDispatcher: CoroutineContext? = null,
+    /** A raster lane of its own, which a test can hold back, or null to keep it with every other lane. */
+    rasterDispatcher: CoroutineContext? = null,
     /** How long a close waits for the release before it reports a compromised runtime: production's ten seconds. */
     closeDeadline: Duration = 10.seconds,
 ) {
@@ -86,6 +88,10 @@ internal class CoreHarness(
         dispatchers = PlaybackDispatchers.sharing(engineDispatcher(scheduler)).let { shared ->
             if (releaseDispatcher == null) shared else object : PlaybackDispatchers by shared {
                 override val release: CoroutineContext get() = releaseDispatcher
+            }
+        }.let { shared ->
+            if (rasterDispatcher == null) shared else object : PlaybackDispatchers by shared {
+                override val raster: CoroutineContext get() = rasterDispatcher
             }
         },
         closeDispatchers = false,

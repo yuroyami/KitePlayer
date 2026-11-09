@@ -16814,10 +16814,18 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
 
     /** Takes [older]'s place, and with it the calls [older] had replaced. Under the mailbox's lock. */
     fun takeOver(older: CoreCommand) {
-        val list = replaced ?: ArrayList<CoreCommand>().also { replaced = it }
-        older.replaced?.let(list::addAll)
+        val inherited = older.replaced
         older.replaced = null
-        list += older
+        val list = replaced
+        if (list == null) {
+            // A new command takes the older one's list itself, in constant time. Copying it at
+            // every replacement made a fast run of setting calls cost the square of its length,
+            // under the mailbox lock (#791).
+            replaced = (inherited ?: ArrayList()).also { it += older }
+        } else {
+            inherited?.let(list::addAll)
+            list += older
+        }
     }
 
     /**

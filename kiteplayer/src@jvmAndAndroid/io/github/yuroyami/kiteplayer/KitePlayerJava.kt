@@ -54,6 +54,7 @@ public class KitePlayerJava(
     private val root = SupervisorJob()
     private val calls = CoroutineScope(root + Dispatchers.Default)
     private val registrations = ConcurrentHashMap<KitePlayerListener, Job>()
+    private val taps = ConcurrentHashMap<AudioBlockTap, AudioTap>()
 
     // ---- Listeners ------------------------------------------------------------------------------
 
@@ -307,6 +308,43 @@ public class KitePlayerJava(
          * whatever outlives the call. The scan waits while this runs.
          */
         public fun onAudio(ptsMicros: Long, interleaved: FloatArray, frames: Int, format: AudioFormat)
+    }
+
+    /**
+     * `KitePlayer.attachAudioTap` with a tap Java can implement (#970): `AudioTap` takes a `Pts`,
+     * whose value class gives its method a name Java cannot declare. Attaching the same tap twice
+     * changes nothing, and `AudioTap` says when and where it is called.
+     */
+    public fun attachAudioTap(tap: AudioBlockTap) {
+        player.attachAudioTap(taps.computeIfAbsent(tap) { java -> JavaAudioTap(java) })
+    }
+
+    /** `KitePlayer.detachAudioTap` for a tap given to [attachAudioTap]. A tap that is not attached is ignored. */
+    public fun detachAudioTap(tap: AudioBlockTap) {
+        taps.remove(tap)?.let(player::detachAudioTap)
+    }
+
+    /** `AudioTap`, with each block's time in microseconds, for [attachAudioTap]. */
+    public interface AudioBlockTap {
+        /**
+         * One block of decoded audio that plays at [ptsMicros]. [interleaved] holds [frames] sample
+         * frames and is the engine's own array, reused for the next block, so copy what you keep.
+         * The audio device waits while this runs.
+         */
+        public fun onAudio(ptsMicros: Long, interleaved: FloatArray, frames: Int, format: AudioFormat)
+
+        /** What the tap holds is stale: the next block continues from somewhere else. It may arrive on another thread. */
+        public fun onDiscontinuity() {}
+    }
+
+    private class JavaAudioTap(private val tap: AudioBlockTap) : AudioTap {
+        override fun onAudio(pts: Pts, interleaved: FloatArray, frames: Int, format: AudioFormat) {
+            tap.onAudio(pts.micros, interleaved, frames, format)
+        }
+
+        override fun onDiscontinuity() {
+            tap.onDiscontinuity()
+        }
     }
 
     // ---- Milliseconds ---------------------------------------------------------------------------

@@ -148,6 +148,41 @@ public class KitePlayerJavaTest {
         }
     }
 
+    /**
+     * A Java app taps the decoded sound (#970). AudioTap's method takes a Pts, whose value class
+     * gives the method a name Java cannot declare, so this implements the Java form instead.
+     */
+    @Test
+    public void aJavaAppTapsTheDecodedSound() throws Exception {
+        Clip clip = clip();
+        Assume.assumeTrue("the clip with no sound has nothing to tap", clip.file.getName().equals("sync1080p30.mp4"));
+        Heard heard = new Heard();
+        KitePlayerJava player = KitePlayerJava.create();
+        List<Long> times = new CopyOnWriteArrayList<>();
+        AtomicInteger frames = new AtomicInteger();
+        KitePlayerJava.AudioBlockTap tap = (ptsMicros, interleaved, count, format) -> {
+            times.add(ptsMicros);
+            frames.addAndGet(count);
+        };
+        try {
+            player.addListener(heard, main);
+            player.attachAudioTap(tap);
+            player.attachAudioTap(tap);
+            player.openAsync(new MediaItemBuilder(clip.file.getAbsolutePath()).build()).get(WAIT_SECONDS, TimeUnit.SECONDS);
+            heard.awaitStatus(PlaybackStatus.Paused);
+            player.getPlayer().play();
+            heard.awaitProgressPast(1_000);
+            player.detachAudioTap(tap);
+            assertTrue("the tap heard " + times.size() + " blocks", times.size() > 10);
+            assertTrue("the tap heard " + frames.get() + " frames", frames.get() > 24_000);
+            for (int i = 1; i < times.size(); i++) {
+                assertTrue("block " + i + " went back from " + times.get(i - 1) + " to " + times.get(i), times.get(i) > times.get(i - 1));
+            }
+        } finally {
+            player.closeAsync().get(WAIT_SECONDS, TimeUnit.SECONDS);
+        }
+    }
+
     @Test
     public void aListenerAddedLaterHearsNoEarlierEventAndARemovedOneHearsNothingMore() throws Exception {
         Clip clip = clip();

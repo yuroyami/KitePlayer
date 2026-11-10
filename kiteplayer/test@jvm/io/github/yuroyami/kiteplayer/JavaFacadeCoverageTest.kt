@@ -39,19 +39,27 @@ class JavaFacadeCoverageTest {
         fun hasTwin(name: String) = name in facade || "${name}Millis" in facade || "${name}Async" in facade
         val members = KitePlayer::class.java.methods.filter { !it.isAnnotationPresent(Deprecated::class.java) && !it.name.endsWith("\$default") }
         val mangled = members.filter { '-' in it.name }.map { it.name.substringBefore('-') }.toSortedSet()
-        // A Duration Java must make or read appears as the boxed class: a nullable one, as
-        // ExternalClock answers. Other value classes in such an interface, such as Pts, are not
-        // what this test covers.
-        val speaksDuration = { type: Class<*> ->
+        // An interface Java cannot implement: one that answers or takes a boxed Duration, as
+        // ExternalClock answers, or one whose abstract method a value class such as Pts mangles,
+        // as AudioTap's does (#970).
+        val javaCannotImplement = { type: Class<*> ->
             type.isInterface && type.methods.any { m ->
-                m.returnType == kotlin.time.Duration::class.java || m.parameterTypes.any { it == kotlin.time.Duration::class.java }
+                m.returnType == kotlin.time.Duration::class.java ||
+                    m.parameterTypes.any { it == kotlin.time.Duration::class.java } ||
+                    ('-' in m.name && java.lang.reflect.Modifier.isAbstract(m.modifiers))
             }
         }
-        val throughInterface = members.filter { method -> method.parameterTypes.any(speaksDuration) }.map { it.name }.toSortedSet()
+        val throughInterface = members.filter { method -> method.parameterTypes.any(javaCannotImplement) }
+        // Its Java form has a twin's name and takes no such interface itself.
+        val javaForms = KitePlayerJava::class.java.methods.filter { form -> form.parameterTypes.none(javaCannotImplement) }.map { it.name }.toSet()
+        val unserved = throughInterface.map { it.name.substringBefore('-') }.toSortedSet().filter { name ->
+            name !in javaForms && "${name}Millis" !in javaForms && "${name}Async" !in javaForms
+        }
         assertTrue("position" in mangled, "the reflection found only $mangled")
-        assertTrue("setExternalClock" in throughInterface, "the reflection found only $throughInterface")
+        assertTrue(throughInterface.any { it.name == "setExternalClock" }, "the reflection found only $throughInterface")
+        assertTrue(throughInterface.any { it.name == "attachAudioTap" }, "the reflection found only $throughInterface")
         assertEquals(emptyList(), mangled.filterNot(::hasTwin), "calls in Durations with no Java form")
-        assertEquals(emptyList(), throughInterface.filter { "${it}Millis" !in facade }, "calls taking a Duration interface with no Millis form")
+        assertEquals(emptyList(), unserved, "calls taking an interface Java cannot implement, with no Java form")
     }
 
     @Test

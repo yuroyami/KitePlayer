@@ -33,6 +33,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerJava : java/lang/Auto
 	public final fun addToQueueAsync (Ljava/util/List;Ljava/lang/Integer;)Ljava/util/concurrent/CompletableFuture;
 	public static synthetic fun addToQueueAsync$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;Lio/github/yuroyami/kiteplayer/MediaItem;Ljava/lang/Integer;ILjava/lang/Object;)Ljava/util/concurrent/CompletableFuture;
 	public static synthetic fun addToQueueAsync$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;Ljava/util/List;Ljava/lang/Integer;ILjava/lang/Object;)Ljava/util/concurrent/CompletableFuture;
+	public final fun attachAudioTap (Lio/github/yuroyami/kiteplayer/KitePlayerJava$AudioBlockTap;)V
 	public final fun attachRendererAsync (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)Ljava/util/concurrent/CompletableFuture;
 	public static final fun availability ()Lio/github/yuroyami/kiteplayer/KitePlayerAvailability;
 	public final fun awaitCloseAsync ()Ljava/util/concurrent/CompletableFuture;
@@ -45,6 +46,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerJava : java/lang/Auto
 	public final fun closeAsync ()Ljava/util/concurrent/CompletableFuture;
 	public static final fun create ()Lio/github/yuroyami/kiteplayer/KitePlayerJava;
 	public static final fun create (Lio/github/yuroyami/kiteplayer/PlayerConfig;)Lio/github/yuroyami/kiteplayer/KitePlayerJava;
+	public final fun detachAudioTap (Lio/github/yuroyami/kiteplayer/KitePlayerJava$AudioBlockTap;)V
 	public final fun getPlayer ()Lio/github/yuroyami/kiteplayer/KitePlayer;
 	public final fun inspectAsync (Lio/github/yuroyami/kiteplayer/MediaItem;)Ljava/util/concurrent/CompletableFuture;
 	public static final fun isAvailable ()Z
@@ -120,6 +122,15 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerJava : java/lang/Auto
 
 public abstract interface class io/github/yuroyami/kiteplayer/KitePlayerJava$AudioBlockSink {
 	public abstract fun onAudio (J[FILio/github/yuroyami/kiteplayer/spi/AudioFormat;)V
+}
+
+public abstract interface class io/github/yuroyami/kiteplayer/KitePlayerJava$AudioBlockTap {
+	public abstract fun onAudio (J[FILio/github/yuroyami/kiteplayer/spi/AudioFormat;)V
+	public fun onDiscontinuity ()V
+}
+
+public final class io/github/yuroyami/kiteplayer/KitePlayerJava$AudioBlockTap$DefaultImpls {
+	public static fun onDiscontinuity (Lio/github/yuroyami/kiteplayer/KitePlayerJava$AudioBlockTap;)V
 }
 
 public final class io/github/yuroyami/kiteplayer/KitePlayerJava$Companion {

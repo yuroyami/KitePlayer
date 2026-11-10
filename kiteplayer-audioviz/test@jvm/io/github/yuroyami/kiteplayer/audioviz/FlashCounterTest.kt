@@ -131,4 +131,16 @@ class FlashCounterTest {
         val counted = count(frames)
         assertTrue(counted < FlashCaptureTest.MOST, "bars travelling at a pixel a frame counted $counted flashes")
     }
+
+    /**
+     * A 5 Hz swap between sRGB grey 210 and white counts as flashes (#782). In linear light the
+     * grey is 0.64, under the 0.80 limit of the darker state, with a swing of 0.36; read from the
+     * encoded values it was 0.82, over the limit, and the swap was skipped.
+     */
+    @Test
+    fun aSwapBetweenTwoBrightGreysThatFlashesInLinearLightCounts() {
+        fun grey(value: Int) = FlashCaptureTest.luma((value shl 16) or (value shl 8) or value)
+        assertTrue(grey(210) < 0.80f, "grey 210 reads ${grey(210)}")
+        assertTrue(count(alternating(5, grey(210), grey(255))) >= 5, "a 5 Hz swap between grey 210 and white")
+    }
 }

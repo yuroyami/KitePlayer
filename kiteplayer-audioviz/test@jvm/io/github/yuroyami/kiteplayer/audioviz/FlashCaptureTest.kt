@@ -229,10 +229,19 @@ class FlashCaptureTest {
         /** Turns kept per pixel: sixteen, so up to eight flashes a second read as what they are. */
         const val TURNS_KEPT = 16
 
-        /** Relative luminance of one pixel. */
+        /**
+         * Relative luminance of one sRGB pixel, as WCAG 2.2 defines it: each channel decoded to
+         * linear light first, then weighted (#782). Weighting the encoded values put the 0.80 limit
+         * of the darker state at a linear 0.60, so a swap between grey 210 and white was skipped,
+         * and read a swing between grey 178 and 198 as 0.078 where it is 0.12.
+         */
         fun luma(pixel: Int): Float =
-            0.2126f * (pixel shr 16 and 0xFF) / 255f +
-                0.7152f * (pixel shr 8 and 0xFF) / 255f +
-                0.0722f * (pixel and 0xFF) / 255f
+            0.2126f * LINEAR[pixel shr 16 and 0xFF] + 0.7152f * LINEAR[pixel shr 8 and 0xFF] + 0.0722f * LINEAR[pixel and 0xFF]
+
+        /** Each 8-bit sRGB value in linear light, through the sRGB transfer function. */
+        private val LINEAR = FloatArray(256) { code ->
+            val x = code / 255f
+            if (x <= 0.04045f) x / 12.92f else ((x + 0.055f) / 1.055f).let { Math.pow(it.toDouble(), 2.4).toFloat() }
+        }
     }
 }

@@ -39,7 +39,8 @@ class NeonLoFiLightTest {
                             val r = NeonLoFiPaint.decode((pixels[i] shr 16 and 255) / 255f)
                             val g = NeonLoFiPaint.decode((pixels[i] shr 8 and 255) / 255f)
                             val b = NeonLoFiPaint.decode((pixels[i] and 255) / 255f)
-                            light[i] = 0.2126f * r + 0.7152f * g + 0.0722f * b
+                            // The one luminance every flash test reads (#782).
+                            light[i] = FlashCaptureTest.luma(pixels[i])
                             red[i] = if (r / max(0.001f, r + g + b) > 0.8f) max(0f, r - g - b) else 0f
                             luma += light[i] / light.size
                         }

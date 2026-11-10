@@ -6,6 +6,7 @@ import io.github.yuroyami.kiteplayer.build.AssChain
 import io.github.yuroyami.kiteplayer.build.BuildFailure
 import io.github.yuroyami.kiteplayer.build.LibassAdapters
 import io.github.yuroyami.kiteplayer.build.download
+import io.github.yuroyami.kiteplayer.build.sha256
 import org.jetbrains.amper.plugins.ExecutionAvoidance
 import org.jetbrains.amper.plugins.Output
 import org.jetbrains.amper.plugins.TaskAction
@@ -115,7 +116,7 @@ private fun fetchCodec(version: String, paths: List<String>, cache: File): File 
 /** Links the libass web module once per chain, then copies it. Needs `emcc` on PATH. */
 private fun linkLibass(root: File, cache: File, target: File) {
     val emcc = LibassAdapters.findEmcc()
-        ?: throw BuildFailure("No emcc on PATH, so there is no libass web module. Install emscripten (brew install emscripten).")
+        ?: throw BuildFailure("No emcc on PATH, so there is no libass web module. Install the pinned emscripten with scripts/install-emscripten.sh.")
     val pins = AssChain.readPins(root.resolve("kiteplayer-libass/ass-chain.sha256"))
     val chain = AssChain.find("wasm32", root, pins, cache.resolve("ass-chain"), log)
         ?: throw BuildFailure("No wasm32 ass chain: no local KiteFFmpeg chain and no pin in kiteplayer-libass/ass-chain.sha256.")
@@ -123,7 +124,12 @@ private fun linkLibass(root: File, cache: File, target: File) {
     val driverDir = root.resolve("kiteplayer-libass/native/src")
     val built = cache.resolve("kiteass")
     val stamp = built.resolve(".inputs")
-    val inputs = listOf(chain.root.absolutePath, source.readText().hashCode().toString(), driverDir.listFiles().orEmpty()
+    // The chain's archives by content: a sibling chain rebuilt in place keeps its folder, so the
+    // folder alone left the old module standing (#929). The compiler too, since a new one links
+    // different bytes from the same sources.
+    val archives = chain.libDir.listFiles().orEmpty().filter { it.isFile && it.name.endsWith(".a") }
+        .sortedBy { it.name }.joinToString(",") { "${it.name}:${sha256(it)}" }
+    val inputs = listOf(chain.root.absolutePath, archives, emcc, source.readText().hashCode().toString(), driverDir.listFiles().orEmpty()
         .filter { it.isFile }.sortedBy { it.name }.joinToString(",") { "${it.name}:${it.length()}:${it.lastModified()}" })
         .joinToString("\n")
     if (!stamp.isFile || stamp.readText() != inputs || !built.resolve(LibassAdapters.WASM_NAME).isFile) {

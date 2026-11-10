@@ -22,7 +22,7 @@ import kotlin.math.sin
  *   own colour filter. That filter has no power curve, so they ignore [gamma].
  * - The desktop AWT renderer, the web canvas renderer and the sample-buffer renderer apply none.
  */
-public data class VideoAdjustments(
+public data class VideoAdjustments @Throws(IllegalArgumentException::class) constructor(
     /** Additive lift, -1 to 1. 0 is neutral; positive lightens. */
     val brightness: Float = 0f,
     /** Scale about mid-grey, 0 to 2. 1 is neutral; 0 is flat grey. */

@@ -209,6 +209,7 @@ public class MediaItemBuilder(private val uri: String) {
 
     /** The item these settings describe, checked as its constructor checks it. */
     @OptIn(KitePlayerLowLevelApi::class)
+    @Throws(IllegalArgumentException::class)
     public fun build(): MediaItem = MediaItem(
         uri = uri,
         headers = headers.toMap(),
@@ -244,5 +245,6 @@ public class MediaItemBuilder(private val uri: String) {
  * }
  * ```
  */
+@Throws(IllegalArgumentException::class)
 public fun mediaItem(uri: String, block: MediaItemBuilder.() -> Unit = {}): MediaItem =
     MediaItemBuilder(uri).apply(block).build()

@@ -23,6 +23,7 @@ public annotation class PlayerConfigDsl
  * Every field starts at the default of [PlayerConfig], and the data classes check their values
  * when the block ends, exactly as their constructors do.
  */
+@Throws(IllegalArgumentException::class)
 public fun PlayerConfig(build: PlayerConfigBuilder.() -> Unit): PlayerConfig =
     PlayerConfigBuilder(PlayerConfig()).apply(build).build()
 
@@ -98,31 +99,37 @@ public class PlayerConfigBuilder(from: PlayerConfig = PlayerConfig()) {
     public var flashGuard: FlashGuard = from.flashGuard
 
     /** Changes [audio] field by field. */
+    @Throws(IllegalArgumentException::class)
     public fun audio(build: AudioConfigBuilder.() -> Unit) {
         audio = AudioConfigBuilder(audio).apply(build).build()
     }
 
     /** Changes [subtitles] field by field. */
+    @Throws(IllegalArgumentException::class)
     public fun subtitles(build: SubtitleConfigBuilder.() -> Unit) {
         subtitles = SubtitleConfigBuilder(subtitles).apply(build).build()
     }
 
     /** Changes [network] field by field. */
+    @Throws(IllegalArgumentException::class)
     public fun network(build: NetworkConfigBuilder.() -> Unit) {
         network = NetworkConfigBuilder(network).apply(build).build()
     }
 
     /** Changes [buffer] field by field. */
+    @Throws(IllegalArgumentException::class)
     public fun buffer(build: BufferPolicyBuilder.() -> Unit) {
         buffer = BufferPolicyBuilder(buffer).apply(build).build()
     }
 
     /** Changes [queue] field by field. */
+    @Throws(IllegalArgumentException::class)
     public fun queue(build: QueueConfigBuilder.() -> Unit) {
         queue = QueueConfigBuilder(queue).apply(build).build()
     }
 
     /** The [PlayerConfig] these fields describe, checked as its constructor checks it. */
+    @Throws(IllegalArgumentException::class)
     public fun build(): PlayerConfig = PlayerConfig(
         renderQuality = renderQuality,
         syncMode = syncMode,
@@ -183,6 +190,7 @@ public class AudioConfigBuilder(from: AudioConfig = AudioConfig()) {
     public var matchOutputChannels: Boolean = from.matchOutputChannels
 
     /** The [AudioConfig] these fields describe, checked as its constructor checks it. */
+    @Throws(IllegalArgumentException::class)
     public fun build(): AudioConfig = AudioConfig(
         preferredLanguages = preferredLanguages,
         preservePitch = preservePitch,
@@ -250,6 +258,7 @@ public class SubtitleConfigBuilder(from: SubtitleConfig = SubtitleConfig()) {
     public var secondaryPlacement: SecondarySubtitlePlacement = from.secondaryPlacement
 
     /** The [SubtitleConfig] these fields describe, checked as its constructor checks it. */
+    @Throws(IllegalArgumentException::class)
     public fun build(): SubtitleConfig = SubtitleConfig(
         preferredLanguages = preferredLanguages,
         autoSelectForced = autoSelectForced,
@@ -289,11 +298,13 @@ public class NetworkConfigBuilder(from: NetworkConfig = NetworkConfig()) {
     public var segmentStore: SegmentStore? = from.segmentStore
 
     /** Changes [ioCache] field by field. */
+    @Throws(IllegalArgumentException::class)
     public fun ioCache(build: IoCachePolicyBuilder.() -> Unit) {
         ioCache = IoCachePolicyBuilder(ioCache).apply(build).build()
     }
 
     /** The [NetworkConfig] these fields describe, checked as its constructor checks it. */
+    @Throws(IllegalArgumentException::class)
     public fun build(): NetworkConfig = NetworkConfig(
         ioResolver = ioResolver,
         ioCache = ioCache,
@@ -319,6 +330,7 @@ public class IoCachePolicyBuilder(from: IoCachePolicy = IoCachePolicy()) {
     public var forwardWindowBytes: Long = from.forwardWindowBytes
 
     /** The [IoCachePolicy] these fields describe, checked as its constructor checks it. */
+    @Throws(IllegalArgumentException::class)
     public fun build(): IoCachePolicy = IoCachePolicy(
         enabled = enabled,
         readChunkBytes = readChunkBytes,
@@ -352,6 +364,7 @@ public class BufferPolicyBuilder(from: BufferPolicy = BufferPolicy()) {
     public var stallTimeout: Duration = from.stallTimeout
 
     /** The [BufferPolicy] these fields describe, checked as its constructor checks it. */
+    @Throws(IllegalArgumentException::class)
     public fun build(): BufferPolicy = BufferPolicy(
         readyDuration = readyDuration,
         readyPackets = readyPackets,
@@ -382,6 +395,7 @@ public class QueueConfigBuilder(from: QueueConfig = QueueConfig()) {
     public var crossfade: Duration = from.crossfade
 
     /** The [QueueConfig] these fields describe, checked as its constructor checks it. */
+    @Throws(IllegalArgumentException::class)
     public fun build(): QueueConfig = QueueConfig(
         preloadNext = preloadNext,
         gapless = gapless,

@@ -7,7 +7,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /** What to play. */
-public data class MediaItem(
+public data class MediaItem @Throws(IllegalArgumentException::class) constructor(
     /**
      * Where the media is: a file path, or an address.
      *
@@ -275,7 +275,7 @@ public data class MediaItem(
  * @throws IllegalArgumentException when [start] is negative or not finite, or when [end] is not
  *         finite or not after [start].
  */
-public data class MediaClip(
+public data class MediaClip @Throws(IllegalArgumentException::class) constructor(
     /** Where the item starts in the file. */
     val start: Duration = Duration.ZERO,
     /** Where the item ends in the file, or null when it runs to the end of the file. */
@@ -328,7 +328,7 @@ public data class MediaClip(
  *
  * @throws IllegalArgumentException when [endsAfter] is not positive and finite.
  */
-public data class FileGrowth(
+public data class FileGrowth @Throws(IllegalArgumentException::class) constructor(
     /** How long the file must go without growing before the item ends. */
     val endsAfter: Duration = 2.seconds,
 ) {
@@ -572,7 +572,7 @@ public fun interface MediaIoResolver {
  *
  * @throws IllegalArgumentException when [encoding] is not one of [ENCODINGS] or a label for one.
  */
-public data class SubtitleSource(
+public data class SubtitleSource @Throws(IllegalArgumentException::class) constructor(
     val uri: String,
     /** Shown in a track menu. Defaults to the file name. */
     val title: String? = null,

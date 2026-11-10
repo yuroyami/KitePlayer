@@ -22,7 +22,7 @@ import kotlin.time.Duration.Companion.seconds
  * that some setup does not read says so in its own documentation, with a pointer to where it is
  * decided instead.
  */
-public data class PlayerConfig(
+public data class PlayerConfig @Throws(IllegalArgumentException::class) constructor(
     /**
      * How much work renderers spend on the picture beyond decoding it correctly.
      *
@@ -179,7 +179,7 @@ public data class NetworkConfig(
  * [PlayerSnapshot.reconnecting], and opens the item again at its position, or at the live edge for
  * a stream that cannot seek, then plays on if it was playing. See [NetworkConfig.recovery].
  */
-public data class NetworkRecovery(
+public data class NetworkRecovery @Throws(IllegalArgumentException::class) constructor(
     /**
      * How long the player keeps trying, from the failure on, before it fails with the error that
      * started the wait. [Duration.INFINITE] never gives up.
@@ -214,7 +214,7 @@ public fun interface NetworkStatus {
  * is evicted, and [forwardWindowBytes] in total; [Progress.bufferedRanges] reports the window,
  * time-mapped.
  */
-public data class IoCachePolicy(
+public data class IoCachePolicy @Throws(IllegalArgumentException::class) constructor(
     val enabled: Boolean = true,
     /**
      * How much one upstream read asks for, and the size of each block of the window. A source
@@ -248,7 +248,7 @@ public data class IoCachePolicy(
  * The read-ahead defaults come from the values ffplay and mpv converged on after a decade of bug
  * reports. Do not retune them without evidence from real content.
  */
-public data class BufferPolicy(
+public data class BufferPolicy @Throws(IllegalArgumentException::class) constructor(
     /**
      * A stream is ready when it has this much buffered, or this many packets, or has ended.
      *
@@ -316,7 +316,7 @@ public data class BufferPolicy(
  * no silence between them. A repeat of the current item follows its own end the same way (#467).
  * [PlaybackWarning.GaplessFallback] says when an item opened the old way.
  */
-public data class QueueConfig(
+public data class QueueConfig @Throws(IllegalArgumentException::class) constructor(
     /**
      * Open and prime the next item this long before the current one ends, for the gapless
      * handoff. Zero turns preloading off, and with it the handoff.
@@ -393,7 +393,7 @@ public enum class QueueItemFailure {
  * ceiling, the equaliser, ReplayGain and the resampler. A fresh player starts from these values,
  * and the setters on [KitePlayer] change most of them while it plays.
  */
-public data class AudioConfig(
+public data class AudioConfig @Throws(IllegalArgumentException::class) constructor(
     /**
      * Preferred languages, best first, as ISO 639 codes or BCP 47 tags.
      *
@@ -490,7 +490,7 @@ public data class AudioConfig(
  * All zero is bypass, and bypass is bit-exact: the filters are skipped entirely rather than run
  * with coefficients that happen to be the identity.
  */
-public data class EqualizerSettings(
+public data class EqualizerSettings @Throws(IllegalArgumentException::class) constructor(
     /** One gain per band, in the order of [Bands]. */
     val gainsDb: List<Float> = List(10) { 0f },
     /**
@@ -669,7 +669,7 @@ public enum class SecondarySubtitlePlacement {
  * cue timing applies [delay], and the platform rasterizer receives [fontScale]. Decoded cues are
  * held for the session and pruned on flush.
  */
-public data class SubtitleConfig(
+public data class SubtitleConfig @Throws(IllegalArgumentException::class) constructor(
     /**
      * Select a subtitle track automatically when one matches these languages, best first, given as
      * ISO 639 codes or BCP 47 tags.

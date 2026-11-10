@@ -52,7 +52,25 @@ internal class HlsTtmlMediaIo(
     /** The initializations read, by address and range. */
     private val inits = HashMap<String, ByteArray>()
 
-    private data class Segment(val url: String, val range: LongRange?, val initUrl: String?, val initRange: LongRange?)
+    private data class Segment(
+        val url: String,
+        val range: LongRange?,
+        val initUrl: String?,
+        val initRange: LongRange?,
+        /** How the segment is encrypted, null for not at all (#742). */
+        val key: SegmentKey? = null,
+        /** How its initialization is: the key in force where the playlist names it, as FFmpeg's HLS reader takes it. */
+        val initKey: SegmentKey? = null,
+    )
+
+    /**
+     * The `EXT-X-KEY` a segment falls under: its method, its key's address, and the IV, in hex,
+     * either the tag's own or the segment's media sequence number, as RFC 8216, 5.2, makes it.
+     */
+    private data class SegmentKey(val method: String, val url: String?, val ivHex: String)
+
+    /** The keys fetched, by address. */
+    private val keys = HashMap<String, ByteArray>()
 
     override suspend fun openRelated(uri: String): MediaIo? {
         if (uri in renditions) return playlist(uri)
@@ -72,6 +90,12 @@ internal class HlsTtmlMediaIo(
         val base = io.location ?: uri
         val out = StringBuilder()
         var init: Pair<String, LongRange?>? = null
+        var initKey: SegmentKey? = null
+        // The key the segments fall under, and the media sequence number of the next one (#742).
+        var keyMethod: String? = null
+        var keyUrl: String? = null
+        var keyIv: String? = null
+        var sequence = 0L
         // The next segment's byte range: its length, and its offset when the tag states one.
         var range: Pair<Long, Long?>? = null
         // Where the next byte range of each file starts when the tag leaves its offset out.
@@ -84,6 +108,8 @@ internal class HlsTtmlMediaIo(
                 when {
                     line.startsWith("#EXT-X-MAP:") -> {
                         val attributes = hlsAttributes(line.substringAfter(':'))
+                        // A key before the map encrypts the initialization too (RFC 8216, 4.3.2.4).
+                        initKey = keyMethod?.let { method -> SegmentKey(method, keyUrl, keyIv ?: sequence.toString(16).padStart(32, '0')) }
                         init = attributes["URI"]?.let { reference ->
                             // An initialization's range with no offset starts at the file's first byte.
                             Playlists.resolve(base, reference) to attributes["BYTERANGE"]?.let(::byteRange)?.let { (length, offset) ->
@@ -92,6 +118,18 @@ internal class HlsTtmlMediaIo(
                         }
                     }
                     line.startsWith("#EXT-X-BYTERANGE:") -> range = byteRange(line.substringAfter(':'))
+                    line.startsWith("#EXT-X-MEDIA-SEQUENCE:") -> {
+                        sequence = line.substringAfter(':').trim().toLongOrNull() ?: 0L
+                        out.append(line).append('\n')
+                    }
+                    // The segments are served decrypted as WebVTT, so FFmpeg must not see a key:
+                    // it would decrypt the plain text a second time.
+                    line.startsWith("#EXT-X-KEY:") -> {
+                        val attributes = hlsAttributes(line.substringAfter(':'))
+                        keyMethod = attributes["METHOD"]?.uppercase()?.takeUnless { it == "NONE" }
+                        keyUrl = attributes["URI"]?.let { Playlists.resolve(base, it) }
+                        keyIv = attributes["IV"]?.removePrefix("0x")?.removePrefix("0X")
+                    }
                     line.isNotBlank() && !line.startsWith("#") -> {
                         val url = Playlists.resolve(base, line.trim())
                         // A range with no offset follows the one before it in the same file.
@@ -100,7 +138,11 @@ internal class HlsTtmlMediaIo(
                             start until start + length
                         }
                         wanted?.let { nextOffset[url] = it.last + 1 }
-                        val segment = Segment(url, wanted, init?.first, init?.second)
+                        val key = keyMethod?.let { method ->
+                            SegmentKey(method, keyUrl, keyIv ?: sequence.toString(16).padStart(32, '0'))
+                        }
+                        sequence++
+                        val segment = Segment(url, wanted, init?.first, init?.second, key, initKey)
                         val address = addresses.getOrPut(segment) { "https://$HOST/${nextAddress++}.vtt" }
                         segments[address] = segment
                         listed += address
@@ -125,21 +167,37 @@ internal class HlsTtmlMediaIo(
 
     /** [segment] as WebVTT. */
     private suspend fun cuesOf(segment: Segment): String {
-        val bytes = read(segment.url, segment.range, MAX_SEGMENT_BYTES)
+        // A method this reader cannot decrypt, SAMPLE-AES among them, gives no cues rather than
+        // parsing ciphertext as TTML, which failed as "not a well formed TTML document" (#742).
+        if (segment.key != null && segment.key.method != "AES-128") return "WEBVTT\n\n"
+        val bytes = decrypted(read(segment.url, segment.range, MAX_SEGMENT_BYTES), segment.key)
         if (looksLikeWebVtt(bytes)) return bytes.decodeToString()
         val cues = if (looksLikeMp4(bytes)) {
             val initUrl = segment.initUrl ?: throw IllegalStateException("the MP4 subtitle segment ${shownUri(segment.url)} names no initialization")
-            DashSubtitles.mp4Cues(initOf(initUrl, segment.initRange), bytes)
+            DashSubtitles.mp4Cues(initOf(initUrl, segment.initRange, segment.initKey), bytes)
         } else {
             Ttml.cues(bytes.decodeToString())
         }
         return webVtt(cues)
     }
 
-    private suspend fun initOf(url: String, range: LongRange?): ByteArray {
-        val key = "$url#$range"
+    /** [bytes] decrypted under [key], or as they are when the segment has none. */
+    private suspend fun decrypted(bytes: ByteArray, key: SegmentKey?): ByteArray {
+        key ?: return bytes
+        val address = key.url ?: throw IllegalStateException("an AES-128 subtitle key names no URI")
+        val secret = lock.withLock { keys[address] } ?: read(address, null, MAX_KEY_BYTES).also { fetched ->
+            require(fetched.size == KEY_BYTES) { "the subtitle key at ${shownUri(address)} is ${fetched.size} bytes, not $KEY_BYTES" }
+            lock.withLock { keys[address] = fetched }
+        }
+        val iv = ByteArray(KEY_BYTES) { i -> key.ivHex.padStart(32, '0').takeLast(32).substring(i * 2, i * 2 + 2).toInt(16).toByte() }
+        return Aes128Cbc.decrypt(bytes, secret, iv)
+    }
+
+    /** The initialization at [url], decrypted under [segmentKey], the key in force where the playlist names it. */
+    private suspend fun initOf(url: String, range: LongRange?, segmentKey: SegmentKey? = null): ByteArray {
+        val key = "$url#$range#${segmentKey?.ivHex}"
         lock.withLock { inits[key] }?.let { return it }
-        val bytes = read(url, range, MAX_SEGMENT_BYTES)
+        val bytes = decrypted(read(url, range, MAX_SEGMENT_BYTES), segmentKey)
         lock.withLock {
             if (inits.size >= MAX_INITS) inits.clear()
             inits[key] = bytes
@@ -205,6 +263,10 @@ internal class HlsTtmlMediaIo(
         /** How many segments the reader keeps named beyond those the last playlist it served names. */
         const val MAX_SEGMENTS: Int = 8192
         private const val MAX_INITS = 64
+
+        /** An AES-128 key is 16 bytes, and a key file holds nothing else. */
+        private const val KEY_BYTES = 16
+        private const val MAX_KEY_BYTES = 1024L
 
         /** The most bytes of a master playlist read to decide, which any master fits. */
         const val MAX_MASTER_BYTES: Int = 512 * 1024

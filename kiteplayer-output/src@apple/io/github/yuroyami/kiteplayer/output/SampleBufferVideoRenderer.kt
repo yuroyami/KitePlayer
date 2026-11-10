@@ -61,6 +61,8 @@ import platform.CoreVideo.CVPixelBufferGetBaseAddress
 import platform.CoreVideo.CVPixelBufferGetBaseAddressOfPlane
 import platform.CoreVideo.CVPixelBufferGetBytesPerRow
 import platform.CoreVideo.CVPixelBufferGetBytesPerRowOfPlane
+import platform.CoreVideo.CVPixelBufferGetHeight
+import platform.CoreVideo.CVPixelBufferGetHeightOfPlane
 import platform.CoreVideo.CVPixelBufferLockBaseAddress
 import platform.CoreVideo.CVPixelBufferRef
 import platform.CoreVideo.CVPixelBufferRefVar
@@ -596,19 +598,20 @@ internal fun copyIntoPixelBuffer(
         val filled = runCatching {
             when (picture.format) {
                 PlayerPixelFormat.Bgra -> {
-                    copyRows(picture.planes[0], CVPixelBufferGetBaseAddress(buffer), CVPixelBufferGetBytesPerRow(buffer).toInt())
+                    copyRows(picture.planes[0], CVPixelBufferGetBaseAddress(buffer), CVPixelBufferGetBytesPerRow(buffer).toInt(), CVPixelBufferGetHeight(buffer).toInt())
                 }
                 PlayerPixelFormat.Nv12 -> {
-                    copyRows(picture.planes[0], CVPixelBufferGetBaseAddressOfPlane(buffer, 0uL), CVPixelBufferGetBytesPerRowOfPlane(buffer, 0uL).toInt())
-                    copyRows(picture.planes[1], CVPixelBufferGetBaseAddressOfPlane(buffer, 1uL), CVPixelBufferGetBytesPerRowOfPlane(buffer, 1uL).toInt())
+                    copyRows(picture.planes[0], CVPixelBufferGetBaseAddressOfPlane(buffer, 0uL), CVPixelBufferGetBytesPerRowOfPlane(buffer, 0uL).toInt(), CVPixelBufferGetHeightOfPlane(buffer, 0uL).toInt())
+                    copyRows(picture.planes[1], CVPixelBufferGetBaseAddressOfPlane(buffer, 1uL), CVPixelBufferGetBytesPerRowOfPlane(buffer, 1uL).toInt(), CVPixelBufferGetHeightOfPlane(buffer, 1uL).toInt())
                 }
                 else -> {
-                    copyRows(picture.planes[0], CVPixelBufferGetBaseAddressOfPlane(buffer, 0uL), CVPixelBufferGetBytesPerRowOfPlane(buffer, 0uL).toInt())
+                    copyRows(picture.planes[0], CVPixelBufferGetBaseAddressOfPlane(buffer, 0uL), CVPixelBufferGetBytesPerRowOfPlane(buffer, 0uL).toInt(), CVPixelBufferGetHeightOfPlane(buffer, 0uL).toInt())
                     interleaveChroma(
                         u = picture.planes[1],
                         v = picture.planes[2],
                         into = CVPixelBufferGetBaseAddressOfPlane(buffer, 1uL),
                         destinationBytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(buffer, 1uL).toInt(),
+                        destinationRows = CVPixelBufferGetHeightOfPlane(buffer, 1uL).toInt(),
                     )
                 }
             }
@@ -626,11 +629,17 @@ internal fun copyIntoPixelBuffer(
 }
 
 /** Row by row, because the source and the destination almost never share a stride. */
-private fun copyRows(plane: MetalPicture.SoftwarePlanes.Plane, into: COpaquePointer?, destinationBytesPerRow: Int) {
+/**
+ * Copies [plane] into a destination plane of [destinationRows] rows. A source with more rows is cut
+ * to the buffer, and one with fewer is refused, so a custom resolver's inconsistent planes can
+ * neither write past the native buffer nor pass a half-filled picture off as whole (#844).
+ */
+private fun copyRows(plane: MetalPicture.SoftwarePlanes.Plane, into: COpaquePointer?, destinationBytesPerRow: Int, destinationRows: Int) {
     val destination = into ?: error("the pixel buffer gave no base address")
+    check(plane.rows >= destinationRows) { "a plane of ${plane.rows} rows cannot fill a picture plane of $destinationRows" }
     val width = minOf(plane.bytesPerRow, destinationBytesPerRow)
     plane.bytes.usePinned { pinned ->
-        for (row in 0 until plane.rows) {
+        for (row in 0 until destinationRows) {
             memcpy(
                 (destination.reinterpret<ByteVar>() + row.toLong() * destinationBytesPerRow),
                 pinned.addressOf(row * plane.bytesPerRow),
@@ -646,10 +655,13 @@ private fun interleaveChroma(
     v: MetalPicture.SoftwarePlanes.Plane,
     into: COpaquePointer?,
     destinationBytesPerRow: Int,
+    destinationRows: Int,
 ) {
     val destination = (into ?: error("the pixel buffer gave no chroma base address")).reinterpret<ByteVar>()
+    // Bounded by the destination as copyRows is (#844).
+    check(minOf(u.rows, v.rows) >= destinationRows) { "chroma planes of ${u.rows} and ${v.rows} rows cannot fill $destinationRows" }
     val samples = minOf(u.bytesPerRow, v.bytesPerRow, destinationBytesPerRow / 2)
-    for (row in 0 until minOf(u.rows, v.rows)) {
+    for (row in 0 until destinationRows) {
         val destinationRow = destination + row.toLong() * destinationBytesPerRow
         val uRow = row * u.bytesPerRow
         val vRow = row * v.bytesPerRow

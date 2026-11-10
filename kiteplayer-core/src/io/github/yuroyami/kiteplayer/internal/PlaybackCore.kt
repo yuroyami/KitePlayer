@@ -1043,40 +1043,48 @@ internal class PlaybackCore(
     /**
      * Answers an [addExternalSubtitle] only once the rebuild its selection triggered has landed.
      *
-     * Launched on the session dispatcher, which is the actor's own lane, so the rollback below
-     * touches actor state under exactly the confinement every handler runs in. A selection that did
-     * not apply takes the appended track back out again: a row in the track table that nothing can
-     * ever show is worse than a call that failed and said so.
+     * A selection that did not apply takes the appended track back out again: a row in the track
+     * table that nothing can ever show is worse than a call that failed and said so. The wait runs
+     * beside the actor, under the work close cancels, and the rollback goes back to the actor as a
+     * command, because only the actor changes the track table: run here, it changed it in the gaps
+     * where the actor suspended inside a handler, and after close beside the close finalizer (#795).
      */
     private fun awaitSubtitleAdd(
         id: TrackId,
         selection: CompletableDeferred<TrackChange>,
         reply: CompletableDeferred<TrackId>,
     ) {
-        scope.launch {
+        scope.launch(looseWork) {
             val outcome = try {
                 selection.await()
             } catch (cancellation: CancellationException) {
                 reply.completeExceptionally(cancellation)
                 throw cancellation
             } catch (failure: Throwable) {
-                withdrawExternalSubtitle(id)
-                reply.completeExceptionally(failure)
+                withdrawOnActor(id, reply, failure)
                 return@launch
             }
             if (outcome is TrackChange.Applied) {
                 reply.complete(id)
                 return@launch
             }
-            withdrawExternalSubtitle(id)
             val why = when (outcome) {
                 is TrackChange.Superseded -> "a later track selection replaced it"
                 is TrackChange.Discarded -> outcome.reason
                 is TrackChange.Applied -> ""
             }
-            reply.completeExceptionally(
-                IllegalStateException("the subtitle file loaded but its selection did not apply: $why"),
-            )
+            withdrawOnActor(id, reply, IllegalStateException("the subtitle file loaded but its selection did not apply: $why"))
+        }
+    }
+
+    /**
+     * Asks the actor to take [id] back out and then answers [reply] with [failure]. The command
+     * carries [reply] as its own, so a close that drains it unrun still answers it; a closed
+     * mailbox answers it here.
+     */
+    private fun withdrawOnActor(id: TrackId, reply: CompletableDeferred<TrackId>, failure: Throwable) {
+        if (!commands.trySend(CoreCommand.WithdrawExternalSubtitle(id, failure, reply)).isSuccess) {
+            reply.completeExceptionally(failure)
         }
     }
 
@@ -3476,6 +3484,10 @@ internal class PlaybackCore(
             is CoreCommand.AddExternalSubtitle -> addExternalSubtitle(command)
             is CoreCommand.ReloadExternalSubtitle -> reloadExternalSubtitle(command)
             is CoreCommand.ExternalSubtitleRead -> command.adopt()
+            is CoreCommand.WithdrawExternalSubtitle -> {
+                withdrawExternalSubtitle(command.id)
+                command.reply.completeExceptionally(command.failure)
+            }
             is CoreCommand.ThumbnailsRead -> command.adopt()
             is CoreCommand.VariantMoved -> command.adopt()
             is CoreCommand.ThumbnailQuery -> command.reply.complete(thumbnailTarget())
@@ -17233,6 +17245,10 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
      */
     class ExternalSubtitleRead(val adopt: suspend () -> Unit) :
         CoreCommand("addExternalSubtitle", CompletableDeferred(Unit))
+
+    /** An added subtitle file whose selection did not apply comes back out (#795); [reply] is the add's own. */
+    class WithdrawExternalSubtitle(val id: TrackId, val failure: Throwable, val reply: CompletableDeferred<TrackId>) :
+        CoreCommand("addExternalSubtitle", reply)
 
     /** The item's thumbnail file was read off the actor (#433); [adopt] runs on the actor. */
     class ThumbnailsRead(val adopt: suspend () -> Unit) :

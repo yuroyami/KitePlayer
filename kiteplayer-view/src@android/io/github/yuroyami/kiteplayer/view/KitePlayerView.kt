@@ -167,6 +167,9 @@ public open class KitePlayerView @JvmOverloads constructor(
      */
     public var player: KitePlayer? = null
         set(value) {
+            // The same player again changes nothing. Without this, every Compose update restarted
+            // the state watch and told a screen reader the state again (#937).
+            if (field === value) return
             field = value
             binding.setPlayer(value)
             updateAccessibilityState()

@@ -336,6 +336,26 @@ class KitePlayerAwtViewTest {
     }
 
     @Test
+    fun settingTheSamePlayerAgainKeepsTheControlsItBuilt() {
+        // A Compose update assigns the player on every run, so the same player again must change
+        // nothing, or each label change rebuilds the controls and restarts the state watch (#937).
+        val view = KitePlayerAwtView()
+        view.setSize(640, 360)
+        view.showsControls = true
+        val paired = player()
+        view.player = paired
+        val model = assertNotNull(view.controls)
+        view.player = paired
+        assertSame(model, view.controls)
+        assertEquals(1, view.mouseListeners.size)
+
+        // Another player still rebuilds them.
+        view.player = player()
+        assertTrue(view.controls !== model)
+        view.release()
+    }
+
+    @Test
     fun turningTheControlsOnAddsThemAndTurningThemOffTakesThemAway() {
         val view = KitePlayerAwtView()
         view.setSize(640, 360)

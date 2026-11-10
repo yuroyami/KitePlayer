@@ -47,7 +47,7 @@ internal actual fun platformKitePlayerSurface(
             if (it.accessibilityVideoLabel != label) it.accessibilityVideoLabel = label
             val format = accessibilityStateFormat ?: ::accessibilityStateText
             if (it.accessibilityStateFormat != format) it.accessibilityStateFormat = format
-            it.player = player
+            if (it.player !== player) it.player = player
         },
     )
     DisposableEffect(view) {

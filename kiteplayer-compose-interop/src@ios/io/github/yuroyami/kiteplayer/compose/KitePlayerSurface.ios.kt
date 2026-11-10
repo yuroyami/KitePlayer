@@ -29,7 +29,7 @@ internal actual fun platformKitePlayerSurface(
             if (view.accessibilityVideoLabel != label) view.accessibilityVideoLabel = label
             val format = accessibilityStateFormat ?: ::accessibilityStateText
             if (view.accessibilityStateFormat != format) view.accessibilityStateFormat = format
-            view.player = player
+            if (view.player !== player) view.player = player
         },
         onRelease = { view -> view.release() },
     )

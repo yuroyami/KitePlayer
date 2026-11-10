@@ -14,8 +14,7 @@ import kotlin.js.Promise
  * The real device behind [WebAudioSink]: an `AudioWorklet` holding a queue this side keeps full.
  *
  * Everything JS is in this file and nothing else knows the sink is a browser at all. The state it
- * hands back is one plain JS object holding the context, the node, the staging array and three
- * counters, so Kotlin reads scalars out of it rather than owning JS references it would have to
+ * hands back is one plain JS object holding the context, the node and three counters, so Kotlin reads scalars out of it rather than owning JS references it would have to
  * keep alive.
  */
 internal class WebAudioWorkletDevice private constructor(
@@ -31,20 +30,17 @@ internal class WebAudioWorkletDevice private constructor(
     override fun outputLatencySeconds(): Double? = webAudioLatencySeconds(state).takeIf { it >= 0.0 }
 
     /**
-     * Copies one block across the JS line a sample at a time, because there is no bulk move.
+     * Sends one block to the worklet in two crossings, packed as [packSamples] packs it, with its
+     * buffer transferred to the worklet rather than copied (#909).
      *
-     * Kotlin/Wasm has no typed-array bridge: `WebMemory.readBytes` in KiteFFmpeg loops per byte for
-     * the same reason, and `BindingProof.fetchClip` says so in its own KDoc. Per sample rather than
-     * per byte is the cheap version of the same limit, and the cost is real but bounded: 2048 calls
-     * per block is about 96,000 a second for 48 kHz stereo, each one a direct wasm-to-JS import.
-     *
-     * The fix is not a smarter loop here. It is either a typed-array bridge in the language, or the
-     * Worker, where `SharedArrayBuffer` becomes legal and the ring stops being copied at all.
+     * Kotlin/Wasm has no typed-array bridge, and the block used to cross a sample at a time, about
+     * 96,000 calls a second for 48 kHz stereo, then copied twice more by `slice` and `postMessage`.
+     * A worker does not remove the copy by itself: it gets `SharedArrayBuffer` only under the same
+     * cross-origin isolation as its page, which the default artifact does not ask for.
      */
     override fun enqueue(samples: FloatArray, frames: Int) {
-        val count = frames * channels
-        for (i in 0 until count) webAudioStage(state, i, samples[i])
-        webAudioPush(state, frames)
+        if (frames <= 0) return
+        webAudioPush(state, samplesOf(packSamples(samples, frames * channels)), frames)
     }
 
     override fun flush(): Unit = webAudioFlush(state)
@@ -226,7 +222,6 @@ registerProcessor('kite-sink', KiteSinkProcessor);
         });
         const s = {
           ctx: ctx, node: node, channels: channels,
-          staging: new Float32Array(blockFrames * channels),
           sent: 0, consumed: 0, silence: 0,
         };
         node.port.onmessage = (e) => { s.consumed = e.data.consumed; s.silence = e.data.silence; };
@@ -258,18 +253,14 @@ internal external fun webAudioSilence(state: JsAny): Int
 )
 private external fun webAudioLatencySeconds(state: JsAny): Double
 
-@JsFun("(s, i, v) => { s.staging[i] = v; }")
-private external fun webAudioStage(state: JsAny, index: Int, value: Float)
-
-/** `slice` because the staging array is reused and `postMessage` must not hand over a live view. */
+/** Hands [samples], a fresh `Float32Array`, to the worklet, transferring its buffer rather than copying it. */
 @JsFun(
-    """(s, frames) => {
-      const n = frames * s.channels;
-      s.node.port.postMessage({ cmd: 'push', samples: s.staging.slice(0, n) });
+    """(s, samples, frames) => {
+      s.node.port.postMessage({ cmd: 'push', samples: samples }, [samples.buffer]);
       s.sent += frames;
     }""",
 )
-private external fun webAudioPush(state: JsAny, frames: Int)
+private external fun webAudioPush(state: JsAny, samples: JsAny, frames: Int)
 
 @JsFun("(s) => { s.node.port.postMessage({ cmd: 'flush' }); }")
 private external fun webAudioFlush(state: JsAny)

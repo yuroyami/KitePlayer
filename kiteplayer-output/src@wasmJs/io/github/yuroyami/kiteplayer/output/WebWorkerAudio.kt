@@ -130,11 +130,14 @@ internal class WorkletPortDevice(
 
     override fun outputLatencySeconds(): Double? = latencySeconds()
 
-    /** The same per-sample crossing as the page's sink, now on the worker's thread instead of the page's. */
+    /**
+     * Sends one block to the worklet in two crossings, packed as [packSamples] packs it, with its
+     * buffer transferred rather than copied (#909). It crossed once per sample before, on the
+     * worker's only thread, beside demux and decode.
+     */
     override fun enqueue(samples: FloatArray, frames: Int) {
-        val count = frames * channels
-        for (i in 0 until count) webPortStage(port.state, i, samples[i])
-        webPortPush(port.state, frames)
+        if (frames <= 0) return
+        webPortPush(port.state, samplesOf(packSamples(samples, frames * channels)), frames)
     }
 
     override fun flush(): Unit = webPortFlush(port.state)
@@ -206,13 +209,13 @@ private external fun webWorkletSuspend(state: JsAny)
 private external fun webWorkletClose(state: JsAny)
 
 /**
- * The worker's state for one port: the staging array and the three counters the page's sink keeps,
+ * The worker's state for one port: the three counters the page's sink keeps,
  * with the worklet's reports arriving on the port itself. Same field names as the page's state, so
  * the queue and silence readers of [WebAudioWorkletDevice] read both.
  */
 @JsFun(
     """(port, channels, blockFrames) => {
-      const s = { port: port, channels: channels, staging: new Float32Array(blockFrames * channels), sent: 0, consumed: 0, silence: 0 };
+      const s = { port: port, channels: channels, sent: 0, consumed: 0, silence: 0 };
       port.onmessage = (e) => {
         const d = e.data;
         if (d && typeof d.consumed === 'number') { s.consumed = d.consumed; s.silence = d.silence; }
@@ -222,17 +225,14 @@ private external fun webWorkletClose(state: JsAny)
 )
 private external fun webPortSetup(port: JsAny, channels: Int, blockFrames: Int): JsAny
 
-@JsFun("(s, i, v) => { s.staging[i] = v; }")
-private external fun webPortStage(state: JsAny, index: Int, value: Float)
-
+/** Hands [samples], a fresh `Float32Array`, to the worklet, transferring its buffer rather than copying it. */
 @JsFun(
-    """(s, frames) => {
-      const n = frames * s.channels;
-      s.port.postMessage({ cmd: 'push', samples: s.staging.slice(0, n) });
+    """(s, samples, frames) => {
+      s.port.postMessage({ cmd: 'push', samples: samples }, [samples.buffer]);
       s.sent += frames;
     }""",
 )
-private external fun webPortPush(state: JsAny, frames: Int)
+private external fun webPortPush(state: JsAny, samples: JsAny, frames: Int)
 
 @JsFun("(s) => { s.port.postMessage({ cmd: 'flush' }); }")
 private external fun webPortFlush(state: JsAny)

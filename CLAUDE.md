@@ -127,10 +127,11 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - The browser half dies under concurrent load and reports that the test process exited
   unexpectedly, naming whichever test was in flight, which reads like that test crashed. Same rule:
   re-run it alone first.
-- A browser test that runs longer than two seconds is killed rather than failed, because the test
-  runner's per-test default is 2000 ms and Kotlin does not raise it. Every module that runs browser
-  tests needs a timeout config file; copy the one that has it. Wiring a module's browser half into
-  CI without it is how a green suite becomes an intermittent red.
+- The web tests run through `scripts/web-tests`, whose harness gives each test 25 minutes and then
+  fails it by name as timed out (#726). The limit sits above every test's own `runTest` limit, so
+  a slow test still fails in its own words; a module's config can lower it with `testTimeoutMs`,
+  and Node reads `KITE_TEST_TIMEOUT_MS`. A test that times out keeps running in the background,
+  because nothing can stop it, so read the first failure of such a run, not the last.
 - `merge` and `channelFlow` collect their sources in coroutines they launch, so a collector started
   undispatched is not subscribed when its start returns. Wrapping a sink's event flow in `merge`
   lost the first device notice in `CoreAudioSinkDeviceWatchTest`. Add to such a flow with

@@ -183,6 +183,23 @@ class WebCanvasFlashGuardTest {
         }
     }
 
+    /** Turning the guard off while paused draws the held picture again, undimmed (#737). */
+    @Test
+    fun turningTheGuardOffBrightensAHeldDimmedPicture() = runTest {
+        withStage {
+            val canvas = flashCanvas()
+            val level = intArrayOf(0)
+            val renderer = WebCanvasVideoRenderer(canvas) { _, destination -> paintLevel(destination, level[0]); true }
+            renderer.setFlashGuard(FlashGuard.On)
+            strobe(renderer, level, frames = 10)
+            val fills = fillCount(canvas)
+            renderer.setFlashGuard(FlashGuard.Off)
+            renderer.setViewport(width = 1280, height = 720, scale = 1f)
+            assertEquals(fills, fillCount(canvas), "the held picture is still drawn dimmed after the guard went off")
+            renderer.close()
+        }
+    }
+
     @Test
     fun takingThePictureOffStartsTheHistoryAfresh() = runTest {
         withStage {

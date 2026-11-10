@@ -235,6 +235,12 @@ public class WebCanvasVideoRenderer(
         if (flashGuard == mode) return
         flashGuard = mode
         guard.reset()
+        // A paused picture held dimmed is brightened at once when the guard stops dimming, rather
+        // than at the next frame, which a paused player never draws (#737).
+        if (mode != FlashGuard.On && retainedFlashFactor < 1f) {
+            retainedFlashFactor = 1f
+            state?.let(::redrawRetained)
+        }
     }
 
     private fun drawStage(s: JsAny, layout: FrameLayout, flashFactor: Float) {

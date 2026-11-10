@@ -222,7 +222,14 @@ public class AwtCanvasVideoRenderer(
      */
     override fun setFlashGuard(mode: FlashGuard) {
         // A change of mode starts the history afresh, as taking the picture off does.
-        if (flashGuard.getAndSet(mode) != mode) guardForgets.set(true)
+        if (flashGuard.getAndSet(mode) == mode) return
+        guardForgets.set(true)
+        // A paused picture held dimmed is brightened at once when the guard stops dimming, rather
+        // than at the next frame, which a paused player never paints (#737).
+        if (mode != FlashGuard.On) {
+            val wasDimmed = synchronized(lock) { (lastDim < 1f).also { lastDim = 1f } }
+            if (wasDimmed) repaintRetained()
+        }
     }
 
     /** The flash guard's factor for [pixels], measured on a sparse lattice of them: 1 when the guard is off. */

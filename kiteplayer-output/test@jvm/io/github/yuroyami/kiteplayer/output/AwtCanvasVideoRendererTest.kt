@@ -806,6 +806,21 @@ class AwtCanvasVideoRendererTest {
         s.renderer.close()
     }
 
+    /** Turning the guard off while paused brightens the held picture at once (#737). */
+    @Test
+    fun `turning the guard off brightens a held dimmed picture`() = runTest {
+        val s = Strobed()
+        s.renderer.setFlashGuard(io.github.yuroyami.kiteplayer.FlashGuard.On)
+        assertTrue(s.show(strobe(30)).last() < 1f)
+        val painted = s.presenter.dims.size
+        s.renderer.setFlashGuard(io.github.yuroyami.kiteplayer.FlashGuard.Off)
+        assertTrue(s.presenter.dims.size > painted, "nothing was painted after the guard went off")
+        assertEquals(1f, s.presenter.dims.last(), "the paused picture stayed dimmed")
+        s.renderer.setOverlay(null)
+        assertEquals(1f, s.presenter.dims.last(), "a later repaint dimmed it again")
+        s.renderer.close()
+    }
+
     @Test
     fun `taking the picture off forgets the run`() = runTest {
         val s = Strobed()

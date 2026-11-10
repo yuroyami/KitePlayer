@@ -17,6 +17,10 @@
 #   5. A plain-http URL. Anyone on the path can serve their own bytes.
 #   6. A wrapper that does not pin its download by SHA-256: `kotlin`, `kotlin.bat`, and the Gradle
 #      wrapper of the verification consumer projects.
+#   7. An emscripten that emscripten-version.txt does not choose. The file must hold an exact
+#      version, every workflow must install it through scripts/install-emscripten.sh, and it must
+#      match the version KiteFFmpeg's chain release job builds with, when that checkout is beside
+#      this one (#778).
 #
 #   ./scripts/check-dependency-hygiene.sh             # must PASS
 #   ./scripts/check-dependency-hygiene.sh --falsify   # plants each violation in turn, must FAIL
@@ -133,6 +137,31 @@ for props in $(build_files | grep "gradle-wrapper.properties"); do
     fi
 done
 
+# ---- 7. One pinned emscripten ----
+EMSCRIPTEN_PIN="emscripten-version.txt"
+emsdk_pin=$(tr -d '[:space:]' < "$EMSCRIPTEN_PIN" 2>/dev/null || true)
+if [[ "$emsdk_pin" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    pass "$EMSCRIPTEN_PIN pins emscripten $emsdk_pin"
+else
+    fail "$EMSCRIPTEN_PIN does not hold an exact emscripten version"
+fi
+unpinned=$(grep -nE 'setup-emsdk|brew install[^#]*emscripten|emsdk[^#]*install[[:space:]]+latest' .github/workflows/*.yml /dev/null || true)
+if [ -n "$unpinned" ]; then
+    fail "a workflow installs emscripten without scripts/install-emscripten.sh"
+    printf '%s\n' "$unpinned" | while IFS= read -r line; do note "$line"; done
+else
+    pass "every workflow installs the pinned emscripten"
+fi
+SIBLING_CHAIN_JOB="../KiteFFmpeg/.github/workflows/release-ass-chain.yml"
+if [ -f "$SIBLING_CHAIN_JOB" ]; then
+    chain_emsdk=$(sed -n 's/^[[:space:]]*EMSCRIPTEN_VERSION:[[:space:]]*"\{0,1\}\([0-9.]*\)"\{0,1\}[[:space:]]*$/\1/p' "$SIBLING_CHAIN_JOB" | head -1)
+    if [ "$chain_emsdk" = "$emsdk_pin" ]; then
+        pass "KiteFFmpeg's chain job builds with the same emscripten $chain_emsdk"
+    else
+        fail "KiteFFmpeg's chain job builds with emscripten '$chain_emsdk', and $EMSCRIPTEN_PIN pins '$emsdk_pin'"
+    fi
+fi
+
 echo
 if [ "$MODE" = "--falsify" ]; then
     echo "== FALSIFICATION arm: each rule is planted in turn and must be caught"
@@ -147,7 +176,8 @@ if [ "$MODE" = "--falsify" ]; then
     MODULE="kiteplayer-core/module.yaml"
     PLUGIN="build-plugins/dokka/plugin.yaml"
     WRAPPER="verification/gradle/wrapper/gradle-wrapper.properties"
-    TOUCHED="$CATALOG $TEMPLATE $MODULE $PLUGIN $WRAPPER kotlin"
+    WEB_JOB=".github/workflows/ci.yml"
+    TOUCHED="$CATALOG $TEMPLATE $MODULE $PLUGIN $WRAPPER kotlin $EMSCRIPTEN_PIN $WEB_JOB"
     for f in $TOUCHED; do cp -p "$f" "$scratch/$(echo "$f" | tr / _)"; done
     restore() { for f in $TOUCHED; do cp -p "$scratch/$(echo "$f" | tr / _)" "$f"; done; }
 
@@ -182,6 +212,10 @@ if [ "$MODE" = "--falsify" ]; then
         "grep -v '^kotlin_cli_sha256=' kotlin > '$scratch/k' && cat '$scratch/k' > kotlin"
     plant "a Gradle wrapper that stopped pinning its distribution" \
         "grep -v '^distributionSha256Sum=' '$WRAPPER' > '$scratch/w' && cp '$scratch/w' '$WRAPPER'"
+    plant "an emscripten pin that is not an exact version" \
+        "echo latest > '$EMSCRIPTEN_PIN'"
+    plant "a workflow that installs whatever emscripten brew has" \
+        "printf '\n# - run: brew install emscripten\n' >> '$WEB_JOB'"
 
     restore
     echo

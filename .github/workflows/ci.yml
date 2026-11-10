@@ -1170,10 +1170,10 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      # emcc links kiteass.mjs, the libass web module that kiteplayer-libass's web tests load.
-      - uses: mymindstorm/setup-emsdk@6ab9eb1bda2574c4ddb79809fc9247783eaf9021 # v14
-        with:
-          version: latest
+      # emcc links kiteass.mjs, the libass web module that kiteplayer-libass's web tests load. The
+      # version is the one emscripten-version.txt pins, which the chain was built with (#778).
+      - name: Install emscripten
+        run: ./scripts/install-emscripten.sh "$RUNNER_TEMP/emsdk"
       - name: kiteplayer-libass C suites on wasm32
         run: ./kiteplayer-libass/native/scripts/run-c-tests.sh wasm32
       - uses: actions/cache@v4

@@ -126,8 +126,9 @@ jobs:
             kotlin-publish-
             kotlin-macos-host-
 
+      # The version emscripten-version.txt pins, the one CI links with (#778).
       - name: Install emscripten
-        run: brew install emscripten
+        run: ./scripts/install-emscripten.sh "$RUNNER_TEMP/emsdk"
 
       # Before anything builds, so that every publication of this run reads the same settings.
       # Only in this runner's checkout: the committed default stays manual.

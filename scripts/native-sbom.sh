@@ -132,8 +132,16 @@ else
     iconv_version=$(unknown "no iconv.h is in $mingw/include")
 fi
 
+# The emcc on the PATH must be the one emscripten-version.txt pins, so the bill names the compiler
+# that CI used too (#778).
+emscripten_pin=$(tr -d "[:space:]" < "$ROOT/emscripten-version.txt")
 emscripten_version=$({ emcc --version 2>/dev/null || true; } | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
-[ -n "$emscripten_version" ] || emscripten_version=$(unknown "emcc is not on the PATH")
+if [ -z "$emscripten_version" ]; then
+    emscripten_version=$(unknown "emcc is not on the PATH")
+elif [ "$emscripten_version" != "$emscripten_pin" ]; then
+    echo "emcc on the PATH is $emscripten_version, and emscripten-version.txt pins $emscripten_pin" >&2
+    exit 1
+fi
 
 # NOTICE must name every version that the artifacts contain. Tags become the version a person
 # would write: v1.0.16 is 1.0.16, and VER-2-14-3 is 2.14.3.

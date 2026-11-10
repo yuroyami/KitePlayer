@@ -823,8 +823,9 @@ internal class DashHlsMediaIo(
      * the DASH numbers. Later loads follow the last segment given, by its start time, so a manifest
      * that counts from a different number after a refresh moves no segment.
      */
-    private class LiveSequence {
+    internal class LiveSequence {
         private var lastStartMicros: Long? = null
+        private var lastDurationMicros = 0L
         private var lastSequence = 0L
 
         fun first(plan: DashTimedPlan): Long {
@@ -837,12 +838,21 @@ internal class DashHlsMediaIo(
                     val at = segments.indexOfFirst { it.startMicros == previous }
                     when {
                         at >= 0 -> lastSequence - at
-                        segments.first().startMicros > previous -> lastSequence + 1
+                        // Segments left the window between the loads: the sequence moves on by as
+                        // many as fit between the last start given and the new first, so the gap
+                        // shows, and the time of day, which places a continuous sequence segment
+                        // after segment, does not drift by what was skipped (#756).
+                        segments.first().startMicros > previous -> {
+                            val gap = segments.first().startMicros - previous
+                            val skipped = if (lastDurationMicros > 0) (gap + lastDurationMicros / 2) / lastDurationMicros else 1L
+                            lastSequence + skipped.coerceAtLeast(1L)
+                        }
                         else -> segments.first().number
                     }
                 }
             }
             lastStartMicros = segments.last().startMicros
+            lastDurationMicros = segments.last().durationMicros
             lastSequence = first + segments.size - 1
             return first
         }

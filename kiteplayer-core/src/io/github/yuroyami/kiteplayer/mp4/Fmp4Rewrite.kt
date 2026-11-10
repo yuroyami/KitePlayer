@@ -214,12 +214,20 @@ public object Fmp4Rewrite {
      * durations FFmpeg hands on as the frames' stay near the frames' own (#876). The step is the
      * smallest even share that still lets every later sample decode by the time it shows, and at
      * least one tick when no room is left.
+     *
+     * Only the next [HELD_LOOKAHEAD] samples are asked. Every held sample asked all of the rest, so a
+     * segment of 47,000 samples at one decode time took 3.4 s to write (#723); a join holds back a
+     * few pictures, and a sample further on than this cannot set the share.
      */
     private fun heldStep(previous: Long, index: Int, shown: LongArray, end: Long): Long {
         var step = (end - previous) / (shown.size - index + 1)
-        for (j in index until shown.size) step = minOf(step, (shown[j] - previous) / (j - index + 1))
+        val until = minOf(shown.size, index + HELD_LOOKAHEAD)
+        for (j in index until until) step = minOf(step, (shown[j] - previous) / (j - index + 1))
         return step.coerceAtLeast(1)
     }
+
+    /** How many samples ahead [heldStep] looks. */
+    private const val HELD_LOOKAHEAD = 256
 
     /** [ticks] of the timescale [from] in the timescale [to], exactly when the two are the same. */
     private fun scaled(ticks: Long, from: Long, to: Long): Long = when {

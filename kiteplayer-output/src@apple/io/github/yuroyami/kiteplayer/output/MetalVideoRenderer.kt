@@ -654,8 +654,14 @@ public class MetalVideoRenderer internal constructor(
     }
 
     override fun setViewport(width: Int, height: Int, scale: Float) {
-        viewportWidth.value = (width * scale).toInt()
-        viewportHeight.value = (height * scale).toInt()
+        val pixelWidth = (width * scale).toInt()
+        val pixelHeight = (height * scale).toInt()
+        val moved = pixelWidth != viewportWidth.value || pixelHeight != viewportHeight.value
+        viewportWidth.value = pixelWidth
+        viewportHeight.value = pixelHeight
+        // A paused picture is drawn again at the new size, or a rotation shows the old drawable
+        // stretched to the new bounds until play (#735).
+        if (moved) requestRedraw()
     }
 
     /**

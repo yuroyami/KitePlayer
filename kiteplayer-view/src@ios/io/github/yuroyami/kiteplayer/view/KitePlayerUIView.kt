@@ -25,6 +25,7 @@ import platform.CoreGraphics.CGSizeMake
 import platform.QuartzCore.CALayer
 import platform.QuartzCore.CAMetalLayer
 import platform.QuartzCore.CATransaction
+import platform.QuartzCore.kCAGravityResizeAspect
 import platform.UIKit.UIColor
 import platform.UIKit.UIScreen
 import platform.UIKit.UIView
@@ -368,6 +369,8 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
         setAccessibilityLabel(accessibilityVideoLabel)
         setAccessibilityTraits(UIAccessibilityTraitUpdatesFrequently)
         backgroundColor = UIColor.blackColor
+        // The frame shown while a resize settles keeps its shape instead of being stretched (#735).
+        metalLayer.contentsGravity = kCAGravityResizeAspect
         layer.addSublayer(videoLayer)
         layer.addSublayer(metalLayer)
         // Neither layer shows anything until a renderer generation claims one.
@@ -389,6 +392,9 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
             metalLayer.contentsScale = scale
             bounds.useContents {
                 metalLayer.drawableSize = CGSizeMake(size.width * scale, size.height * scale)
+                // The renderer draws its kept picture again at the new size, so a rotation while
+                // paused does not leave the old drawable stretched over the new bounds (#735).
+                binding.activeRenderer?.setViewport(size.width.toInt(), size.height.toInt(), scale.toFloat())
             }
         } finally {
             CATransaction.commit()

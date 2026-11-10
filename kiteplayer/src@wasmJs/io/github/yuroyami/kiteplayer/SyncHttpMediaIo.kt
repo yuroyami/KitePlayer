@@ -8,6 +8,7 @@ import io.github.yuroyami.kiteplayer.network.dash.DashUrlPolicy
 import kotlin.js.JsAny
 import kotlin.math.pow
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
 /**
@@ -77,7 +78,7 @@ internal class SyncHttpResolver(private val timeout: Duration) : MediaIoResolver
  * worker and needs no isolation headers.
  *
  * Each request asks for a window of the file. The window doubles while the reads run forward, up
- * to [MAX_WINDOW_BYTES], and starts small again after a seek, so a file read from the start takes
+ * to [SyncWindows.MAX_BYTES] or what the link delivers in time, and starts small again after a seek, so a file read from the start takes
  * few requests and a seek does not download what it skips. A server that ignores the range sends
  * the whole file, and every read is then answered from that.
  *
@@ -98,7 +99,7 @@ internal class SyncHttpMediaIo(
 
     private val state: JsAny = xhrState(headers.toJsObject(), timeout.inWholeMilliseconds.toDouble())
     private var position = 0L
-    private var nextWindow = FIRST_WINDOW_BYTES
+    private var nextWindow = SyncWindows.FIRST_BYTES
     private var closed = false
 
     /** False until the first request was made, which [start] or the first use of the answer does. */
@@ -215,9 +216,11 @@ internal class SyncHttpMediaIo(
     }
 
     private fun fetch(from: Long) {
-        nextWindow = if (from == windowEnd && from > 0) (nextWindow * 2).coerceAtMost(MAX_WINDOW_BYTES) else FIRST_WINDOW_BYTES
+        val rate = meter.bitsPerSecond()
+        nextWindow = SyncWindows.next(nextWindow, forward = from == windowEnd && from > 0, rate, timeout)
+        val allowed = SyncWindows.timeout(nextWindow, rate, timeout)
         val asked = TimeSource.Monotonic.markNow()
-        when (val status = xhrFetch(state, url, from.toDouble(), nextWindow.toDouble())) {
+        when (val status = xhrFetch(state, url, from.toDouble(), nextWindow.toDouble(), allowed.inWholeMilliseconds.toDouble())) {
             200, 206 -> {
                 // The whole request waits for the network, so all of its time counts.
                 meter.add(xhrWindowLength(state), asked.elapsedNow())
@@ -251,9 +254,6 @@ internal class SyncHttpMediaIo(
     }
 
     private companion object {
-        const val FIRST_WINDOW_BYTES = 1L shl 20
-        const val MAX_WINDOW_BYTES = 16L shl 20
-
         /** What [xhrFetch] answers when the request ran out of time. */
         const val TIMED_OUT = -1
 
@@ -262,6 +262,44 @@ internal class SyncHttpMediaIo(
 
         /** What [xhrFetch] answers when a range answer starts at another byte than the one asked for. */
         const val MISALIGNED = -3
+    }
+}
+
+/**
+ * The size and the time limit of each request of a [SyncHttpMediaIo].
+ *
+ * A browser's request timeout limits the whole request, from send to the last byte, so a window
+ * that the link cannot deliver within it failed as a stall while bytes still arrived: a 16 MiB
+ * window needs 4.5 Mbit/s to finish in 30 s (#896). Once the reader has measured the link, a
+ * window holds no more than the link delivers in [FIT_SHARE] of the stall timeout, and each
+ * request is given the stall timeout plus twice the time its window needs at that rate.
+ */
+internal object SyncWindows {
+    const val FIRST_BYTES: Long = 1L shl 20
+    const val MAX_BYTES: Long = 16L shl 20
+
+    /** The smallest window a slow link is cut to, so each request still carries some bytes. */
+    const val SMALLEST_BYTES: Long = 64L shl 10
+
+    /** How much of the stall timeout a window may take at the measured rate. */
+    const val FIT_SHARE: Double = 0.5
+
+    /**
+     * The window after [previous]: twice it while the reads run [forward], up to [MAX_BYTES], or
+     * [FIRST_BYTES] again after a seek, and never more than [bitsPerSecond] delivers in
+     * [FIT_SHARE] of [stall].
+     */
+    fun next(previous: Long, forward: Boolean, bitsPerSecond: Long?, stall: Duration): Long {
+        val grown = if (forward) (previous * 2).coerceAtMost(MAX_BYTES) else FIRST_BYTES
+        val rate = bitsPerSecond?.takeIf { it > 0 } ?: return grown
+        val fits = (rate / 8.0 * stall.inWholeMilliseconds / 1000.0 * FIT_SHARE).toLong()
+        return grown.coerceAtMost(fits.coerceAtLeast(SMALLEST_BYTES))
+    }
+
+    /** The time one request of [window] bytes is given: [stall], and twice what the window takes at [bitsPerSecond]. */
+    fun timeout(window: Long, bitsPerSecond: Long?, stall: Duration): Duration {
+        val rate = bitsPerSecond?.takeIf { it > 0 } ?: return stall
+        return stall + (window * 8.0 / rate * 2).seconds
     }
 }
 
@@ -345,11 +383,11 @@ private external fun xhrState(headers: JsAny, timeoutMillis: Double): JsAny
  * lists only what the origin shows, because asking another origin for a hidden one logs a refusal.
  */
 @JsFun(
-    """(s, url, from, count) => {
+    """(s, url, from, count, timeout) => {
       const xhr = new XMLHttpRequest();
       xhr.open('GET', url, false);
       xhr.responseType = 'arraybuffer';
-      xhr.timeout = s.timeout;
+      xhr.timeout = timeout;
       for (const k of Object.keys(s.headers)) { try { xhr.setRequestHeader(k, s.headers[k]); } catch (e) {} }
       xhr.setRequestHeader('Range', 'bytes=' + from + '-' + (from + count - 1));
       const validator = s.tag || s.modified;
@@ -414,7 +452,7 @@ private external fun xhrState(headers: JsAny, timeoutMillis: Double): JsAny
       return status;
     }""",
 )
-private external fun xhrFetch(state: JsAny, url: String, from: Double, count: Double): Int
+private external fun xhrFetch(state: JsAny, url: String, from: Double, count: Double, timeoutMillis: Double): Int
 
 /** One synchronous `HEAD` request, whose `Content-Length` becomes the size. Leaves the size unknown on any failure. */
 @JsFun(

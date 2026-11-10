@@ -14,9 +14,9 @@ import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * The display's refresh interval reaches the schedule. Every renderer used to answer null and the
- * engine discarded [RendererEvent.VsyncChanged] outright, so a 120 Hz phone and a ProMotion Mac
- * were paced no better than a display nobody asked.
+ * The display's refresh interval reaches the schedule and is kept there. That is all it checks:
+ * the schedule records the interval and does not pace by it yet, so this proves the value arrives,
+ * not that frames land on refresh edges (#738).
  */
 class VsyncAwarenessTest {
 

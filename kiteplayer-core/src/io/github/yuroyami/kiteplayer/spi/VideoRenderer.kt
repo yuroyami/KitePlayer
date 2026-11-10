@@ -19,8 +19,9 @@ import kotlinx.coroutines.flow.Flow
  * 2. The renderer owns the frame from the moment [present] is called, including when it fails, and
  *    closes it exactly once.
  * 3. A renderer must never call synchronously back into the player from inside [present].
- * 4. [vsyncIntervalNanos] is advisory. Returning null costs smoothness on a high refresh display
- *    and nothing else.
+ * 4. [vsyncIntervalNanos] is advisory, and today it is recorded for diagnostics only: the schedule
+ *    hands each frame over at its target whatever the answer, so null changes nothing yet. Pacing
+ *    against the display's refresh is #738.
  * 5. Losing a surface is an event, not an exception. Playback continues, the video frames not
  *    presented are counted as refused in `PlaybackStats.refusedFrames`, not as dropped, and audio
  *    keeps playing, because a minimised window should not stop the sound.

@@ -117,9 +117,9 @@ public class VideoPlayback(
 
     /**
      * The display's refresh interval, seeded at renderer attach and moved by
-     * [io.github.yuroyami.kiteplayer.spi.RendererEvent.VsyncChanged]. Advisory, exactly as the
-     * SPI says: null costs smoothness on a high-refresh display and nothing else. Held here
-     * because the schedule is the one consumer pacing against a display.
+     * [io.github.yuroyami.kiteplayer.spi.RendererEvent.VsyncChanged]. Recorded, not yet used: the
+     * schedule hands each frame over at its target and reads nothing here, so a renderer that
+     * answers null and one that answers 8.33 ms are paced the same (#738).
      */
     internal var vsyncIntervalNanos: Long? = null
 

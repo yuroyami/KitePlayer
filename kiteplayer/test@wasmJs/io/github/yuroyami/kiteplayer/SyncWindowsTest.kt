@@ -44,4 +44,12 @@ class SyncWindowsTest {
         // 64 KiB at 8 kbit/s is about 65 s, and the request is given that twice over on top of the stall timeout.
         assertTrue(SyncWindows.timeout(window, 8_000, stall) > 160.seconds)
     }
+
+    @Test
+    fun aTimedOutWindowIsAskedAgainAtAQuarterUntilTheSmallest() {
+        // #853: 16 MiB at an unmeasured 3 Mbit/s timed out; 4 MiB finishes in about 11 s.
+        assertEquals(4L shl 20, SyncWindows.retry(16L shl 20))
+        assertEquals(SyncWindows.SMALLEST_BYTES, SyncWindows.retry(128L shl 10))
+        assertEquals(null, SyncWindows.retry(SyncWindows.SMALLEST_BYTES))
+    }
 }

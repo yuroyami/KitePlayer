@@ -218,9 +218,17 @@ internal class SyncHttpMediaIo(
     private fun fetch(from: Long) {
         val rate = meter.bitsPerSecond()
         nextWindow = SyncWindows.next(nextWindow, forward = from == windowEnd && from > 0, rate, timeout)
-        val allowed = SyncWindows.timeout(nextWindow, rate, timeout)
-        val asked = TimeSource.Monotonic.markNow()
-        when (val status = xhrFetch(state, url, from.toDouble(), nextWindow.toDouble(), allowed.inWholeMilliseconds.toDouble())) {
+        var asked = TimeSource.Monotonic.markNow()
+        var status = xhrFetch(state, url, from.toDouble(), nextWindow.toDouble(), SyncWindows.timeout(nextWindow, rate, timeout).inWholeMilliseconds.toDouble())
+        // A window the link could not finish in time is asked once more at a quarter of its size,
+        // before the reader calls it a stall (#853): an unmeasured link, or one that slowed down.
+        val smaller = SyncWindows.retry(nextWindow)
+        if (status == TIMED_OUT && smaller != null) {
+            nextWindow = smaller
+            asked = TimeSource.Monotonic.markNow()
+            status = xhrFetch(state, url, from.toDouble(), nextWindow.toDouble(), SyncWindows.timeout(nextWindow, rate, timeout).inWholeMilliseconds.toDouble())
+        }
+        when (status) {
             200, 206 -> {
                 // The whole request waits for the network, so all of its time counts.
                 meter.add(xhrWindowLength(state), asked.elapsedNow())
@@ -295,6 +303,9 @@ internal object SyncWindows {
         val fits = (rate / 8.0 * stall.inWholeMilliseconds / 1000.0 * FIT_SHARE).toLong()
         return grown.coerceAtMost(fits.coerceAtLeast(SMALLEST_BYTES))
     }
+
+    /** The window to ask once more after [window] timed out, a quarter of it, or null when it is already the smallest. */
+    fun retry(window: Long): Long? = if (window <= SMALLEST_BYTES) null else (window / 4).coerceAtLeast(SMALLEST_BYTES)
 
     /** The time one request of [window] bytes is given: [stall], and twice what the window takes at [bitsPerSecond]. */
     fun timeout(window: Long, bitsPerSecond: Long?, stall: Duration): Duration {

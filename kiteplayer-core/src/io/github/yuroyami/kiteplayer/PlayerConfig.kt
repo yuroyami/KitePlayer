@@ -283,6 +283,11 @@ public data class BufferPolicy(
      * An open through the backend's own protocols is bounded by their timeouts instead.
      * An external subtitle file that stalls is skipped with a warning instead. Ending a read needs
      * a source that can interrupt; the FFmpeg backend can.
+     *
+     * The player in a Web Worker reads with synchronous requests, whose time limit covers a whole
+     * request rather than a silence. There each request is sized to what the measured link
+     * delivers in half of this time and given this time plus twice its own, and a request that
+     * still runs out is asked once more at a quarter of its size before the read stalls.
      */
     val stallTimeout: Duration = 30.seconds,
 ) {

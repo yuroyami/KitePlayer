@@ -13,6 +13,7 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowInsets
 import android.view.ViewConfiguration
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.FrameLayout
@@ -153,6 +154,35 @@ internal class ControlsOverlay(
         setOnClickListener { model.toggleVisible() }
         render(shown)
         watch = scope.launch { model.state.collect(::render) }
+    }
+
+    /**
+     * The bar keeps clear of the system bars, a display cutout and the gesture area of an
+     * edge-to-edge screen, while the layer still covers the whole picture (#935). Insets an
+     * ancestor consumed never reach this view, so a player inside padded content gets no extra room.
+     */
+    @Suppress("DEPRECATION")
+    override fun onApplyWindowInsets(insets: WindowInsets): WindowInsets {
+        val left: Int
+        val right: Int
+        val bottom: Int
+        if (Build.VERSION.SDK_INT >= 30) {
+            val safe = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+            left = safe.left
+            right = safe.right
+            bottom = safe.bottom
+        } else {
+            // The pre-30 form, which API 26 to 29 have.
+            left = insets.systemWindowInsetLeft
+            right = insets.systemWindowInsetRight
+            bottom = insets.systemWindowInsetBottom
+        }
+        val params = bar.layoutParams as? LayoutParams
+        if (params != null && (params.leftMargin != left || params.rightMargin != right || params.bottomMargin != bottom)) {
+            params.setMargins(left, 0, right, bottom)
+            bar.layoutParams = params
+        }
+        return insets
     }
 
     /** Stops following the model, which the caller closes. */

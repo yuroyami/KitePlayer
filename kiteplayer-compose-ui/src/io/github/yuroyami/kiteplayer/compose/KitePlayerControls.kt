@@ -17,10 +17,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -113,9 +112,11 @@ import kotlin.time.DurationUnit
  * `KitePlayerVideo(player) { KitePlayerControls(player) }`, or place it over a video yourself; it
  * fills what it is given.
  *
- * [contentPadding] keeps the controls clear of the system bars, a display cutout and the home
- * indicator, by default the safe drawing insets, which are zero on the desktop. The scrim still
- * covers the whole area. Pass `PaddingValues(0.dp)` when the controls sit inside padded content.
+ * [windowInsets] keeps the controls clear of the system bars, a display cutout and the home
+ * indicator, by default the safe drawing insets, which are zero on the desktop, as Material's own
+ * bars take them: insets an ancestor already consumed are left out, so a player inside a padded
+ * screen gets no extra room. The scrim still covers the whole area. Pass `WindowInsets(0, 0, 0, 0)`
+ * to turn it off.
  *
  * It is made only from the state holders, [rememberTransportState], [rememberSeekBarState],
  * [rememberVolumeState], [rememberTrackMenuState], [rememberQualityMenuState],
@@ -147,10 +148,10 @@ public fun KitePlayerControls(
     labels: KitePlayerControlsLabels = DefaultControlsLabels,
     onFullScreen: (() -> Unit)? = null,
     onPictureInPicture: (() -> Unit)? = null,
-    contentPadding: PaddingValues = WindowInsets.safeDrawing.asPaddingValues(),
+    windowInsets: WindowInsets = WindowInsets.safeDrawing,
 ) {
     if (player == null) return
-    Controls(rememberControlsSource(player), modifier, visibility, style, labels, onFullScreen, onPictureInPicture, contentPadding)
+    Controls(rememberControlsSource(player), modifier, visibility, style, labels, onFullScreen, onPictureInPicture, windowInsets)
 }
 
 internal enum class ControlsMenu { Audio, Subtitles, Quality, Speed }
@@ -181,7 +182,7 @@ internal fun Controls(
     labels: KitePlayerControlsLabels,
     onFullScreen: (() -> Unit)?,
     onPictureInPicture: (() -> Unit)?,
-    contentPadding: PaddingValues = PaddingValues(0.dp),
+    windowInsets: WindowInsets = WindowInsets(0, 0, 0, 0),
 ) {
     val transport = rememberTransportState(source)
     val seekBar = rememberSeekBarState(source)
@@ -246,7 +247,7 @@ internal fun Controls(
     val lift = remember(source) { SubtitleLift() }
     // How much of the output the bar covers, which the engine keeps subtitles above (#648).
     // The padding under the bar is covered too, so subtitles stay above the whole of it (#935).
-    val bottomPadding = with(LocalDensity.current) { contentPadding.calculateBottomPadding().roundToPx() }
+    val bottomPadding = windowInsets.getBottom(LocalDensity.current)
     val wantedLift = if (visibility.visible && height > 0 && barHeight > 0) {
         ((barHeight + bottomPadding).toFloat() / height).coerceIn(0f, 1f)
     } else {
@@ -300,7 +301,7 @@ internal fun Controls(
                     .background(style.scrimColor)
                     // The scrim covers everything; the controls keep clear of the system bars,
                     // cutouts and the home indicator of an edge-to-edge screen (#935).
-                    .padding(contentPadding)
+                    .windowInsetsPadding(windowInsets)
                     .onFocusChanged { if (visibility.visible) focusInside = it.hasFocus },
             ) {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
@@ -354,6 +355,7 @@ internal fun Controls(
                     }
                 }
                 val barDp = with(LocalDensity.current) { barHeight.toDp() }
+                val insetsHeight = with(LocalDensity.current) { (windowInsets.getTop(this) + windowInsets.getBottom(this)).toDp() }
                 if (seekBar.scrubbing) {
                     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                         ScrubPreview(
@@ -380,10 +382,7 @@ internal fun Controls(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(end = 8.dp, bottom = barDp + 4.dp)
-                            .heightIn(
-                                max = (tallest - barDp - 16.dp - contentPadding.calculateTopPadding() - contentPadding.calculateBottomPadding())
-                                    .coerceAtLeast(96.dp),
-                            ),
+                            .heightIn(max = (tallest - barDp - 16.dp - insetsHeight).coerceAtLeast(96.dp)),
                     )
                 }
                 LaunchedEffect(focusPlay) {

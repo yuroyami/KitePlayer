@@ -197,10 +197,18 @@ internal sealed interface Failure {
     }
 }
 
+/**
+ * The version of this protocol (#905). The page half comes from Maven and the worker half is a
+ * file an app copies from a release zip, so the two can be of different releases, and a call one
+ * of them cannot read went unanswered for ever. Raise it with every change to a message, a
+ * command, a control or a field that the other half must read.
+ */
+internal const val WORKER_PROTOCOL: Int = 1
+
 /** What the worker sends the page. */
 internal sealed interface WorkerMessage {
-    /** The worker's code is running and listening. */
-    data object Hello : WorkerMessage
+    /** The worker's code is running and listening, and speaks [protocol]: null from a worker made before it said. */
+    data class Hello(val protocol: Int?) : WorkerMessage
 
     /** The codec module loaded and the player exists. */
     data object Ready : WorkerMessage
@@ -282,7 +290,10 @@ internal fun PageMessage.encode(): JsAny = record {
 
 internal fun WorkerMessage.encode(): JsAny = record {
     when (val message = this@encode) {
-        WorkerMessage.Hello -> kind("hello")
+        is WorkerMessage.Hello -> {
+            kind("hello")
+            put("protocol", message.protocol)
+        }
         WorkerMessage.Ready -> kind("ready")
         is WorkerMessage.InitFailed -> {
             kind("initFailed")
@@ -1278,6 +1289,39 @@ internal fun decodePageMessage(data: JsAny?): PageMessage? = runCatching {
 }.getOrNull()
 
 /**
+ * A call in [data] that [decodePageMessage] could not read, as its id and the member it names, or
+ * null when [data] is not a call. The worker answers it with a failure rather than not at all (#905).
+ */
+internal fun unreadableCall(data: JsAny?): Pair<Int, String?>? = runCatching {
+    val o = data ?: return null
+    if (o.str("t") != "call") return null
+    val id = o.int("id") ?: return null
+    id to o.child("command")?.str("t")
+}.getOrNull()
+
+/** The member a control in [data] names, when [data] is a control [decodePageMessage] could not read, or null. */
+internal fun unreadableControl(data: JsAny?): String? = runCatching {
+    val o = data ?: return null
+    if (o.str("t") != "send") return null
+    o.child("control")?.str("t") ?: "an unnamed control"
+}.getOrNull()
+
+/**
+ * The refusal of a worker whose [hello] names another protocol than this page's, or null when the
+ * two match (#905).
+ */
+internal fun helloRefusal(hello: WorkerMessage.Hello): PlaybackException? {
+    if (hello.protocol == WORKER_PROTOCOL) return null
+    val theirs = hello.protocol?.let { "protocol $it" } ?: "a protocol older than the version check"
+    return PlaybackException(
+        PlaybackError.ConfigurationInvalid(
+            "the worker file is from another KitePlayer release: it speaks $theirs and this page speaks " +
+                "protocol $WORKER_PROTOCOL. Serve the kiteplayer-web-worker.mjs of the release the page is built with.",
+        ),
+    )
+}
+
+/**
  * The message in [data], or null for anything that is not one: the page ignores what it does not
  * know. A reply is the exception: a reply with an id is always one, because the call waiting on it
  * must end. A failure or an answer that cannot be read makes it a failed reply.
@@ -1285,7 +1329,7 @@ internal fun decodePageMessage(data: JsAny?): PageMessage? = runCatching {
 internal fun decodeWorkerMessage(data: JsAny?): WorkerMessage? = runCatching {
     val o = data ?: return null
     when (o.str("t")) {
-        "hello" -> WorkerMessage.Hello
+        "hello" -> WorkerMessage.Hello(o.int("protocol"))
         "ready" -> WorkerMessage.Ready
         "initFailed" -> WorkerMessage.InitFailed(o.str("message").orEmpty())
         "reply" -> decodeReply(o)

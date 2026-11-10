@@ -468,7 +468,8 @@ Each line is something that bit someone. Delete a line when it stops being true.
   by hand, and its decoders fill a missing field from the default, so a new member that skips it
   reads on the page as "nothing" and only a new warning breaks the build. Add each new member both
   ways and set it off its default in `WorkerProtocolTest`; three fields and a warning went missing
-  this way at once (#517).
+  this way at once (#517). Raise `WORKER_PROTOCOL` with any such change: the worker file ships apart
+  from the page, and the start refuses a worker whose number differs (#905).
 - The worker browser tests read their test server from `scripts/web-tests/probe.mjs`, and
   `scripts/web-tests/browser.mjs` serves all of `testmedia` beside it. A new kind of request that
   a test makes to that server goes into `probe.mjs` (#546).

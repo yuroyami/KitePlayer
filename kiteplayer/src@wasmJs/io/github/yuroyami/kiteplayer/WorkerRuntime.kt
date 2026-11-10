@@ -31,7 +31,7 @@ import kotlin.js.JsAny
 public fun runKitePlayerWorker() {
     val runtime = WorkerRuntime(MainScope())
     workerOnMessage(runtime::receive)
-    workerPost(WorkerMessage.Hello.encode())
+    workerPost(WorkerMessage.Hello(WORKER_PROTOCOL).encode())
 }
 
 /** One player in one worker, built by the first message and driven by the rest. */
@@ -42,7 +42,7 @@ private class WorkerRuntime(private val scope: CoroutineScope) {
     private var closing = false
 
     fun receive(data: JsAny?) {
-        val message = decodePageMessage(data) ?: return
+        val message = decodePageMessage(data) ?: return refuseUnreadable(data)
         when (message) {
             is PageMessage.Init -> scope.launch {
                 runCatching { start(message, data?.let { jsField(it, "canvas") }, data?.let { jsField(it, "port") }) }
@@ -53,6 +53,21 @@ private class WorkerRuntime(private val scope: CoroutineScope) {
             is PageMessage.Close -> close(message.id)
             is PageMessage.Cancel -> cancel(message.id)
             is PageMessage.Send -> send(message.control)
+        }
+    }
+
+    /**
+     * Answers a call or a control this worker could not read, as one from a page of another
+     * release sends, instead of leaving the call waiting for ever (#905).
+     */
+    private fun refuseUnreadable(data: JsAny?) {
+        val detail = "this worker file cannot read it: serve the kiteplayer-web-worker.mjs of the page's own release"
+        unreadableCall(data)?.let { (id, member) ->
+            post(WorkerMessage.Reply(id, Failure.State("${member ?: "the call"}: $detail")))
+            return
+        }
+        unreadableControl(data)?.let { member ->
+            post(WorkerMessage.Event(PlayerEvent.Warning(PlaybackWarning.CommandRefused(member, detail))))
         }
     }
 

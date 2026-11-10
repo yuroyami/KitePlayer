@@ -563,7 +563,7 @@ public class KitePlayerWorker private constructor(
     internal fun receive(data: JsAny?) {
         if (audio != null) sendLatencyWhenMoved()
         when (val message = decodeWorkerMessage(data) ?: return) {
-            WorkerMessage.Hello -> Unit
+            is WorkerMessage.Hello -> Unit
             WorkerMessage.Ready -> started?.complete(Unit)
             is WorkerMessage.InitFailed ->
                 started?.completeExceptionally(PlaybackException(PlaybackError.Internal(message.message)))
@@ -715,8 +715,13 @@ public class KitePlayerWorker private constructor(
                         val current = player
                         if (current != null) {
                             current.receive(data)
-                        } else if (decodeWorkerMessage(data) == WorkerMessage.Hello) {
-                            hello.complete(Unit)
+                        } else {
+                            // A worker file of another release answers nothing it cannot read, so
+                            // the two halves agree on the protocol before any call (#905).
+                            val greeting = decodeWorkerMessage(data) as? WorkerMessage.Hello
+                            if (greeting != null) {
+                                helloRefusal(greeting)?.let(hello::completeExceptionally) ?: hello.complete(Unit)
+                            }
                         }
                     },
                     { detail ->

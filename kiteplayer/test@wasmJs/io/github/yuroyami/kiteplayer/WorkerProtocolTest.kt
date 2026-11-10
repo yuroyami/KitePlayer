@@ -459,7 +459,8 @@ class WorkerProtocolTest {
     @Test
     fun theStateProgressAndStatsComeBackAsTheyWent() {
         val messages = listOf(
-            WorkerMessage.Hello,
+            WorkerMessage.Hello(WORKER_PROTOCOL),
+            WorkerMessage.Hello(null),
             WorkerMessage.Ready,
             WorkerMessage.InitFailed("the codec module did not load"),
             WorkerMessage.State(snapshot),

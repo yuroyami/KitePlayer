@@ -7,6 +7,7 @@ import io.github.yuroyami.kiteplayer.output.WebWorkletAudio
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride
 import io.github.yuroyami.kiteplayer.view.KitePlayerPictureInPicture
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -515,7 +516,16 @@ public class KitePlayerWorker private constructor(
         val reply = CompletableDeferred<Answer?>()
         pending[id] = reply
         post(PageMessage.Call(id, command))
-        return reply.await()
+        try {
+            return reply.await()
+        } catch (cancelled: CancellationException) {
+            // The caller left before the reply, so the worker stops the call too (#893). A reply
+            // that already arrived took the entry, and then there is nothing left to cancel.
+            if (pending.remove(id) != null) post(PageMessage.Cancel(id))
+            throw cancelled
+        } finally {
+            pending.remove(id)
+        }
     }
 
     /** [call], for a command whose reply carries an answer of the kind [A]. */

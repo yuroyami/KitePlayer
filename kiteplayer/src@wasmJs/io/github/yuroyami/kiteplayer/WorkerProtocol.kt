@@ -54,6 +54,13 @@ internal sealed interface PageMessage {
     data class Close(val id: Int) : PageMessage
 
     /**
+     * The caller of the call [id] was cancelled, so the worker cancels it too, as a cancelled
+     * call of the player itself ends (#893): an open then leaves the player Idle. The page no
+     * longer waits, and a reply that still comes is ignored.
+     */
+    data class Cancel(val id: Int) : PageMessage
+
+    /**
      * Applies [control] with no reply. A control the player refuses comes back as
      * [PlaybackWarning.CommandRefused] on the events, named by [Control.member].
      */
@@ -260,6 +267,10 @@ internal fun PageMessage.encode(): JsAny = record {
         }
         is PageMessage.Close -> {
             kind("close")
+            put("id", message.id)
+        }
+        is PageMessage.Cancel -> {
+            kind("cancel")
             put("id", message.id)
         }
         is PageMessage.Send -> {
@@ -1260,6 +1271,7 @@ internal fun decodePageMessage(data: JsAny?): PageMessage? = runCatching {
             decodeCommand(o.child("command") ?: missing("command")) ?: return null,
         )
         "close" -> PageMessage.Close(o.int("id") ?: missing("id"))
+        "cancel" -> PageMessage.Cancel(o.int("id") ?: missing("id"))
         "send" -> PageMessage.Send(decodeControl(o.child("control") ?: missing("control")) ?: return null)
         else -> null
     }

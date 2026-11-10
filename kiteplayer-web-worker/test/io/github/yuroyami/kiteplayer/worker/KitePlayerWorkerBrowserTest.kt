@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.js.JsAny
@@ -69,6 +70,42 @@ import kotlin.time.TimeSource
  * Node has no page, no worker of this kind and no canvas, so the node half of the task skips this.
  */
 class KitePlayerWorkerBrowserTest {
+
+    /**
+     * A cancelled open leaves the worker player Idle and ready for the next, as on every other
+     * platform (#893). The page stopped waiting and told the worker nothing, so the worker went on
+     * opening the item, and the player that should be Idle reached Paused and refused the next open.
+     * A live DASH open blocks the worker's one thread for tens of seconds, so the cancel arrives
+     * after the open has finished there, the hardest case.
+     */
+    @Test
+    fun aCancelledOpenLeavesTheWorkerPlayerIdleAndReadyForAnother() = runTest(timeout = 3.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n")
+        if (setup == null) {
+            println("skipped: the worker player runs only in the browser half, where karma serves the worker")
+            return@runTest
+        }
+        val (workerUrl, codecUrl, media) = setup
+        val probe = probeOf(media)
+        withContext(Dispatchers.Default) {
+            val player = KitePlayerWorker.start(pageCanvas(320, 180), workerUrl, codecUrl)
+            try {
+                fetchText("$probe/reset").await<JsString>()
+                val slow = launch { player.open(MediaItem("$probe/live.mpd")) }
+                withTimeout(30.seconds) { while (asked(probe).manifests == 0) delay(100) }
+                slow.cancelAndJoin()
+                withTimeout(90.seconds) { player.state.first { it.status != PlaybackStatus.Idle } }
+                val settled = withTimeout(90.seconds) { player.state.first { it.status == PlaybackStatus.Idle } }
+                assertNull(settled.media, "the cancelled item is still the player's")
+
+                player.open(MediaItem("$media/sync1080p30.mp4"))
+                val opened = withTimeout(30.seconds) { player.state.first { it.duration != null } }
+                assertEquals(10.seconds, opened.duration)
+            } finally {
+                player.closeAndAwait()
+            }
+        }
+    }
 
     @Test
     fun aNetworkClipPlaysInTheWorkerWhileThePageKeepsItsFrames() = runTest(timeout = 3.minutes) {

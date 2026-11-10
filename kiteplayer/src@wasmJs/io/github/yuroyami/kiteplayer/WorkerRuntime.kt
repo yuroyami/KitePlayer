@@ -10,6 +10,7 @@ import io.github.yuroyami.kiteplayer.output.WebOutputBackend
 import io.github.yuroyami.kiteplayer.output.workerOutputBackend
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -50,6 +51,7 @@ private class WorkerRuntime(private val scope: CoroutineScope) {
             }
             is PageMessage.Call -> call(message.id, message.command)
             is PageMessage.Close -> close(message.id)
+            is PageMessage.Cancel -> cancel(message.id)
             is PageMessage.Send -> send(message.control)
         }
     }
@@ -92,6 +94,27 @@ private class WorkerRuntime(private val scope: CoroutineScope) {
         scope.launch { created.events.collect { post(WorkerMessage.Event(it)) } }
     }
 
+    /** The calls running, by id, so the page can cancel one (#893). */
+    private val calls = HashMap<Int, Job>()
+
+    /**
+     * The newest opens that finished, by id. The worker's reads block its one thread, so the page's
+     * cancel of an open can arrive only after the open itself has finished; it then stops the
+     * player, which leaves it Idle as a cancelled open does (#893).
+     */
+    private val finishedOpens = ArrayDeque<Int>()
+
+    private fun cancel(id: Int) {
+        calls.remove(id)?.let { running ->
+            running.cancel()
+            return
+        }
+        if (!finishedOpens.remove(id)) return
+        val target = player ?: return
+        if (closing) return
+        scope.launch { runCatching { target.stop() } }
+    }
+
     /** Runs [command] on the player and replies to [id] once, whatever happens. */
     private fun call(id: Int, command: Command) {
         val target = player
@@ -99,10 +122,16 @@ private class WorkerRuntime(private val scope: CoroutineScope) {
             post(WorkerMessage.Reply(id, Failure.State("the worker has no player to run ${command.member}")))
             return
         }
-        scope.launch {
+        val job = scope.launch {
             val outcome = runCatching { target.perform(command) }
+            calls.remove(id)
+            if (outcome.isSuccess && (command is Command.Open || command is Command.OpenQueue)) {
+                finishedOpens.addLast(id)
+                if (finishedOpens.size > FINISHED_OPENS_KEPT) finishedOpens.removeFirst()
+            }
             post(WorkerMessage.Reply(id, outcome.exceptionOrNull()?.let(Failure::of), outcome.getOrNull()))
         }
+        if (job.isActive) calls[id] = job
     }
 
     /**
@@ -209,6 +238,9 @@ private class WorkerRuntime(private val scope: CoroutineScope) {
 
     private fun post(message: WorkerMessage) = workerPost(message.encode())
 }
+
+/** How many finished opens [WorkerRuntime] remembers for a cancel that arrives after them. */
+private const val FINISHED_OPENS_KEPT = 8
 
 @JsFun("(receive) => { self.onmessage = (e) => receive(e.data); }")
 private external fun workerOnMessage(receive: (JsAny?) -> Unit)

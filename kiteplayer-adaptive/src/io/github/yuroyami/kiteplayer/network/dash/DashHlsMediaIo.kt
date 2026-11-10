@@ -583,7 +583,9 @@ internal class DashHlsMediaIo(
     private suspend fun fetch(url: String, range: LongRange?, limit: Long, segment: Boolean = true): ByteArray {
         if (range != null) {
             require(range.last - range.first < limit) { "${shownUri(url)} asks for more than $limit bytes" }
-            return readRange(url, range)
+            // The fetch's own limit: a media segment of a joined Period may be up to 64 MiB, which
+            // the 16 MiB of an index read refused, so it was skipped (#752).
+            return readRange(url, range, limit = limit)
         }
         val io = openOriginal(DashManifestParser.requireAllowed(manifestUrl, url, policy), segment)
         try {
@@ -781,10 +783,11 @@ internal class DashHlsMediaIo(
      * The bytes of [range] of [file]; fewer only at the end of the file, when [allowShort]. A range
      * of more than [MAX_INDEX_BYTES] is refused before anything is allocated, whoever asks.
      */
-    private suspend fun readRange(file: String, range: LongRange, allowShort: Boolean = false): ByteArray {
+    /** [range] of [file], at most [limit] bytes: an index read's 16 MiB unless the caller says otherwise. */
+    private suspend fun readRange(file: String, range: LongRange, allowShort: Boolean = false, limit: Long = MAX_INDEX_BYTES): ByteArray {
         val length = range.last - range.first + 1
-        if (length > MAX_INDEX_BYTES) {
-            throw DashUnsupportedException("${shownUri(file)} asks for $length bytes at once, and the limit is $MAX_INDEX_BYTES")
+        if (length > limit) {
+            throw DashUnsupportedException("${shownUri(file)} asks for $length bytes at once, and the limit is $limit")
         }
         val wanted = length.coerceAtLeast(0L).toInt()
         val allowed = DashManifestParser.requireAllowed(manifestUrl, file, policy)

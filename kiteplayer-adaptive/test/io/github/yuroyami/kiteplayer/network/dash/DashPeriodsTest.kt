@@ -190,6 +190,50 @@ class DashPeriodsTest {
         assertTrue("00:00:06.000 --> 00:00:07.500\nWerbung" in io.openRelated(addresses[1])!!.readAll().decodeToString())
     }
 
+    /**
+     * A joined Period's media segment addressed by byte range is read up to the media limit, not
+     * the 16 MiB of an index read, which refused and skipped one of 20 MiB (#752).
+     */
+    @Test
+    fun aJoinedPeriodsByteRangeSegmentOfTwentyMibIsRead() = runTest {
+        val big = Mp4Bytes.segment(2, 8_100_000, listOf(Sample(90_000, ByteArray(20 shl 20) { 5 }, 0)))
+        val manifest = parse(
+            """
+            <MPD type="static" mediaPresentationDuration="PT9S">
+                <Period id="main" start="PT0S" duration="PT5S">
+                    <AdaptationSet id="1" contentType="video" mimeType="video/mp4">
+                        <SegmentTemplate media="a-${'$'}Number${'$'}.m4s" initialization="a-init.mp4" timescale="1000" duration="2000"/>
+                        <Representation id="v" bandwidth="500000"/>
+                    </AdaptationSet>
+                </Period>
+                <Period id="ad" duration="PT1S">
+                    <AdaptationSet id="1" contentType="video" mimeType="video/mp4">
+                        <Representation id="v" bandwidth="400000">
+                            <BaseURL>b.mp4</BaseURL>
+                            <SegmentList timescale="90000" duration="90000" presentationTimeOffset="8100000">
+                                <Initialization sourceURL="b-init.mp4"/>
+                                <SegmentURL mediaRange="0-${big.size - 1}"/>
+                            </SegmentList>
+                        </Representation>
+                    </AdaptationSet>
+                </Period>
+            </MPD>
+            """.trimIndent(),
+        )
+        val served = files + ("b.mp4" to big)
+        val presentation = DashHls.presentation(manifest.periods.first())
+        val io = DashHlsMediaIo(presentation, manifest, "https://cdn.test/vod/movie.mpd", DashUrlPolicy.Default, { url ->
+            BytesMediaIo(checkNotNull(served[url.substringAfterLast('/')]) { "no $url" })
+        }, null, { 0L })
+        val video = presentation.tracks.single { it.role == DashHlsRole.Video }
+        val playlist = io.openRelated(video.address)!!.readAll().decodeToString().lines()
+        val last = playlist.last { it.startsWith("https://") }
+        val root = "https://${DashHls.HOST}/0-0"
+        val base = Fmp4.tracks(io.openRelated("$root/init")!!.readAll()).single()
+        val moved = Fmp4.samples(io.openRelated(last)!!.readAll(), base)
+        assertEquals(20 shl 20, moved.single().data.size - 12, "the 20 MiB segment was not served whole")
+    }
+
     private suspend fun MediaIo.readAll(): ByteArray {
         var out = ByteArray(0)
         val buffer = ByteArray(4096)

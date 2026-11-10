@@ -239,6 +239,12 @@ internal class SyncHttpMediaIo(
                 throw PlaybackException(PlaybackError.SourceUnavailable(url, null, "HTTP $status"))
             }
             TIMED_OUT -> throw PlaybackException(PlaybackError.SourceStalled(url, timeout))
+            CHANGED -> throw PlaybackException(
+                PlaybackError.SourceUnavailable(url, null, "the file changed since it was opened: ${xhrError(state)}"),
+            )
+            MISALIGNED -> throw PlaybackException(
+                PlaybackError.SourceUnavailable(url, null, xhrError(state) ?: "a range answer started at another byte"),
+            )
             0 -> throw PlaybackException(PlaybackError.SourceUnavailable(url, null, xhrError(state) ?: "the request failed"))
             else -> throw PlaybackException(PlaybackError.SourceUnavailable(url, null, "HTTP $status"))
         }
@@ -250,6 +256,12 @@ internal class SyncHttpMediaIo(
 
         /** What [xhrFetch] answers when the request ran out of time. */
         const val TIMED_OUT = -1
+
+        /** What [xhrFetch] answers when the file is not the one the first answer was. */
+        const val CHANGED = -2
+
+        /** What [xhrFetch] answers when a range answer starts at another byte than the one asked for. */
+        const val MISALIGNED = -3
     }
 }
 
@@ -315,14 +327,22 @@ internal class SyncDownloadMeter {
 @JsFun(
     """(headers, timeout) => ({
       headers: headers, timeout: timeout, buf: new Uint8Array(0), start: 0, total: -1,
-      url: null, type: null, error: null, last: null,
+      url: null, type: null, error: null, last: null, tag: null, modified: null,
     })""",
 )
 private external fun xhrState(headers: JsAny, timeoutMillis: Double): JsAny
 
 /**
  * One synchronous request for [count] bytes from [from]. Answers the status, 0 when the request
- * did not complete, or -1 when it ran out of time. On 200 or 206 the answer becomes the window.
+ * did not complete, -1 when it ran out of time, -2 when the answer is of another version of the
+ * file than the first answer was, and -3 when a range answer starts at another byte than [from]
+ * (#855). On 200 or 206 of the same file the answer becomes the window.
+ *
+ * The first answer's strong entity tag, or else its `Last-Modified`, and its size are the file's
+ * identity, as the player's other network reader keeps them (#283). Every later request carries
+ * `If-Range` with that validator, so a server whose file changed sends the whole new file, which
+ * the validator or the size then tells apart. Headers are read from `getAllResponseHeaders`, which
+ * lists only what the origin shows, because asking another origin for a hidden one logs a refusal.
  */
 @JsFun(
     """(s, url, from, count) => {
@@ -332,28 +352,61 @@ private external fun xhrState(headers: JsAny, timeoutMillis: Double): JsAny
       xhr.timeout = s.timeout;
       for (const k of Object.keys(s.headers)) { try { xhr.setRequestHeader(k, s.headers[k]); } catch (e) {} }
       xhr.setRequestHeader('Range', 'bytes=' + from + '-' + (from + count - 1));
+      const validator = s.tag || s.modified;
+      if (validator) { try { xhr.setRequestHeader('If-Range', validator); } catch (e) {} }
       try { xhr.send(); } catch (e) {
         s.error = (e && e.message) ? e.message : String(e);
         return (e && e.name === 'TimeoutError') ? -1 : 0;
       }
       const status = xhr.status;
       if (status === 200 || status === 206) {
-        s.buf = new Uint8Array(xhr.response || new ArrayBuffer(0));
+        const shown = {};
+        for (const line of (xhr.getAllResponseHeaders() || '').split(/\r?\n/)) {
+          const at = line.indexOf(':');
+          if (at > 0) shown[line.slice(0, at).trim().toLowerCase()] = line.slice(at + 1).trim();
+        }
+        const etag = shown['etag'] && !/^W\//.test(shown['etag']) ? shown['etag'] : null;
+        const modified = shown['last-modified'] || null;
+        const body = new Uint8Array(xhr.response || new ArrayBuffer(0));
+        let start = 0, total = -1;
+        if (status === 200) {
+          total = body.length;
+        } else {
+          const range = shown['content-range'] || null;
+          const first = range ? /bytes\s+(\d+)-/.exec(range) : null;
+          const stated = range ? /\/(\d+)\s*$/.exec(range) : null;
+          start = first ? Number(first[1]) : from;
+          if (start !== from) {
+            s.error = 'the server answered from byte ' + start + ' to a read at byte ' + from;
+            return -3;
+          }
+          if (stated) total = Number(stated[1]);
+        }
+        if (s.last !== null) {
+          if (s.tag !== null && etag !== s.tag) {
+            s.error = 'its entity tag was ' + s.tag + ' and is ' + etag;
+            return -2;
+          }
+          if (s.tag === null && s.modified !== null && modified !== null && modified !== s.modified) {
+            s.error = 'it was last modified ' + s.modified + ' and is now ' + modified;
+            return -2;
+          }
+          if (s.total >= 0 && total >= 0 && total !== s.total) {
+            s.error = 'it had ' + s.total + ' bytes and has ' + total;
+            return -2;
+          }
+        } else {
+          s.tag = etag;
+          s.modified = etag ? null : modified;
+        }
+        s.buf = body;
         s.url = xhr.responseURL || url;
         s.type = xhr.getResponseHeader('Content-Type');
         s.last = xhr;
-        if (status === 200) {
-          s.start = 0;
-          s.total = s.buf.length;
-        } else {
-          const range = xhr.getResponseHeader('Content-Range');
-          const first = range ? /bytes\s+(\d+)-/.exec(range) : null;
-          const total = range ? /\/(\d+)\s*$/.exec(range) : null;
-          s.start = first ? Number(first[1]) : from;
-          if (total) s.total = Number(total[1]);
-          // Fewer bytes than were asked for, with no stated size: the file ends there.
-          else if (s.buf.length < count) s.total = s.start + s.buf.length;
-        }
+        s.start = start;
+        if (total >= 0) s.total = total;
+        // Fewer bytes than were asked for, with no stated size: the file ends there.
+        else if (s.buf.length < count) s.total = s.start + s.buf.length;
       } else if (status === 416) {
         s.buf = new Uint8Array(0);
         s.start = from;

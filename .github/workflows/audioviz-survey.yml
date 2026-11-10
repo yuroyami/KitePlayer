@@ -1,0 +1,56 @@
+name: Visualiser picture survey
+
+# The visualiser's rendering suites measure what a viewer sees: how often a drawing flashes, how it
+# moves, how a change between drawings looks, and what each one costs. They take about 25 minutes,
+# so ci.yml runs only scripts/audioviz-tests.sh gate, which leaves them out, and a change that made a
+# drawing flash more often passed CI (#781). This runs them once a week and on demand, fails when a
+# suite fails, and keeps their reports.
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audioviz-survey
+  cancel-in-progress: false
+
+jobs:
+  survey:
+    name: The rendering suites (Linux, software Skia)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/JetBrains/Kotlin
+          key: kotlin-audioviz-survey-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
+          restore-keys: |
+            kotlin-audioviz-survey-
+            kotlin-linux-jvm-android-
+
+      # Some suites play the test clips. Ubuntu's FFmpeg 6.1 makes every clip but one, which
+      # testmedia.sh lists as skipped.
+      - name: Make the test clips
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq ffmpeg
+          ./scripts/testmedia.sh
+
+      - name: The rendering suites
+        run: |
+          . scripts/test-env.sh
+          ./scripts/audioviz-tests.sh survey
+
+      - name: Keep the reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audioviz-survey
+          path: |
+            build/reports/
+            build/tasks/_kiteplayer-audioviz_testJvm/
+          if-no-files-found: warn

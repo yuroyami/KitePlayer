@@ -54,38 +54,83 @@ internal class HdrToneMap private constructor(
         (lin.pow(1.0 / 2.2) * 255.0 + 0.5).toInt().coerceIn(0, 255)
     }
 
+    /**
+     * The same curve as [eotf] over 4096 steps of the electrical value, which [eotfAt] reads
+     * between two steps, for a source deeper than 8 bits (#731).
+     */
+    private val eotfFine = DoubleArray(EOTF_STEPS + 1) { step ->
+        val e = step / EOTF_STEPS.toDouble()
+        if (isHlg) {
+            if (e <= 0.5) e * e / 3.0
+            else (kotlin.math.exp((e - 0.55991073) / 0.17883277) + 0.28466892) / 12.0
+        } else {
+            pqDecode(e) * 10000.0
+        }
+    }
+
+    /** [eotf] at an electrical value of [code] on the 0 to 255 scale, read between two of 4096 steps. */
+    private fun eotfAt(code: Double): Double {
+        val at = (code / 255.0).coerceIn(0.0, 1.0) * EOTF_STEPS
+        val below = at.toInt().coerceAtMost(EOTF_STEPS - 1)
+        val part = at - below
+        return eotfFine[below] + (eotfFine[below + 1] - eotfFine[below]) * part
+    }
+
     /** Tone-maps [rgba] in place. Alpha bytes are untouched. */
     fun mapInPlace(rgba: ByteArray) {
         var at = 0
         while (at < rgba.size) {
-            var r = eotf[rgba[at].toInt() and 0xFF]
-            var g = eotf[rgba[at + 1].toInt() and 0xFF]
-            var b = eotf[rgba[at + 2].toInt() and 0xFF]
-            if (isHlg) {
-                // BT.2100 OOTF at Lw = 1000: display = 1000 * Ys^0.2 * scene.
-                val ys = 0.2627 * r + 0.6780 * g + 0.0593 * b
-                val factor = 1000.0 * hlgOotf[warp1023(ys, 1.0)]
-                r *= factor; g *= factor; b *= factor
-            }
-            if (gamut2020) {
-                val r709 = 1.6605 * r - 0.5876 * g - 0.0728 * b
-                val g709 = -0.1246 * r + 1.1329 * g - 0.0083 * b
-                val b709 = -0.0182 * r - 0.1006 * g + 1.1187 * b
-                r = if (r709 > 0.0) r709 else 0.0
-                g = if (g709 > 0.0) g709 else 0.0
-                b = if (b709 > 0.0) b709 else 0.0
-            }
-            val luma = 0.2126 * r + 0.7152 * g + 0.0722 * b
-            // Above lumaMax the EETF is flat (its e1 clamp), so the mapped luminance is the
-            // one at lumaMax and the ratio shrinks with the real luminance.
-            val lumaClamped = if (luma > lumaMax) lumaMax else luma
-            val mappedNits = eetfRatio[warp1023(lumaClamped, lumaMax)] * lumaClamped
-            val ratio = if (luma > 1e-4) mappedNits / luma / 203.0 else 1.0 / 203.0
-            rgba[at] = encode[warp4095(r * ratio)].toByte()
-            rgba[at + 1] = encode[warp4095(g * ratio)].toByte()
-            rgba[at + 2] = encode[warp4095(b * ratio)].toByte()
+            mapLinear(
+                eotf[rgba[at].toInt() and 0xFF],
+                eotf[rgba[at + 1].toInt() and 0xFF],
+                eotf[rgba[at + 2].toInt() and 0xFF],
+                rgba,
+                at,
+            )
             at += 4
         }
+    }
+
+    /**
+     * Writes the SDR bytes of one pixel at [index] of [out], and opaque alpha, from its electrical
+     * red, green and blue on the 0 to 255 scale, not cut to whole steps (#731). A 10-bit PQ sample
+     * cut to 8 bits before the curve loses three steps in four, which the EETF stretches into
+     * visible bands in a slow gradient. Returns the index after the pixel.
+     */
+    fun mapElectrical(red: Double, green: Double, blue: Double, out: ByteArray, index: Int): Int {
+        mapLinear(eotfAt(red), eotfAt(green), eotfAt(blue), out, index)
+        out[index + 3] = -1
+        return index + 4
+    }
+
+    /** The rest of the law, from linear light, into the three colour bytes at [at]. */
+    private fun mapLinear(linearR: Double, linearG: Double, linearB: Double, rgba: ByteArray, at: Int) {
+        var r = linearR
+        var g = linearG
+        var b = linearB
+        if (isHlg) {
+            // BT.2100 OOTF at Lw = 1000: display = 1000 * Ys^0.2 * scene.
+            val ys = 0.2627 * r + 0.6780 * g + 0.0593 * b
+            val factor = 1000.0 * hlgOotf[warp1023(ys, 1.0)]
+            r *= factor; g *= factor; b *= factor
+        }
+        if (gamut2020) {
+            val r709 = 1.6605 * r - 0.5876 * g - 0.0728 * b
+            val g709 = -0.1246 * r + 1.1329 * g - 0.0083 * b
+            val b709 = -0.0182 * r - 0.1006 * g + 1.1187 * b
+            r = if (r709 > 0.0) r709 else 0.0
+            g = if (g709 > 0.0) g709 else 0.0
+            b = if (b709 > 0.0) b709 else 0.0
+        }
+        val luma = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        // Above lumaMax the EETF is flat (its e1 clamp), so the mapped luminance is the
+        // one at lumaMax and the ratio shrinks with the real luminance.
+        val lumaClamped = if (luma > lumaMax) lumaMax else luma
+        val mappedNits = eetfRatio[warp1023(lumaClamped, lumaMax)] * lumaClamped
+        val ratio = if (luma > 1e-4) mappedNits / luma / 203.0 else 1.0 / 203.0
+        rgba[at] = encode[warp4095(r * ratio)].toByte()
+        rgba[at + 1] = encode[warp4095(g * ratio)].toByte()
+        rgba[at + 2] = encode[warp4095(b * ratio)].toByte()
     }
 
     private fun warp1023(value: Double, max: Double): Int {
@@ -103,6 +148,9 @@ internal class HdrToneMap private constructor(
 
     internal companion object {
         internal const val SRC_PEAK = 1000.0
+
+        /** Steps of the fine curve a deep source reads. */
+        private const val EOTF_STEPS = 4096
 
         private const val PQ_M1 = 0.1593017578125
         private const val PQ_M2 = 78.84375

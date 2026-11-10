@@ -66,6 +66,9 @@ public object SoftwareConverter {
         }
 
         val out = ByteArray(width * height * 4)
+        // A 10-bit source is tone mapped inside the conversion, before any cut to 8 bits (#731).
+        val toneMap = HdrToneMap.forColorSpaceOrNull(frame.colorSpace, frame.toneMapPeakNits)
+        var mappedDeep = false
         when (format) {
             PlayerPixelFormat.Yuv420p ->
                 frame.convertPlanarYuv(out, subsampleX = 1, subsampleY = 1, layout = SampleLayout.Eight)
@@ -73,12 +76,15 @@ public object SoftwareConverter {
                 frame.convertPlanarYuv(out, subsampleX = 1, subsampleY = 0, layout = SampleLayout.Eight)
             PlayerPixelFormat.Yuv444p ->
                 frame.convertPlanarYuv(out, subsampleX = 0, subsampleY = 0, layout = SampleLayout.Eight)
-            PlayerPixelFormat.Yuv420p10le ->
-                frame.convertPlanarYuv(out, subsampleX = 1, subsampleY = 1, layout = SampleLayout.TenLowAligned)
-            PlayerPixelFormat.Yuv422p10le ->
-                frame.convertPlanarYuv(out, subsampleX = 1, subsampleY = 0, layout = SampleLayout.TenLowAligned)
+            PlayerPixelFormat.Yuv420p10le -> frame.convertPlanarYuv(
+                out, subsampleX = 1, subsampleY = 1, layout = SampleLayout.TenLowAligned, toneMap = toneMap,
+            ).also { mappedDeep = true }
+            PlayerPixelFormat.Yuv422p10le -> frame.convertPlanarYuv(
+                out, subsampleX = 1, subsampleY = 0, layout = SampleLayout.TenLowAligned, toneMap = toneMap,
+            ).also { mappedDeep = true }
             PlayerPixelFormat.Nv12 -> frame.convertNv12(out, layout = SampleLayout.Eight)
-            PlayerPixelFormat.P010le -> frame.convertNv12(out, layout = SampleLayout.TenHighAligned)
+            PlayerPixelFormat.P010le -> frame.convertNv12(out, layout = SampleLayout.TenHighAligned, toneMap = toneMap)
+                .also { mappedDeep = true }
             PlayerPixelFormat.Rgba -> frame.copyPacked(out, sourceComponents = 4, redFirst = true)
             PlayerPixelFormat.Bgra -> frame.copyPacked(out, sourceComponents = 4, redFirst = false)
             PlayerPixelFormat.Rgb24 -> frame.copyPacked(out, sourceComponents = 3, redFirst = true)
@@ -91,7 +97,7 @@ public object SoftwareConverter {
         // path runs: this converter used to skip it, so the same public API
         // returned washed-out pixels here and tone-mapped ones on the JVM. SDR frames answer
         // null and stay bit-exact.
-        HdrToneMap.forColorSpaceOrNull(frame.colorSpace, frame.toneMapPeakNits)?.mapInPlace(out)
+        if (!mappedDeep) toneMap?.mapInPlace(out)
         return out
     }
 
@@ -110,6 +116,7 @@ public object SoftwareConverter {
         subsampleX: Int,
         subsampleY: Int,
         layout: SampleLayout,
+        toneMap: HdrToneMap? = null,
     ) {
         val width = size.width
         val height = size.height
@@ -139,6 +146,15 @@ public object SoftwareConverter {
 
                     for (column in 0 until width) {
                         val chromaColumn = ((column + chromaShift) shr subsampleX).coerceIn(0, lastChromaColumn)
+                        if (toneMap != null) {
+                            outIndex = writeToneMapped(
+                                out, outIndex, coefficients, toneMap,
+                                readDeep(y, yRow + column * step, layout),
+                                readDeep(u, uRow + chromaColumn * step, layout),
+                                readDeep(v, vRow + chromaColumn * step, layout),
+                            )
+                            continue
+                        }
                         val luma = readComponent(y, yRow + column * step, layout)
                         val chromaB = readComponent(u, uRow + chromaColumn * step, layout)
                         val chromaR = readComponent(v, vRow + chromaColumn * step, layout)
@@ -149,7 +165,7 @@ public object SoftwareConverter {
         }
     }
 
-    private fun KiteFFmpegVideoFrame.convertNv12(out: ByteArray, layout: SampleLayout) {
+    private fun KiteFFmpegVideoFrame.convertNv12(out: ByteArray, layout: SampleLayout, toneMap: HdrToneMap? = null) {
         val width = size.width
         val height = size.height
         val coefficients = PackedCoefficients.of(colorSpace)
@@ -174,6 +190,15 @@ public object SoftwareConverter {
 
                     for (column in 0 until width) {
                         val chromaColumn = ((column + chromaShift) shr 1).coerceIn(0, lastChromaColumn)
+                        if (toneMap != null) {
+                            outIndex = writeToneMapped(
+                                out, outIndex, coefficients, toneMap,
+                                readDeep(y, yRow + column * step, layout),
+                                readDeep(uv, uvRow + chromaColumn * 2 * step, layout),
+                                readDeep(uv, uvRow + (chromaColumn * 2 + 1) * step, layout),
+                            )
+                            continue
+                        }
                         val luma = readComponent(y, yRow + column * step, layout)
                         // Chroma is interleaved in this format: U then V, per chroma sample.
                         val chromaB = readComponent(uv, uvRow + chromaColumn * 2 * step, layout)
@@ -252,6 +277,39 @@ public object SoftwareConverter {
         val low = plane[offset].toInt()
         val high = plane[offset + 1].toInt()
         ((high shl 8) or low) shr layout.dropBits
+    }
+
+    /** [readComponent] on the 8-bit scale, with the bits it drops kept as a fraction (#731). */
+    private fun readDeep(
+        plane: kotlinx.cinterop.CPointer<kotlinx.cinterop.UByteVar>,
+        offset: Int,
+        layout: SampleLayout,
+    ): Double = if (layout.bytesPerSample == 1) {
+        plane[offset].toInt().toDouble()
+    } else {
+        ((plane[offset + 1].toInt() shl 8) or plane[offset].toInt()) / (1 shl layout.dropBits).toDouble()
+    }
+
+    /** [writeRgba] for an HDR source, with no step cut to a byte before [toneMap] runs. */
+    private fun writeToneMapped(
+        out: ByteArray,
+        index: Int,
+        c: PackedCoefficients,
+        toneMap: HdrToneMap,
+        luma: Double,
+        chromaB: Double,
+        chromaR: Double,
+    ): Int {
+        val y = (luma - c.lumaOffset) * c.lumaScale
+        val cb = (chromaB - c.chromaZero) * c.chromaScale
+        val cr = (chromaR - c.chromaZero) * c.chromaScale
+        return toneMap.mapElectrical(
+            c.rY * y + c.rCb * cb + c.rCr * cr,
+            c.gY * y + c.gCb * cb + c.gCr * cr,
+            c.bY * y + c.bCb * cb + c.bCr * cr,
+            out,
+            index,
+        )
     }
 
     private fun writeRgba(

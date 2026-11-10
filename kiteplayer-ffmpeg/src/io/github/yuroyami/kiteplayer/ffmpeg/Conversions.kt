@@ -210,6 +210,11 @@ internal fun tightlyPackedToRgba(
 ): ByteArray {
     require(width > 0 && height > 0) { "frame has no dimensions: ${width}x$height" }
     val out = into?.takeIf { it.size == width * height * 4 } ?: ByteArray(width * height * 4)
+    // The software half of the HDR-to-SDR law. SDR frames return null here, which keeps every
+    // existing SDR pixel bit-exact. A 10-bit source runs it inside the conversion, before any cut
+    // to 8 bits (#731); an 8-bit one after, on the bytes.
+    val toneMap = HdrToneMap.forColorSpaceOrNull(colorSpace, hdrPeakNits)
+    var mappedDeep = false
     when (pixelFormat) {
         PlayerPixelFormat.Yuv420p -> bytes.convertPlanarYuv(
             out, width, height, colorSpace,
@@ -225,18 +230,18 @@ internal fun tightlyPackedToRgba(
         )
         PlayerPixelFormat.Yuv420p10le -> bytes.convertPlanarYuv(
             out, width, height, colorSpace,
-            subsampleX = 1, subsampleY = 1, layout = PackedSampleLayout.TenLowAligned,
-        )
+            subsampleX = 1, subsampleY = 1, layout = PackedSampleLayout.TenLowAligned, toneMap = toneMap,
+        ).also { mappedDeep = true }
         PlayerPixelFormat.Yuv422p10le -> bytes.convertPlanarYuv(
             out, width, height, colorSpace,
-            subsampleX = 1, subsampleY = 0, layout = PackedSampleLayout.TenLowAligned,
-        )
+            subsampleX = 1, subsampleY = 0, layout = PackedSampleLayout.TenLowAligned, toneMap = toneMap,
+        ).also { mappedDeep = true }
         PlayerPixelFormat.Nv12 -> bytes.convertNv12(
             out, width, height, colorSpace, layout = PackedSampleLayout.Eight,
         )
         PlayerPixelFormat.P010le -> bytes.convertNv12(
-            out, width, height, colorSpace, layout = PackedSampleLayout.TenHighAligned,
-        )
+            out, width, height, colorSpace, layout = PackedSampleLayout.TenHighAligned, toneMap = toneMap,
+        ).also { mappedDeep = true }
         PlayerPixelFormat.Rgba -> bytes.copyPackedRgba(out, width, height, components = 4, redFirst = true)
         PlayerPixelFormat.Bgra -> bytes.copyPackedRgba(out, width, height, components = 4, redFirst = false)
         PlayerPixelFormat.Rgb24 -> bytes.copyPackedRgba(out, width, height, components = 3, redFirst = true)
@@ -245,9 +250,7 @@ internal fun tightlyPackedToRgba(
                 "and an unusual software format needs a filter graph first.",
         )
     }
-    // The software half of the HDR-to-SDR law. SDR frames return null here, which
-    // keeps every existing SDR pixel bit-exact.
-    HdrToneMap.forColorSpaceOrNull(colorSpace, hdrPeakNits)?.mapInPlace(out)
+    if (!mappedDeep) toneMap?.mapInPlace(out)
     return out
 }
 
@@ -265,6 +268,7 @@ private fun ByteArray.convertPlanarYuv(
     subsampleX: Int,
     subsampleY: Int,
     layout: PackedSampleLayout,
+    toneMap: HdrToneMap? = null,
 ) {
     val chromaWidth = packedChromaSize(width, subsampleX)
     val chromaHeight = packedChromaSize(height, subsampleY)
@@ -285,6 +289,13 @@ private fun ByteArray.convertPlanarYuv(
         var outIndex = row * width * 4
         for (column in 0 until width) {
             val chromaColumn = ((column + chromaShift) shr subsampleX).coerceIn(0, chromaWidth - 1)
+            if (toneMap != null) {
+                val luma = readDeepComponent(yOffset + row * yStride + column * step, layout)
+                val chromaB = readDeepComponent(uOffset + chromaRow * chromaStride + chromaColumn * step, layout)
+                val chromaR = readDeepComponent(vOffset + chromaRow * chromaStride + chromaColumn * step, layout)
+                outIndex = writeToneMapped(out, outIndex, coefficients, toneMap, luma, chromaB, chromaR)
+                continue
+            }
             val luma = readPackedComponent(yOffset + row * yStride + column * step, layout)
             val chromaB = readPackedComponent(uOffset + chromaRow * chromaStride + chromaColumn * step, layout)
             val chromaR = readPackedComponent(vOffset + chromaRow * chromaStride + chromaColumn * step, layout)
@@ -300,6 +311,7 @@ private fun ByteArray.convertNv12(
     height: Int,
     colorSpace: ColorSpaceInfo,
     layout: PackedSampleLayout,
+    toneMap: HdrToneMap? = null,
 ) {
     val chromaWidth = packedChromaSize(width, subsampling = 1)
     val chromaHeight = packedChromaSize(height, subsampling = 1)
@@ -317,8 +329,15 @@ private fun ByteArray.convertNv12(
         var outIndex = row * width * 4
         for (column in 0 until width) {
             val chromaColumn = ((column + chromaShift) shr 1).coerceIn(0, chromaWidth - 1)
-            val luma = readPackedComponent(row * yStride + column * step, layout)
             val uv = uvOffset + (row shr 1) * uvStride + chromaColumn * 2 * step
+            if (toneMap != null) {
+                val luma = readDeepComponent(row * yStride + column * step, layout)
+                outIndex = writeToneMapped(
+                    out, outIndex, coefficients, toneMap, luma, readDeepComponent(uv, layout), readDeepComponent(uv + step, layout),
+                )
+                continue
+            }
+            val luma = readPackedComponent(row * yStride + column * step, layout)
             val chromaB = readPackedComponent(uv, layout)
             val chromaR = readPackedComponent(uv + step, layout)
             outIndex = writePackedRgba(out, outIndex, coefficients, luma, chromaB, chromaR)
@@ -360,6 +379,36 @@ private fun ByteArray.readPackedComponent(offset: Int, layout: PackedSampleLayou
     } else {
         ((this[offset + 1].toInt() and 0xFF) shl 8 or (this[offset].toInt() and 0xFF)) shr layout.dropBits
     }
+
+/** A sample on the 8-bit scale with the bits [readPackedComponent] drops kept as a fraction (#731). */
+private fun ByteArray.readDeepComponent(offset: Int, layout: PackedSampleLayout): Double =
+    if (layout.bytesPerSample == 1) {
+        (this[offset].toInt() and 0xFF).toDouble()
+    } else {
+        ((this[offset + 1].toInt() and 0xFF) shl 8 or (this[offset].toInt() and 0xFF)) / (1 shl layout.dropBits).toDouble()
+    }
+
+/** [writePackedRgba] for an HDR source, with no step cut to a byte before [toneMap] runs. */
+private fun writeToneMapped(
+    out: ByteArray,
+    index: Int,
+    coefficients: PackedCoefficients,
+    toneMap: HdrToneMap,
+    luma: Double,
+    chromaB: Double,
+    chromaR: Double,
+): Int {
+    val y = (luma - coefficients.lumaOffset) * coefficients.lumaScale
+    val cb = (chromaB - coefficients.chromaZero) * coefficients.chromaScale
+    val cr = (chromaR - coefficients.chromaZero) * coefficients.chromaScale
+    return toneMap.mapElectrical(
+        coefficients.rY * y + coefficients.rCb * cb + coefficients.rCr * cr,
+        coefficients.gY * y + coefficients.gCb * cb + coefficients.gCr * cr,
+        coefficients.bY * y + coefficients.bCb * cb + coefficients.bCr * cr,
+        out,
+        index,
+    )
+}
 
 private fun writePackedRgba(
     out: ByteArray,

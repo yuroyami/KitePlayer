@@ -47,7 +47,13 @@ public data class RenderQuality(
     public val debandRange: Float = 16f,
     /** Grain added back after smoothing, in 1/16384 of full scale. mpv's 48. */
     public val debandGrain: Float = 48f,
-    /** Which kernel resamples the picture when it is not drawn at its own size. */
+    /**
+     * Which kernel resamples the picture when it is not drawn at its own size.
+     *
+     * The GPU renderers, Metal and the Android GL tier, run one or the other of [deband] and a
+     * kernel other than bilinear, and debanding wins: with both asked for, the picture is
+     * debanded and scaled bilinearly, on both alike (#845).
+     */
     public val scaler: VideoScaler = VideoScaler.Bilinear,
     /**
      * Scales in LIGHT-linear space rather than in the transfer curve's space.

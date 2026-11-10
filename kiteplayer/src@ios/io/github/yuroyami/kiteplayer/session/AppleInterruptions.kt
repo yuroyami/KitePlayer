@@ -5,6 +5,7 @@ import io.github.yuroyami.kiteplayer.KitePlayerPlatform
 import platform.AVFAudio.AVAudioSessionInterruptionNotification
 import platform.AVFAudio.AVAudioSessionInterruptionOptionKey
 import platform.AVFAudio.AVAudioSessionInterruptionOptionShouldResume
+import platform.AVFAudio.AVAudioSessionInterruptionReasonKey
 import platform.AVFAudio.AVAudioSessionInterruptionTypeBegan
 import platform.AVFAudio.AVAudioSessionInterruptionTypeKey
 import platform.AVFAudio.AVAudioSessionRouteChangeNotification
@@ -51,6 +52,7 @@ private class AppleInterruptionHandle(
             interruptionEventFor(
                 type = note.number(AVAudioSessionInterruptionTypeKey),
                 options = note.number(AVAudioSessionInterruptionOptionKey),
+                reason = note.number(AVAudioSessionInterruptionReasonKey),
             )?.let(applier::handle)
         }
         observe(AVAudioSessionRouteChangeNotification) { note ->
@@ -88,11 +90,18 @@ private class AppleInterruptionHandle(
  * flag that arrives at the end is what decides whether anything plays again. Without the resume
  * flag the end is not reported at all, so nothing starts by itself.
  */
-internal fun interruptionEventFor(type: ULong?, options: ULong?): InterruptionEvent? = when (type) {
-    AVAudioSessionInterruptionTypeBegan -> InterruptionEvent.LostTransient
+internal fun interruptionEventFor(type: ULong?, options: ULong?, reason: ULong? = null): InterruptionEvent? = when (type) {
+    // On iOS 15 a notice that began can arrive late, as a suspended app resumes, with the reason
+    // "app was suspended". Apple says it is no interruption and no end follows it, so taken as one
+    // it paused a player for good (#838). The reason is AVAudioSessionInterruptionReasonAppWasSuspended,
+    // 1, written as its value because the constant is deprecated from iOS 16, which sends none.
+    AVAudioSessionInterruptionTypeBegan -> if (reason == REASON_APP_WAS_SUSPENDED) null else InterruptionEvent.LostTransient
     null -> null
     else -> {
         val shouldResume = ((options ?: 0uL) and AVAudioSessionInterruptionOptionShouldResume) != 0uL
         if (shouldResume) InterruptionEvent.Gained else null
     }
 }
+
+/** The value of AVAudioSessionInterruptionReasonAppWasSuspended (#838). */
+private const val REASON_APP_WAS_SUSPENDED: ULong = 1uL

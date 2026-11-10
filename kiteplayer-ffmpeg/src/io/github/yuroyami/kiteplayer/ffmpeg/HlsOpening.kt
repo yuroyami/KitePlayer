@@ -46,9 +46,12 @@ internal class HlsOpen(
     val times: HlsTimeOfDay = HlsTimeOfDay(),
     /** Moves a master playlist's stream to another variant in place, or null when it cannot (#464). */
     val switch: HlsVariantSwitch? = null,
-    /** Where a finished media playlist asks to start, in microseconds (#627), or null. */
-    val suggestedStartUs: Long? = null,
+    /** Where the playlist asks to start, once FFmpeg has read the playlist that says (#627). */
+    val start: HlsStart = HlsStart(null, null, null),
 ) {
+    /** Where a finished media playlist asks to start, in microseconds (#627), or null. */
+    val suggestedStartUs: Long? get() = start.startUs
+
     /**
      * The pre-open options this open adds. A segment address often has no file extension, so
      * FFmpeg's extension check must not refuse it; the opener decides which addresses open. A live
@@ -68,9 +71,11 @@ internal class HlsOpen(
  * either end stops there. A live playlist gives null: FFmpeg applies the tag to it with
  * `prefer_x_start`, and only to it, so a finished one started at zero.
  */
-internal fun hlsSuggestedStartUs(text: String): Long? {
+internal fun hlsSuggestedStartUs(text: String, master: String? = null): Long? {
     if (text.lineSequence().none { it.trim() == "#EXT-X-ENDLIST" }) return null
-    val tag = text.lineSequence().map { it.trim() }.firstOrNull { it.startsWith("#EXT-X-START:") } ?: return null
+    // A master may name the start for every playlist it lists; a media playlist's own tag wins.
+    fun tagOf(playlist: String) = playlist.lineSequence().map { it.trim() }.firstOrNull { it.startsWith("#EXT-X-START:") }
+    val tag = tagOf(text) ?: master?.let(::tagOf) ?: return null
     val offset = tag.removePrefix("#EXT-X-START:").split(',')
         .map { it.trim() }
         .firstOrNull { it.startsWith("TIME-OFFSET=") }
@@ -130,9 +135,17 @@ internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job, read: 
         master == null -> text
         switch != null -> master.servedFrom(HlsVariantSwitch.PLAYLIST)
         else -> master.playlist
+    }.let { if (master == null) it else withoutStartTag(it) }
+    // A master names its start in the kept variant's playlist, or in itself, and FFmpeg reads that
+    // playlist through the opener during its own open, which is where the start is read (#627).
+    val start = when {
+        master == null -> HlsStart(null, null, hlsSuggestedStartUs(text))
+        switch != null -> HlsStart(HlsVariantSwitch.PLAYLIST, text, null)
+        nested -> HlsStart(keptVariantAddress(master.playlist)?.let { Playlists.resolve(base, it) }, text, null)
+        else -> HlsStart(null, null, null)
     }
     val opener = if (nested) {
-        MediaByteOpener { address -> openRelatedBridge(io, address, lifetime, ledger, failover, times, switch) }
+        MediaByteOpener { address -> openRelatedBridge(io, address, lifetime, ledger, failover, times, switch, start) }
     } else {
         // No segment open will say where FFmpeg starts, which for a playlist that has ended is its first.
         times.anchorAtStart(base)
@@ -153,9 +166,45 @@ internal suspend fun openHls(item: MediaItem, io: MediaIo, lifetime: Job, read: 
     val thumbnails = HlsThumbnails.choose(hlsImageStreams(text))?.let { HlsThumbnails(io, base, it) }
     return HlsOpen(
         PlaylistMediaIo(playlist.encodeToByteArray(), owner = io), base, opener, ledger, variants, master?.chosen, thumbnails, times, switch,
-        // A master names its media playlists' starts in them, which this open does not read (#627).
-        suggestedStartUs = if (master == null) hlsSuggestedStartUs(text) else null,
+        start = start,
     )
+}
+
+/**
+ * [master] without its `EXT-X-START`. FFmpeg takes that tag for a media playlist's, and then refuses
+ * the master's first variant as "Master Playlist tag found in a Media Playlist", so a master that
+ * named its start never opened. The start is read here instead (#627).
+ */
+private fun withoutStartTag(master: String): String =
+    if ("#EXT-X-START:" !in master) master else master.split('\n').filterNot { it.trim().startsWith("#EXT-X-START:") }.joinToString("\n")
+
+/** The address the kept [master] playlist gives its one variant, as written, or null. */
+private fun keptVariantAddress(master: String): String? {
+    val lines = master.split('\n').map { it.trim() }
+    val tag = lines.indexOfFirst { it.startsWith("#EXT-X-STREAM-INF:") }
+    if (tag < 0) return null
+    return (tag + 1 until lines.size).map { lines[it] }.firstOrNull { it.isNotEmpty() && !it.startsWith("#") }
+}
+
+/**
+ * Where an HLS item asks to start (#627). A media playlist says so in itself, which the open reads
+ * at once. A master's kept variant says so in its own playlist, which FFmpeg reads through the
+ * opener during its open, so [read] takes the first text read from [variantAddress], with the
+ * master's own tag standing in when that playlist names none. A rendition's playlist, which FFmpeg
+ * may read first, does not count.
+ */
+internal class HlsStart(private val variantAddress: String?, private val master: String?, initial: Long?) {
+    private val found = atomic<Long?>(initial)
+    private val read = atomic(variantAddress == null)
+
+    /** The playlist at [address] was read whole as [text]. */
+    fun read(address: String, text: String) {
+        if (address != variantAddress || !read.compareAndSet(false, true)) return
+        found.value = hlsSuggestedStartUs(text, master)
+    }
+
+    /** The start in microseconds, or null when nothing names one or the playlist was not read yet. */
+    val startUs: Long? get() = found.value
 }
 
 /**
@@ -172,6 +221,7 @@ private fun openRelatedBridge(
     failover: HlsFailover,
     times: HlsTimeOfDay,
     switch: HlsVariantSwitch?,
+    start: HlsStart,
 ): MediaByteSource? =
     blockingIn(lifetime) {
         // The kept variant's playlist and segments are at addresses the switch gave them (#464).
@@ -200,6 +250,7 @@ private fun openRelatedBridge(
             // A media playlist whose keys are protected by digital rights management fails its
             // read, so FFmpeg decrypts nothing with the wrong key, and the open says why (#624).
             hlsDrmRefusal(text, shown)?.let { throw ledger.refuse(it) }
+            start.read(address, text)
         }
         BlockingMediaIo(dated, lifetime)
     }

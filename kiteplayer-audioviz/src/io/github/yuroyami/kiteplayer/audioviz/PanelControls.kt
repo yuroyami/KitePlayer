@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.audioviz
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -27,6 +28,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
@@ -126,7 +132,20 @@ internal fun Slider(label: String, value: Float, range: ClosedFloatingPointRange
     Canvas(
         Modifier
             .fillMaxWidth()
-            .height(22.dp)
+            // A touch target of 48 dp, the line drawn at its middle (#959).
+            .height(48.dp)
+            // A keyboard or a television remote reaches it, and the left and right keys move it a
+            // twentieth of its range (#959).
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                val step = span / KEY_STEPS
+                when (event.key) {
+                    Key.DirectionLeft -> { latest((value - step).coerceIn(range.start, range.endInclusive)); true }
+                    Key.DirectionRight -> { latest((value + step).coerceIn(range.start, range.endInclusive)); true }
+                    else -> false
+                }
+            }
+            .focusable()
             .semantics {
                 contentDescription = label
                 progressBarRangeInfo = ProgressBarRangeInfo(value.coerceIn(range.start, range.endInclusive), range)
@@ -172,3 +191,6 @@ internal fun SearchField(query: String, hint: String, onChange: (String) -> Unit
         },
     )
 }
+
+/** The steps of a slider's range that the left and right keys move it by (#959). */
+private const val KEY_STEPS = 20f

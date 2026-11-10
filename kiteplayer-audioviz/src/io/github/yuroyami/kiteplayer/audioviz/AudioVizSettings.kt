@@ -1,9 +1,12 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -245,7 +248,10 @@ private fun Swatch(palette: VizPalette, chosen: Boolean, onPick: () -> Unit) {
             .size(44.dp, 22.dp)
             .clip(RoundedCornerShape(4.dp))
             .border(if (chosen) 2.dp else 0.dp, PanelColors.Bright, RoundedCornerShape(4.dp))
-            .clickable(onClick = onPick),
+            // A named choice of one, as the panel's chips are, so a screen reader says which
+            // palette each swatch is and which one is in use (#959).
+            .selectable(selected = chosen, role = Role.RadioButton, onClick = onPick)
+            .semantics { contentDescription = palette.name },
     ) {
         drawRect(Brush.horizontalGradient(List(8) { palette.ramp(it / 7f) }))
     }

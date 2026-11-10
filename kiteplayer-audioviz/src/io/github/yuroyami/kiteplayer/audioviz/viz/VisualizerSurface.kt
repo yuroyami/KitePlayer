@@ -33,6 +33,7 @@ import io.github.yuroyami.kiteplayer.audioviz.SpectrumFrame
 import io.github.yuroyami.kiteplayer.audioviz.viz.ground.drawDetail
 import io.github.yuroyami.kiteplayer.audioviz.viz.ground.drawGround
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.TransitionBlend
+import io.github.yuroyami.kiteplayer.audioviz.viz.shader.transitionFor
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.canDrawRuntimeShaders
 import kotlin.time.TimeSource
 import kotlin.math.pow
@@ -738,11 +739,14 @@ private fun DirectedCanvas(
 
         val transitionStarted = TimeSource.Monotonic.markNow()
         val progress = director.progress
+        // On a platform whose bitmaps run no shader, a change that renders into bitmaps would show
+        // a drawing with no fallback as its background alone, so such a pair crossfades (#947).
+        val transition = transitionFor(director.transition, showing, next)
         drawRect(shown.background)
         showing.ground?.let { drawGround(it, state, if (next.ground == null) 1f - progress else 1f) }
         next.ground?.let { drawGround(it, state, progress) }
 
-        if (director.transition == VizTransition.WarpHandoff) {
+        if (transition == VizTransition.WarpHandoff) {
             if (stage.handingOff) {
                 // One more frame of the old drawing, and that frame becomes the new drawing's past.
                 stage.arriving.inherit(stage.steady.render(this, showing, state, scale))
@@ -757,9 +761,9 @@ private fun DirectedCanvas(
             return@Canvas
         }
 
-        if (blend.canDrawLayers(director.transition)) {
+        if (blend.canDrawLayers(transition)) {
             drawTransitionLayers(
-                blend, director.transition, progress,
+                blend, transition, progress,
                 from = { drawTransitionEcho(stage.steady, showing, state, scale, stats, fresh) },
                 to = { drawTransitionEcho(stage.arriving, next, state, scale, stats, fresh) },
             )
@@ -767,7 +771,7 @@ private fun DirectedCanvas(
             val from = stage.steady.frameFor(fresh, this, showing, state, scale, stats)
             val to = stage.arriving.frameFor(fresh, this, next, state, scale, stats)
             if (from == null || to == null) return@Canvas
-            val brush = blend.prepare(from, to, director.transition, progress, size.width, size.height)
+            val brush = blend.prepare(from, to, transition, progress, size.width, size.height)
             if (brush != null) {
                 drawRect(brush)
             } else {

@@ -128,3 +128,22 @@ half4 main(float2 position) {
 """
     }
 }
+
+/**
+ * The change to draw between [from] and [to] for [asked]. [VizTransition.ZoomThrough] and
+ * [VizTransition.WarpHandoff] draw both drawings into bitmaps, and where a bitmap canvas runs no
+ * shader a drawing with no fallback would show only its background there, so those two become a
+ * crossfade on the screen canvas for such a pair (#947). Every other change is kept.
+ */
+internal fun transitionFor(
+    asked: VizTransition,
+    from: io.github.yuroyami.kiteplayer.audioviz.viz.Visualization,
+    to: io.github.yuroyami.kiteplayer.audioviz.viz.Visualization,
+    bitmapsRunShaders: Boolean = bitmapCanvasesRunShaders,
+): VizTransition {
+    if (bitmapsRunShaders) return asked
+    if (asked != VizTransition.ZoomThrough && asked != VizTransition.WarpHandoff) return asked
+    fun blankInABitmap(drawing: io.github.yuroyami.kiteplayer.audioviz.viz.Visualization) =
+        drawing is ShaderPreset && !drawing.hasFallback
+    return if (blankInABitmap(from) || blankInABitmap(to)) VizTransition.Crossfade else asked
+}

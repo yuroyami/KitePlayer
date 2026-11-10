@@ -18,6 +18,9 @@ import org.jetbrains.skia.impl.use
 
 internal actual val runtimeShadersSupported: Boolean = true
 
+/** Skia runs runtime shaders on every canvas, a bitmap's included. */
+internal actual val bitmapCanvasesRunShaders: Boolean = true
+
 internal actual fun DrawScope.canDrawRuntimeShaders(): Boolean = true
 
 /**

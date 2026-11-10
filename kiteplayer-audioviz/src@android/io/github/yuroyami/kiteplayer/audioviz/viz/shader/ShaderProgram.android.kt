@@ -17,6 +17,9 @@ import io.github.yuroyami.kiteplayer.audioviz.AudioVizAuthoringApi
 internal actual val runtimeShadersSupported: Boolean
     get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
 
+/** A bitmap canvas is not hardware accelerated, so Android runs no runtime shader on one. */
+internal actual val bitmapCanvasesRunShaders: Boolean = false
+
 internal actual fun DrawScope.canDrawRuntimeShaders(): Boolean =
     runtimeShadersSupported && drawContext.canvas.nativeCanvas.isHardwareAccelerated
 

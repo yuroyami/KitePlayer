@@ -75,6 +75,12 @@ public expect class ShaderProgram(source: String) {
 internal expect val runtimeShadersSupported: Boolean
 
 /**
+ * Whether a canvas backed by a bitmap runs runtime shaders. Android runs them only on a hardware
+ * accelerated canvas, so a drawing rendered into a bitmap there draws its fallback (#947).
+ */
+internal expect val bitmapCanvasesRunShaders: Boolean
+
+/**
  * Whether a shader brush may be drawn on this canvas. Android refuses one on a bitmap-backed canvas
  * and throws, and every echo buffer is one; Skia draws it anywhere.
  */

@@ -12,6 +12,35 @@ import kotlin.test.assertTrue
 /** The XML reader and the MPD parser against real-world manifest shapes. */
 class DashManifestParserTest {
 
+    /**
+     * A repeat to the end of the Period counts that end from presentationTimeOffset, as its own t
+     * does (#748). Without the offset a 60 s Period with a 10 s offset listed 25 two-second
+     * segments instead of 30, and one when the offset passed the Period's length.
+     */
+    @Test
+    fun aRepeatToThePeriodsEndCountsFromThePresentationTimeOffset() {
+        fun countFor(offsetSeconds: Int): Int {
+            val offset = offsetSeconds * 90_000L
+            val manifest = DashManifestParser.parse(
+                """<MPD type="static" mediaPresentationDuration="PT60S"><Period duration="PT60S">
+                    <AdaptationSet contentType="video" mimeType="video/mp4">
+                        <SegmentTemplate media="v-${'$'}Time${'$'}.m4s" timescale="90000" presentationTimeOffset="$offset">
+                            <SegmentTimeline><S t="$offset" d="180000" r="-1"/></SegmentTimeline>
+                        </SegmentTemplate>
+                        <Representation id="v" bandwidth="1"/>
+                    </AdaptationSet>
+                </Period></MPD>""",
+                "https://cdn.test/vod/movie.mpd",
+                DashUrlPolicy.Default,
+            )
+            val period = manifest.periods.single()
+            return DashManifestParser.segmentPlan(manifest, period, period.adaptationSets.single().representations.single()).mediaUrls.size
+        }
+        assertEquals(30, countFor(10), "a 10 s offset")
+        assertEquals(30, countFor(600), "a ten minute offset")
+        assertEquals(30, countFor(0), "no offset")
+    }
+
     @Test
     fun theXmlReaderHandlesTheShapesManifestsUse() {
         val root = XmlMini.parse(

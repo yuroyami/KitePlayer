@@ -731,8 +731,17 @@ public object DashManifestParser {
                 // the end": until the next entry's own start, or the period's end in timescale
                 // units (0..-1 used to expand this entry to nothing at all).
                 val repeats: Long = if (entry.r >= 0) entry.r else {
+                    // A t counts from presentationTimeOffset, so the Period's end does too, as the
+                    // live expander has it; without the offset the repeat stopped that far early,
+                    // and at one segment when the offset passed the Period's length (#748).
                     val untilTime = timeline.getOrNull(index + 1)?.t
-                        ?: durationMicros?.let { rescale(it, template.timescale, 1_000_000L, "the period in timescale units") }
+                        ?: durationMicros?.let {
+                            plus(
+                                rescale(it, template.timescale, 1_000_000L, "the period in timescale units"),
+                                template.presentationTimeOffset,
+                                "the period end",
+                            )
+                        }
                         ?: throw IllegalArgumentException(
                             "SegmentTimeline r=-1 needs the next entry's t or a duration to stop at",
                         )

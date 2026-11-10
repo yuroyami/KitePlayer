@@ -197,6 +197,31 @@ class KitePlayerUIViewTest {
         view.release()
     }
 
+    /** A view out of its window has no controls following the player, and gets them back on return (#941). */
+    @Test
+    fun leavingTheWindowDropsTheControlsAndComingBackBuildsThemAgain() {
+        val window = UIWindow(frame = CGRectMake(0.0, 0.0, 320.0, 240.0))
+        val view = KitePlayerUIView()
+        view.rendererFactory = ApplePlayerViewRendererFactory { _, _, _ -> FakeRenderer() }
+        window.addSubview(view)
+        view.player = player()
+        view.showsControls = true
+        val first = assertNotNull(view.controls)
+
+        view.removeFromSuperview()
+        assertNull(view.controls)
+        assertEquals(0, view.subviews.size)
+        assertTrue(view.isAccessibilityElement)
+        assertTrue(view.showsControls, "the switch stays as the application set it")
+
+        window.addSubview(view)
+        val again = assertNotNull(view.controls)
+        assertTrue(again !== first)
+        assertFalse(view.isAccessibilityElement)
+        view.release()
+        window.hidden = true
+    }
+
     /** The application no longer has to tell the view: it follows the status while in a window (#307). */
     @Test
     fun `VoiceOver hears a status change without the application asking`() {

@@ -220,14 +220,18 @@ public open class KitePlayerView @JvmOverloads constructor(
             controlsOverlay?.model?.onPictureInPicture = value
         }
 
-    /** The model behind the controls, to show or hide them from code, or null while [showsControls] is false or no player is set. */
+    /**
+     * The model behind the controls, to show or hide them from code, or null while [showsControls]
+     * is false, no player is set, or the view has left its window. Leaving the window stops the
+     * controls following the player, and coming back builds them again (#941).
+     */
     public val controls: PlayerControlsModel? get() = controlsOverlay?.model
 
     private var controlsOverlay: ControlsOverlay? = null
     private var controlsScope: CoroutineScope? = null
 
-    /** Builds the controls for the player and the switch as they stand now, and drops the old ones. */
-    private fun rebuildControls() {
+    /** Drops the controls and their scope, so nothing follows the player for them any more. */
+    private fun dropControls() {
         controlsOverlay?.let { old ->
             old.close()
             old.model.close()
@@ -236,6 +240,11 @@ public open class KitePlayerView @JvmOverloads constructor(
         controlsScope?.cancel()
         controlsOverlay = null
         controlsScope = null
+    }
+
+    /** Builds the controls for the player and the switch as they stand now, and drops the old ones. */
+    private fun rebuildControls() {
+        dropControls()
         val paired = player
         if (!showsControls || paired == null) return
         val scope = CoroutineScope(SupervisorJob() + MainLooper)
@@ -314,12 +323,20 @@ public open class KitePlayerView @JvmOverloads constructor(
         attached = true
         displayAwake.onScreen = true
         watchPlayer()
+        // Built on the next turn of the loop: a child added while the attach is still being
+        // handed to the children would be attached twice.
+        if (controlsOverlay == null && showsControls && player != null) {
+            post { if (attached && controlsOverlay == null) rebuildControls() }
+        }
     }
 
     override fun onDetachedFromWindow() {
         attached = false
         displayAwake.onScreen = false
         watchPlayer()
+        // The controls follow the player's state and progress, so a view out of its window drops
+        // them rather than building a snapshot on every tick for nobody (#941).
+        dropControls()
         super.onDetachedFromWindow()
     }
 

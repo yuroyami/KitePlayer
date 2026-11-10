@@ -191,15 +191,19 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
             controlsOverlay?.model?.onPictureInPicture = value
         }
 
-    /** The model behind the controls, to show or hide them from code, or null while [showsControls] is false or no player is set. */
+    /**
+     * The model behind the controls, to show or hide them from code, or null while [showsControls]
+     * is false, no player is set, or the view has left its window. Leaving the window stops the
+     * controls following the player, and coming back builds them again (#941).
+     */
     public val controls: PlayerControlsModel? get() = controlsOverlay?.model
 
     internal var controlsOverlay: ControlsOverlayView? = null
         private set
     private var controlsScope: CoroutineScope? = null
 
-    /** Builds the controls for the player and the switch as they stand now, and drops the old ones. */
-    private fun rebuildControls() {
+    /** Drops the controls and their scope, so nothing follows the player for them any more. */
+    private fun dropControls() {
         controlsOverlay?.let { old ->
             old.close()
             old.model.close()
@@ -208,11 +212,14 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
         controlsScope?.cancel()
         controlsOverlay = null
         controlsScope = null
+        setIsAccessibilityElement(true)
+    }
+
+    /** Builds the controls for the player and the switch as they stand now, and drops the old ones. */
+    private fun rebuildControls() {
+        dropControls()
         val paired = player
-        if (!showsControls || paired == null) {
-            setIsAccessibilityElement(true)
-            return
-        }
+        if (!showsControls || paired == null) return
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
         val model = PlayerControlsModel(paired, scope, controlsStrings)
         // iOS has no recommended timeout for controls, so they stay while VoiceOver reads them (#653).
@@ -400,5 +407,8 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
         }
         displayAwake.onScreen = window != null
         watchPlayer()
+        // The controls follow the player's state and progress, so a view out of its window drops
+        // them rather than building a snapshot on every tick for nobody (#941).
+        if (window == null) dropControls() else if (controlsOverlay == null) rebuildControls()
     }
 }

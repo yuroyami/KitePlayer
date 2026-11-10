@@ -61,6 +61,19 @@ internal object Aes128Cbc {
         require(key.size == BLOCK) { "an AES-128 key has 16 bytes, not ${key.size}" }
         require(iv.size == BLOCK) { "an AES-128 IV has 16 bytes, not ${iv.size}" }
         require(data.size % BLOCK == 0 && (data.isNotEmpty() || !padded)) { "${data.size} encrypted bytes are not whole blocks of 16" }
+        // The platform's own cipher where there is one, the JVM's on the JVM and Android, which
+        // runs the hardware's AES instructions; this Kotlin one is the fallback and the reference (#866).
+        val out = platformAesCbcDecrypt(data, key, iv) ?: decryptBlocks(data, key, iv)
+        if (!padded) return out
+        val padding = out[out.size - 1].toInt() and 0xFF
+        require(padding in 1..BLOCK && (out.size - padding until out.size).all { out[it].toInt() and 0xFF == padding }) {
+            "the decrypted bytes do not end in their padding, so the key or the IV is not the segment's"
+        }
+        return out.copyOf(out.size - padding)
+    }
+
+    /** [data], whole blocks, decrypted in Kotlin, with no padding taken off. Also the test's reference. */
+    internal fun decryptBlocks(data: ByteArray, key: ByteArray, iv: ByteArray): ByteArray {
         val keys = roundKeys(key)
         val out = ByteArray(data.size)
         val state = IntArray(BLOCK)
@@ -95,12 +108,7 @@ internal object Aes128Cbc {
             }
             at += BLOCK
         }
-        if (!padded) return out
-        val padding = out[out.size - 1].toInt() and 0xFF
-        require(padding in 1..BLOCK && (out.size - padding until out.size).all { out[it].toInt() and 0xFF == padding }) {
-            "the decrypted bytes do not end in their padding, so the key or the IV is not the segment's"
-        }
-        return out.copyOf(out.size - padding)
+        return out
     }
 
     /** The eleven round keys of [key], one byte to an entry. */
@@ -130,3 +138,9 @@ internal object Aes128Cbc {
         return keys
     }
 }
+
+/**
+ * [data], whole blocks of AES-128-CBC, decrypted by the platform's own cipher with no padding taken
+ * off, or null where the platform has none to offer (#866).
+ */
+internal expect fun platformAesCbcDecrypt(data: ByteArray, key: ByteArray, iv: ByteArray): ByteArray?

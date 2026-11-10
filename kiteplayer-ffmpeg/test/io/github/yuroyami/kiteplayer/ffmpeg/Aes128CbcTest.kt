@@ -52,4 +52,30 @@ class Aes128CbcTest {
         assertFailsWith<IllegalArgumentException> { Aes128Cbc.decrypt(encrypted, ByteArray(24), iv) }
         assertFailsWith<IllegalArgumentException> { Aes128Cbc.decrypt(encrypted, "0123456789abcdef".encodeToByteArray(), ByteArray(8)) }
     }
+
+    /** The Kotlin cipher is still the reference where a platform one runs instead (#866). */
+    @Test
+    fun theKotlinCipherAloneMatchesTheNistVector() {
+        assertContentEquals(
+            bytes("6bc1bee22e409f96e93d7e117393172a ae2d8a571e03ac9c9eb76fac45af8e51 30c81c46a35ce411e5fbc1191a0a52ef f69f2445df4f9b17ad2b417be66c3710"),
+            Aes128Cbc.decryptBlocks(
+                bytes("7649abac8119b246cee98e9b12e9197d 5086cb9b507219ee95db113a917678b2 73bed6b8e3c1743b7116e69e22229516 3ff1caa1681fac09120eca307586e1a7"),
+                key = bytes("2b7e151628aed2a6abf7158809cf4f3c"),
+                iv = bytes("000102030405060708090a0b0c0d0e0f"),
+            ),
+        )
+    }
+
+    /** Where the platform has a cipher, it gives the Kotlin one's bytes for any key, IV and length (#866). */
+    @Test
+    fun thePlatformCipherAgreesWithTheKotlinOne() {
+        val random = kotlin.random.Random(866)
+        repeat(40) { round ->
+            val key = random.nextBytes(16)
+            val iv = random.nextBytes(16)
+            val data = random.nextBytes(16 * (1 + round))
+            val platform = platformAesCbcDecrypt(data, key, iv) ?: return
+            assertContentEquals(Aes128Cbc.decryptBlocks(data, key, iv), platform, "round $round")
+        }
+    }
 }

@@ -1052,8 +1052,16 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         if (closed.value) return
         // A new surface has no matched rate yet; the next frames measure it again (API 30+).
         // A fresh object, not a reset: the schedule thread may be inside the old one right now.
-        matchedSurface = surface
-        frameRateRequest = SurfaceFrameRateRequest()
+        // surfaceChanged hands the same Surface again on every resize, which must not restart the
+        // three second measurement, and a replaced Surface gives back the rate it asked for (#739).
+        val previous = matchedSurface
+        if (surface !== previous) {
+            if (previous != null && android.os.Build.VERSION.SDK_INT >= 30) {
+                runCatching { previous.setFrameRate(0f, Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE) }
+            }
+            matchedSurface = surface
+            frameRateRequest = SurfaceFrameRateRequest()
+        }
         runCatching { directTarget.update(surface) }
             .onFailure { failure ->
                 eventFlow.tryEmit(

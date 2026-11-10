@@ -28,6 +28,33 @@ class DashManifestParserTest {
      * (#743). It paired them by their place among the ones left, so at 8 s, with a 4 s window,
      * the first address in the list took the timing of the first segment still in the window.
      */
+    /**
+     * A live window longer than the plan's budgets lists the segments nearest the live edge rather
+     * than refusing the stream (#750). A 72 hour time shift of two second segments is 129,600 of
+     * them, past the 100,000 a plan may hold, and the channel never opened.
+     */
+    @Test
+    fun aLongTimeShiftWindowListsTheSegmentsNearestTheLiveEdge() {
+        val manifest = DashManifestParser.parse(
+            """<MPD type="dynamic" availabilityStartTime="1970-01-01T00:00:00Z" timeShiftBufferDepth="PT72H">
+                <Period start="PT0S"><AdaptationSet contentType="video" mimeType="video/mp4">
+                  <SegmentTemplate media="v-${'$'}Number${'$'}.m4s" initialization="init.mp4" startNumber="1" timescale="1000" duration="2000"/>
+                  <Representation id="v" bandwidth="1"/>
+                </AdaptationSet></Period>
+              </MPD>""",
+            "https://cdn.test/live/movie.mpd",
+            DashUrlPolicy.Default,
+        )
+        val period = manifest.periods.single()
+        val now = 100L * 3_600_000_000L
+        val plan = assertNotNull(
+            DashManifestParser.timedPlan(manifest, period, period.adaptationSets.single().representations.single(), DashUrlPolicy.Default, now),
+        )
+        assertTrue(plan.segments.size in 50_000..100_000, "the plan lists ${plan.segments.size} segments")
+        val last = plan.segments.last()
+        assertEquals(now, last.startMicros + last.durationMicros, "the last segment is not the one at the live edge")
+    }
+
     @Test
     fun aLiveSegmentListPairsEachTimedSegmentWithItsOwnAddress() {
         val manifest = DashManifestParser.parse(

@@ -937,8 +937,18 @@ public object DashManifestParser {
                 durationMicros,
             )
         }
+        // A live window lists at most what the plan's budgets hold, the segments nearest the live
+        // edge, where FFmpeg starts anyway. A window past them, a 72 hour time shift of two second
+        // segments among them, was refused as a whole, so the channel never opened (#750). Each
+        // address costs its base and its reference, whose number or time takes at most 20 digits.
+        val liveLimit: Long? = window?.let {
+            val cost = base.url.length.toLong() + media.length + 20
+            minOf(urlLimits.planUrls.toLong() - 1, (urlLimits.planChars - (initialization?.length ?: 0)) / cost).coerceAtLeast(1)
+        }
         if (template.timeline.isNotEmpty()) {
-            for (entry in expandTimeline(template.timeline, template.timescale, totalMicros, window, null, template.presentationTimeOffset)) {
+            val timed = expandTimeline(template.timeline, template.timescale, totalMicros, window, null, template.presentationTimeOffset)
+            val listed = if (liveLimit != null && timed.size > liveLimit) timed.subList(timed.size - liveLimit.toInt(), timed.size) else timed
+            for (entry in listed) {
                 val number = plus(template.startNumber, entry.index, "a segment number")
                 if (template.endNumber != null && number > template.endNumber) break
                 budget.reserve(1)
@@ -949,7 +959,7 @@ public object DashManifestParser {
                 ?: throw IllegalArgumentException("SegmentTemplate needs duration or a timeline")
             val segmentMicros = rescale(segmentDuration, 1_000_000L, template.timescale, "the segment duration")
             require(segmentMicros > 0) { "degenerate segment duration" }
-            val first: Long
+            var first: Long
             var end: Long
             // endNumber names the last segment, so it counts them when nothing else does.
             val count = template.endNumber?.let { (minus(it, template.startNumber, "the segment count") + 1).coerceAtLeast(0) }
@@ -968,6 +978,7 @@ public object DashManifestParser {
                 totalMicros?.let { total -> end = minOf(end, total / segmentMicros + if (total % segmentMicros != 0L) 1 else 0) }
             }
             if (count != null) end = minOf(end, count)
+            if (liveLimit != null && end - first > liveLimit) first = end - liveLimit
             budget.reserve((end - first).coerceAtLeast(0))
             for (k in first until end) {
                 val startMicros = times(k, segmentMicros, "a segment start")

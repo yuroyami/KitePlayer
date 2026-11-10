@@ -165,16 +165,26 @@ public object Webm {
     /**
      * [segment] with each block's track number written as [numbers] says, or [segment] itself when
      * every number stays. A block of a track that [numbers] does not name is left as it is.
+     *
+     * @throws WebmUnsupportedException when the segment nests its blocks deeper than any real
+     *   one does, as a crafted segment can (#719).
      */
+    @Throws(WebmUnsupportedException::class)
     public fun retrack(segment: ByteArray, numbers: Map<Long, Long>): ByteArray {
         if (numbers.all { it.key == it.value }) return segment
         val out = segment.copyOf()
         val reader = Reader(out)
-        fun blocks(end: Long) {
+        // Matroska nests three levels here, Segment, Cluster and BlockGroup. Each further level
+        // costs a crafted segment two bytes, so without a bound a 64 MiB one nested millions deep
+        // overflowed the stack, which ends a native process (#719).
+        fun blocks(end: Long, depth: Int) {
+            if (depth > MAX_RETRACK_DEPTH) {
+                throw WebmUnsupportedException("a WebM segment nests its blocks more than $MAX_RETRACK_DEPTH levels deep")
+            }
             while (reader.position < end) {
                 val child = reader.element() ?: return
                 when (child.id) {
-                    SEGMENT, CLUSTER, BLOCK_GROUP -> blocks(reader.end(child))
+                    SEGMENT, CLUSTER, BLOCK_GROUP -> blocks(reader.end(child), depth + 1)
                     SIMPLE_BLOCK, BLOCK -> {
                         val at = reader.position.toInt()
                         val first = out.getOrNull(at)?.toInt()?.and(0xFF) ?: return
@@ -186,9 +196,12 @@ public object Webm {
                 }
             }
         }
-        blocks(out.size.toLong())
+        blocks(out.size.toLong(), depth = 0)
         return out
     }
+
+    /** The deepest [retrack] walks, far past the three levels a real segment uses. */
+    private const val MAX_RETRACK_DEPTH = 16
 
     private class Element(val id: Long, val size: Long?)
 

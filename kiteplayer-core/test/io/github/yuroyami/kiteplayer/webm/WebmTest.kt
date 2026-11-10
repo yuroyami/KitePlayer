@@ -93,4 +93,19 @@ class WebmTest {
         assertEquals(listOf(11, 22, 44), changed.map { written[it + 4].toInt() }, "each number is the one before its own block's payload")
         assertTrue(written.indexOf(0x89.toByte()) >= 0, "a block of a track with no number to take stays")
     }
+
+    /**
+     * A segment that nests BlockGroups 100,000 deep, two bytes a level, is refused by type (#719).
+     * The walk called itself for each level, so it overflowed the stack, which a native app does
+     * not survive.
+     */
+    @Test
+    fun aSegmentNestedFarPastMatroskasLevelsIsRefused() {
+        val nested = ByteArray(200_000) { if (it % 2 == 0) 0xA0.toByte() else 0xFF.toByte() }
+        assertFailsWith<WebmUnsupportedException> { Webm.retrack(nested, mapOf(1L to 2L)) }
+        // Three real levels, Segment, Cluster and BlockGroup, still walk.
+        val group = element(0xA0, element(0xA1, block(3, 22)))
+        val segment = element(0x18538067, element(0x1F43B675, element(0xE7, number(0)) + group))
+        assertEquals(0x82, Webm.retrack(segment, mapOf(3L to 2L)).let { out -> out[segment.indexOf(0x83.toByte())].toInt() and 0xFF })
+    }
 }

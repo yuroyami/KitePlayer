@@ -230,6 +230,33 @@ class SincResamplerTest {
     }
 
     /**
+     * Content just past the new Nyquist is filtered, not folded into the top of the band (#826). From
+     * 48 to 44.1 kHz a 23 kHz tone folds to 21.1 kHz; 32 Blackman taps let it through 32 dB down.
+     */
+    @Test
+    fun aToneJustPastTheNewNyquistIsFilteredRatherThanFolded() {
+        val resampler = resampler(48_000, 44_100)
+        val input = tone(96_000, 48_000, hz = 23_000.0)
+        val produced = runAll(resampler, input, 96_000)
+        val measured = produced.copyOfRange(SincResampler.TAPS, produced.size)
+        val alias = amplitudeAt(measured, measured.size, 44_100, 21_100.0)
+        val down = -20.0 * kotlin.math.log10(alias)
+        assertTrue(down >= 60.0, "a 23 kHz tone came through as 21.1 kHz only $down dB down")
+    }
+
+    /** The top of the audible band keeps its level: 19 kHz from 44.1 to 48 kHz loses at most 0.5 dB (#826). */
+    @Test
+    fun theTopOfTheAudibleBandKeepsItsLevel() {
+        val resampler = resampler(44_100, 48_000)
+        val input = tone(88_200, 44_100, hz = 19_000.0)
+        val produced = runAll(resampler, input, 88_200)
+        val measured = produced.copyOfRange(SincResampler.TAPS * 2, produced.size - SincResampler.TAPS * 2)
+        val kept = amplitudeAt(measured, measured.size, 48_000, 19_000.0)
+        val loss = -20.0 * kotlin.math.log10(kept)
+        assertTrue(loss <= 0.5, "a 19 kHz tone lost $loss dB going from 44.1 to 48 kHz")
+    }
+
+    /**
      * How far below a tone the resampler's own noise sits, in dB: the residual after a sine at
      * [hz] is fitted over the middle second of [output], at [rate].
      */

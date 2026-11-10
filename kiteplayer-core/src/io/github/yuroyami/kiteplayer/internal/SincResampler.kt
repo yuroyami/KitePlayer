@@ -3,7 +3,7 @@ package io.github.yuroyami.kiteplayer.internal
 import io.github.yuroyami.kiteplayer.spi.AudioResampler
 import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.cos
+import kotlin.math.sqrt
 import kotlin.math.min
 import kotlin.math.sin
 
@@ -290,24 +290,48 @@ internal class SincResampler(
         return sin(piX) / piX
     }
 
-    /** Blackman, which trades a little transition width for stopband rejection deep enough to hide. */
+    /**
+     * Kaiser, with [KAISER_BETA]. A Blackman window over 32 taps left a transition band a third of
+     * the Nyquist wide, so going from 48 to 44.1 kHz a 23 kHz tone came through only 32 dB down,
+     * folded to 21.1 kHz, and 19 kHz was already 1.5 dB down (#826).
+     */
     private fun window(distance: Double): Double {
         val ratio = distance / half
         if (ratio <= -1.0 || ratio >= 1.0) return 0.0
-        val angle = PI * (ratio + 1.0)
-        return 0.42 - 0.5 * cos(angle) + 0.08 * cos(2.0 * angle)
+        return besselI0(KAISER_BETA * sqrt(1.0 - ratio * ratio)) / KAISER_NORM
     }
 
     internal companion object {
         /**
          * Taps per output frame.
          *
-         * Thirty-two is the usual place to sit: the stopband is deep enough that the residual
-         * aliasing is far below anything a listener can hear over the music, and the cost is 32
-         * multiply-adds per channel per output frame, which at 48 kHz stereo is about 3 million
-         * per second and disappears next to the decode.
+         * Sixty-four, with the Kaiser window and the corner at [ROLLOFF], computed from the kernel
+         * over every phase (#826): from 48 to 44.1 kHz a 23 kHz tone is 76 dB down before it
+         * folds, 19 kHz loses nothing measurable and 20 kHz 0.6 dB; from 96 to 48 kHz, 26 kHz is
+         * 59 dB down. Thirty-two taps with a Blackman window gave 32 dB, 1.5 dB, 4.3 dB and 21 dB.
+         * The cost is 64 multiply-adds per channel per output frame, about 6 million a second at
+         * 48 kHz stereo, still small next to the decode.
          */
-        const val TAPS: Int = 32
+        const val TAPS: Int = 64
+
+        /** The Kaiser window's shape: 7 trades transition width and stopband depth best at [TAPS]. */
+        const val KAISER_BETA: Double = 7.0
+
+        private val KAISER_NORM: Double = besselI0(KAISER_BETA)
+
+        /** The modified Bessel function of the first kind, order zero, by its power series. */
+        private fun besselI0(x: Double): Double {
+            var sum = 1.0
+            var term = 1.0
+            var k = 1
+            val quarter = x * x / 4.0
+            while (true) {
+                term *= quarter / (k.toDouble() * k)
+                sum += term
+                if (term < 1e-17 * sum) return sum
+                k++
+            }
+        }
 
         /**
          * Positions between two input frames that get their own row of weights.
@@ -322,9 +346,9 @@ internal class SincResampler(
          * Where the passband ends, as a fraction of the Nyquist it is protecting.
          *
          * Not 1.0: a brick wall at exactly Nyquist needs infinite taps, so the last few percent are
-         * given up as transition band. At 44.1 kHz this puts the corner near 20.4 kHz, above
-         * anything most listeners can hear, and keeps the stopband properly deep.
+         * given up as transition band. At 44.1 kHz this puts the corner near 20.9 kHz, above
+         * anything most listeners can hear, with the stopband deep from just past the Nyquist.
          */
-        const val ROLLOFF: Double = 0.925
+        const val ROLLOFF: Double = 0.95
     }
 }

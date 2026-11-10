@@ -94,4 +94,41 @@ class FlashCounterTest {
         val frames = List(180) { FloatArray(width * height) { 0.3f } }
         assertEquals(0, count(frames), "a still picture")
     }
+
+    /**
+     * A checkerboard that inverts in place flashes over the whole screen (#783). Half its pixels
+     * brighten as the other half darken, so the net of the frame was about nothing, and the
+     * counter saw no flash at all.
+     */
+    @Test
+    fun anInvertingCheckerboardCountsAtItsOwnRate() {
+        val cell = 10
+        val frames = List(180) { step ->
+            val phase = (step / 5) % 2
+            FloatArray(width * height) { index ->
+                val x = index % width
+                val y = index / width
+                if (((x / cell) + (y / cell) + phase) % 2 == 0) 0.85f else 0.05f
+            }
+        }
+        assertEquals(6, count(frames), "a 6 Hz inverting checkerboard")
+    }
+
+    /**
+     * Bars that travel slowly across the screen stay inside the policy. Each pixel brightens and
+     * darkens as a bar passes, under once a second here, which is a slow flash at that place and
+     * counts as one, not as the flash train that reading the larger side of each frame made of it.
+     */
+    @Test
+    fun aSlowlyTravellingPatternStaysInsideThePolicy() {
+        val frames = List(240) { step ->
+            FloatArray(width * height) { index ->
+                val x = (index % width + step) % width
+                // A soft sine of bars 80 pixels apart, moving one pixel a frame.
+                0.45f + 0.4f * kotlin.math.sin(2.0 * kotlin.math.PI * x / 80.0).toFloat()
+            }
+        }
+        val counted = count(frames)
+        assertTrue(counted < FlashCaptureTest.MOST, "bars travelling at a pixel a frame counted $counted flashes")
+    }
 }

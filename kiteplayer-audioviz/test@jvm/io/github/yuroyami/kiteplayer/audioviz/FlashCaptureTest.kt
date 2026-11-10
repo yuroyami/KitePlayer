@@ -73,16 +73,27 @@ class FlashCaptureTest {
         private var ring: Array<FloatArray>? = null
         private var written = 0
         private var seconds = 0f
-        private var lastLegRising: Boolean? = null
-        private var halfway = false
-        private val flashes = ArrayDeque<Float>()
+
+        /** Each pixel's last swing, 1 up, -1 down, 0 none yet. */
+        private var ways: ByteArray? = null
+
+        /** Each pixel's last [TURNS_KEPT] turns, by time, written round. */
+        private var turns: FloatArray? = null
+        private var turnCount: IntArray? = null
+
         var widest = 0f
             private set
 
-        val recent: Int get() = flashes.size
+        /**
+         * The most flashes in the last second over at least [AREA] of the picture: the largest
+         * count that a tenth of the pixels reached, each counting its own pairs of opposing swings.
+         */
+        var recent: Int = 0
+            private set
 
         /**
-         * Reads one frame and records a leg when the picture has swung since [QUICK] ago.
+         * Reads one frame, and records a turn at each pixel that has swung the other way since
+         * [QUICK] ago.
          *
          * Comparing with the picture a fixed time back is the definition itself: a change of at
          * least the step, over at least the area, inside the time a flash takes. Comparing with the
@@ -91,41 +102,64 @@ class FlashCaptureTest {
          */
         fun add(light: FloatArray, deltaSeconds: Float) {
             seconds += deltaSeconds
-            while (flashes.isNotEmpty() && seconds - flashes.first() >= SECOND) flashes.removeFirst()
             val depth = (QUICK / deltaSeconds).toInt().coerceAtLeast(1)
             val frames = ring ?: Array(depth + 1) { FloatArray(light.size) }.also { ring = it }
             light.copyInto(frames[written % frames.size])
             written++
-            if (written <= depth) return
+            if (written <= depth) {
+                recent = 0
+                return
+            }
             val then = frames[(written - 1 - depth) % frames.size]
+            val way = ways ?: ByteArray(light.size).also { ways = it }
+            val times = turns ?: FloatArray(light.size * TURNS_KEPT).also { turns = it }
+            val counts = turnCount ?: IntArray(light.size).also { turnCount = it }
+            // How many pixels reached each count of flashes in the last second.
+            val reached = IntArray(TURNS_KEPT / 2 + 1)
             var up = 0
             var down = 0
             for (index in light.indices) {
                 val was = then[index]
                 val now = light[index]
-                if (minOf(was, now) >= DARK) continue
-                if (now - was >= STEP) up++ else if (was - now >= STEP) down++
+                if (minOf(was, now) < DARK) {
+                    val swing: Byte = when {
+                        now - was >= STEP -> 1
+                        was - now >= STEP -> -1
+                        else -> 0
+                    }
+                    if (swing > 0) up++ else if (swing < 0) down++
+                    // A pixel turns when it swings the other way from its last swing: one leg of
+                    // a flash at that place. Counted per pixel, a pattern that inverts in place, a
+                    // checkerboard or a red and blue swap, flashes over all of it, where the net of
+                    // the whole frame came to about nothing (#783). One leg that reaches the
+                    // pixels over two frames is still one turn of each. A pattern travelling
+                    // slowly turns no pixel, because none swings a whole step in a flash's time.
+                    if (swing.toInt() != 0) {
+                        if (way[index].toInt() != 0 && way[index] != swing) {
+                            times[index * TURNS_KEPT + counts[index] % TURNS_KEPT] = seconds
+                            counts[index]++
+                        }
+                        way[index] = swing
+                    }
+                }
+                // Two turns in the last second are one flash there.
+                var inSecond = 0
+                val kept = minOf(counts[index], TURNS_KEPT)
+                for (k in 0 until kept) if (seconds - times[index * TURNS_KEPT + k] < SECOND) inSecond++
+                reached[minOf(inSecond / 2, reached.size - 1)]++
             }
-            // The net, not the larger side. A pattern travelling across the screen darkens as many
-            // pixels as it brightens, and its direction flips as the crests move, which counts as a
-            // flash train if only the larger side is read. A flash brightens or darkens the picture,
-            // so the two sides have to be far apart.
             val share = (up - down).toFloat() / light.size
             val size = if (share < 0f) -share else share
             if (size > widest) widest = size
-            if (size < AREA) return
-            val rising = share > 0f
-            // The same swing stays true for several frames, so only a turn is a new leg. A flash is
-            // a pair of opposing legs, so it takes two turns to make one.
-            if (lastLegRising == rising) return
-            val first = lastLegRising == null
-            lastLegRising = rising
-            if (first) return
-            if (halfway) {
-                flashes.addLast(seconds)
-                halfway = false
-            } else {
-                halfway = true
+            // From the most flashes down, the first count a tenth of the picture reached.
+            var atLeast = 0
+            recent = 0
+            for (count in reached.size - 1 downTo 1) {
+                atLeast += reached[count]
+                if (atLeast >= AREA * light.size) {
+                    recent = count
+                    break
+                }
             }
         }
     }
@@ -191,6 +225,9 @@ class FlashCaptureTest {
          * is slower than the policy counts. *Judgement.*
          */
         const val QUICK = 0.3f
+
+        /** Turns kept per pixel: sixteen, so up to eight flashes a second read as what they are. */
+        const val TURNS_KEPT = 16
 
         /** Relative luminance of one pixel. */
         fun luma(pixel: Int): Float =

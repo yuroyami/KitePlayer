@@ -674,10 +674,12 @@ waiting data, hands the track to the built-in styling.
   cannot be used against symbol 'font_constructors'". Rebuild the chain, do not patch the link.
 - Cross-linking a Linux shared object with konan's clang needs the gcc runtime directory passed
   with `-B` as well as `-L`, or lld cannot find `crtbeginS.o`.
-- The publish path must pass `-Pkiteplayer.libass.requireAllHostJni=true`, which turns a desktop
+- The publish path must set `KITEPLAYER_LIBASS_REQUIRE_ALL_HOST_JNI=true`, which turns a desktop
   adapter this machine cannot link, or a web module this machine cannot link (no `emcc`), into a
-  failure. Without it the artifact quietly ships without that half and the player there warns
-  `TypesetterUnavailable` and keeps the Kotlin tier.
+  failure, and `KITEPLAYER_LIBASS_REQUIRE_ANDROID_JNI=true`, which does the same for an Android
+  adapter with no NDK. Without them the artifact quietly ships without that half and the player
+  there warns `TypesetterUnavailable` and keeps the Kotlin tier. `scripts/check-libass-jars.sh`
+  opens both jars after a publish (#776).
 - The wasm32 chain is built by the sibling's `buildAssChainForWasm32` with emscripten. HarfBuzz
   promotes warnings to errors through pragmas in `hb.hh`, which no `-Wno-` flag and no
   `-Dwerror=false` can undo; `-DHB_NO_PRAGMA_GCC_DIAGNOSTIC_ERROR` is its own switch for that, and

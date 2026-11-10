@@ -148,17 +148,20 @@ jobs:
           path: build/sbom/
           if-no-files-found: error
 
-      # Every host JNI library and the libass web module must link here: a publish never ships a
-      # module with a missing half.
+      # Every host JNI library, every Android libass adapter and the libass web module must link
+      # here, and the jars must carry them: a publish never ships a module with a missing half (#776).
       - name: Publication readiness
         env:
           KITEPLAYER_LIBASS_REQUIRE_ALL_HOST_JNI: "true"
+          KITEPLAYER_LIBASS_REQUIRE_ANDROID_JNI: "true"
         run: |
+          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           . scripts/test-signing-key.sh
           flags=()
           for module in $(scripts/published-modules.sh); do flags+=(-m "$module"); done
           ./kotlin publish mavenLocal --non-transitive "${flags[@]}"
           ./kotlin check publication
+          ./scripts/check-libass-jars.sh
 
       - name: The web zips for the release page
         run: ./scripts/web-zips.sh
@@ -180,6 +183,7 @@ jobs:
       - name: Publish to Maven Central
         env:
           KITEPLAYER_LIBASS_REQUIRE_ALL_HOST_JNI: "true"
+          KITEPLAYER_LIBASS_REQUIRE_ANDROID_JNI: "true"
           KOTLIN_TOOLCHAIN_MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           KOTLIN_TOOLCHAIN_MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           KOTLIN_TOOLCHAIN_SIGNING_KEY: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
@@ -192,6 +196,9 @@ jobs:
       # writes what the build gives now; a file that differs from the list fails the run before
       # any attestation names it. With the release input off, drop the deployment on the portal.
       - name: The uploaded files are the listed ones
+        env:
+          KITEPLAYER_LIBASS_REQUIRE_ALL_HOST_JNI: "true"
+          KITEPLAYER_LIBASS_REQUIRE_ANDROID_JNI: "true"
         run: |
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           . scripts/test-signing-key.sh

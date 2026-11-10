@@ -228,13 +228,22 @@ jobs:
 
       # Every published artifact against artifact-size-baseline.txt: the JVM jar, the Android
       # archive and the macOS and iOS klibs. After the tests, so a size failure never hides a test
-      # failure.
+      # failure. Its publish links every desktop and Android libass adapter or fails, as a release
+      # does, so the jars it leaves carry every half (#776). Only this step: the switch also makes
+      # every test task link the libass web module, and this job has no emcc.
       - name: Artifact sizes
+        env:
+          KITEPLAYER_LIBASS_REQUIRE_ALL_HOST_JNI: "true"
+          KITEPLAYER_LIBASS_REQUIRE_ANDROID_JNI: "true"
         run: ./scripts/check-artifact-size.sh
 
-      # The publication check reads the POMs that the size step left in Maven Local.
+      # The publication check reads the POMs that the size step left in Maven Local, and the libass
+      # check opens its jars for their native libraries (#776).
       - name: Publication readiness
-        run: ./kotlin check publication
+        run: |
+          ./kotlin check publication
+          ./scripts/check-libass-jars.sh
+          ./scripts/check-libass-jars.sh --falsify
 
       # Dokka fails on an unresolved KDoc link, which would otherwise render as plain text.
       - name: API reference

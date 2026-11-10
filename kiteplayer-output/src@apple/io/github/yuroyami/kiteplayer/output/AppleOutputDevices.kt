@@ -79,6 +79,14 @@ internal interface AppleOutputDevices {
      * @return the registration, which `close` releases, or null when the platform has no such notice.
      */
     fun watchRoute(device: UInt, onChange: () -> Unit): AutoCloseable? = null
+
+    /**
+     * Calls [onReset] when the system resets its media services, after which every audio object
+     * of the app is invalid and has to be built again (#837). It runs on a notification thread.
+     *
+     * @return the registration, which `close` releases, or null when the platform has no such notice.
+     */
+    fun watchServicesReset(onReset: () -> Unit): AutoCloseable? = null
 }
 
 /** Where the sound comes out, as far as the system's description of the device tells. */

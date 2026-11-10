@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.output
 import io.github.yuroyami.kiteplayer.AudioOutputDevice
 import platform.AVFAudio.AVAudioSession
 import platform.AVFAudio.AVAudioSessionPortDescription
+import platform.AVFAudio.AVAudioSessionMediaServicesWereResetNotification
 import platform.AVFAudio.AVAudioSessionRouteChangeNotification
 import platform.AVFAudio.currentRoute
 import platform.AVFAudio.maximumOutputNumberOfChannels
@@ -42,6 +43,13 @@ internal actual fun platformAppleOutputDevices(): AppleOutputDevices = object : 
     override fun watchRoute(device: UInt, onChange: () -> Unit): AutoCloseable? {
         val center = NSNotificationCenter.defaultCenter
         val observer = center.addObserverForName(AVAudioSessionRouteChangeNotification, null, null) { _ -> onChange() }
+        return AutoCloseable { center.removeObserver(observer) }
+    }
+
+    /** The session's reset notice: the audio unit and every session setting are gone (#837). */
+    override fun watchServicesReset(onReset: () -> Unit): AutoCloseable? {
+        val center = NSNotificationCenter.defaultCenter
+        val observer = center.addObserverForName(AVAudioSessionMediaServicesWereResetNotification, null, null) { _ -> onReset() }
         return AutoCloseable { center.removeObserver(observer) }
     }
 }

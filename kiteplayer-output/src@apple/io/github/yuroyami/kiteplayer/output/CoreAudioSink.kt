@@ -401,6 +401,17 @@ public class CoreAudioSink private constructor(
         eventFlow.tryEmit(RouteTick)
     }
 
+    /** The system reset its media services (#837). Runs on a notification thread. */
+    private fun servicesReset() {
+        val lease = synchronized(lock) {
+            if (handle == null) return
+            sessionLease
+        }
+        lease?.servicesReset()
+        pendingFormat.value = "the system reset its media services, so the output is built again"
+        eventFlow.tryEmit(RouteTick)
+    }
+
     private fun readRoute(deviceId: UInt): OutputRoute = try {
         outputDevices.outputRoute(deviceId)
     } catch (_: Throwable) {
@@ -555,6 +566,9 @@ public class CoreAudioSink private constructor(
             // the two. A notice that arrives before the handle is published finds none and does
             // nothing, and the read below then answers the same figure.
             val latencyWatch = outputDevices.watchRoute(deviceId) { refreshRoute(deviceId, clock.nanos()) }
+            // After a media services reset this unit is dead: the session is set up again and the
+            // engine is asked for a new output, which its reopen builds at the current position (#837).
+            val resetWatch = outputDevices.watchServicesReset { servicesReset() }
             applyOutputLatency(created.sink, deviceId)
             val openedOn = readRoute(deviceId)
 
@@ -569,11 +583,15 @@ public class CoreAudioSink private constructor(
                 reportedChannels = 0
                 sessionLease = acquiredLease
                 route = openedOn
-                deviceWatch = if (latencyWatch == null) watch else AutoCloseable {
+                deviceWatch = if (latencyWatch == null && resetWatch == null) watch else AutoCloseable {
                     try {
                         watch?.close()
                     } finally {
-                        latencyWatch.close()
+                        try {
+                            latencyWatch?.close()
+                        } finally {
+                            resetWatch?.close()
+                        }
                     }
                 }
             }

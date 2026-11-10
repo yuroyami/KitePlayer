@@ -58,6 +58,12 @@ internal fun interface AppleAudioSessionLease {
      * no more than it offered then, so a receiver that joins later is asked again.
      */
     fun routeChanged() = Unit
+
+    /**
+     * Sets the session up again after the system reset its media services, which forgets every
+     * setting an app made (#837).
+     */
+    fun servicesReset() = Unit
 }
 
 internal expect fun platformAppleAudioSessionController(): AppleAudioSessionController
@@ -167,6 +173,24 @@ internal class AppleAudioSessionLeaseManager(
     }
 
     /**
+     * After the system reset its media services every session setting is gone, and what this
+     * manager believes it set is stale (#837). While a lease is held, the category, the channels
+     * and the activation are set again, and the claim to stop mixing is made again at the next start.
+     */
+    fun servicesReset() {
+        synchronized(lock) {
+            if (leases == 0) return
+            claimed = false
+            multichannel = false
+            asked = 0
+            runCatching { controller.setPlaybackCategory(mode ?: AudioContent.Movie, mixesWithOthers = true) }
+            declareChannels(wanted)
+            runCatching { controller.setActive(active = true, notifyOthers = false) }
+            askRouteFor(wanted)
+        }
+    }
+
+    /**
      * Activates the session again while a managed lease is held. A refusal is not thrown: the
      * device start that follows reports whatever still stops playback.
      */
@@ -222,6 +246,10 @@ internal class AppleAudioSessionLeaseManager(
 
         override fun routeChanged() {
             if (!synchronized(this) { closed }) manager.routeChanged()
+        }
+
+        override fun servicesReset() {
+            if (!synchronized(this) { closed }) manager.servicesReset()
         }
     }
 

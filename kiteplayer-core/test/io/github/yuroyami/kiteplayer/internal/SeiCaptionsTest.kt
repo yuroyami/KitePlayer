@@ -61,6 +61,32 @@ class SeiCaptionsTest {
         assertContentEquals(hello, SeiCaptions.extract(lengthPrefixed(sei, avcSlice), hevc = false, nalLengthSize = 4))
     }
 
+    /**
+     * The walk of an H.264 packet ends at its first slice (#889), where an access unit's SEI has
+     * already come, so the slice data that is nearly all of the packet is not searched for start
+     * codes. A caption message placed after the slice, which no conforming writer does, is not read.
+     */
+    @Test
+    fun anH264WalkEndsAtTheFirstSlice() {
+        val sei = bytes(0x06) + escape(seiPayload(4, t35(hello)))
+        val late = bytes(0x06) + escape(seiPayload(4, t35("LATE!!".encodeToByteArray())))
+        for (packet in listOf(annexB(sei, avcSlice, late), lengthPrefixed(sei, avcSlice, late))) {
+            val framing = if (packet[0].toInt() == 0 && packet[3].toInt() == 1) 0 else 4
+            assertContentEquals(hello, SeiCaptions.extract(packet, hevc = false, nalLengthSize = framing), "framing $framing")
+        }
+        // A non-IDR slice, unit 1, ends it as an IDR slice does.
+        assertNull(SeiCaptions.extract(annexB(bytes(0x41, 0x9A, 0x00), late), hevc = false, nalLengthSize = 0))
+    }
+
+    /** HEVC reads past its slices, because a suffix SEI comes after them. */
+    @Test
+    fun anHevcSuffixSeiAfterTheSliceIsStillRead() {
+        val slice = bytes(0x26, 0x01, 0xAF, 0x00)
+        val suffix = bytes(40 shl 1, 0x01) + escape(seiPayload(4, t35(hello)))
+        assertContentEquals(hello, SeiCaptions.extract(lengthPrefixed(slice, suffix), hevc = true, nalLengthSize = 4))
+        assertContentEquals(hello, SeiCaptions.extract(annexB(slice, suffix), hevc = true, nalLengthSize = 0))
+    }
+
     @Test
     fun anHevcPrefixSeiGivesItsCaptions() {
         val sei = bytes(39 shl 1, 0x01) + escape(seiPayload(4, t35(hello)))

@@ -17,10 +17,17 @@ package io.github.yuroyami.kiteplayer.internal
  */
 internal object SeiCaptions {
 
-    /** The caption triplets of [packet], or null when it carries none. [nalLengthSize] 0 is start codes. */
+    /**
+     * The caption triplets of [packet], or null when it carries none. [nalLengthSize] 0 is start codes.
+     *
+     * For H.264 the walk ends at the first slice: an access unit's SEI comes before its slices
+     * (ITU-T H.264, 7.4.1.2.3), and the slices are nearly all of the packet, which a start code
+     * search would otherwise read byte by byte for every packet of the stream (#889). HEVC reads
+     * on, because its suffix SEI comes after the slices.
+     */
     fun extract(packet: ByteArray, hevc: Boolean, nalLengthSize: Int): ByteArray? {
         var out: ByteArray? = null
-        forEachNal(packet, nalLengthSize) { from, to ->
+        forEachNal(packet, nalLengthSize, stopAt = { header -> !hevc && isAvcSlice(header) }) { from, to ->
             if (isSei(packet, from, to, hevc)) {
                 val headerSize = if (hevc) 2 else 1
                 captionsOfSei(unescape(packet, from + headerSize, to))?.let { found ->
@@ -30,6 +37,9 @@ internal object SeiCaptions {
         }
         return out
     }
+
+    /** An H.264 coded slice, the units 1 to 5, whose header's first byte is [header]. */
+    private fun isAvcSlice(header: Byte): Boolean = (header.toInt() and 0x1F) in 1..5
 
     /**
      * The size of the length before each unit of a packet of a stream with [extradata], or 0 for
@@ -43,7 +53,11 @@ internal object SeiCaptions {
         return (extradata[at].toInt() and 0x03) + 1
     }
 
-    private inline fun forEachNal(data: ByteArray, nalLengthSize: Int, block: (from: Int, to: Int) -> Unit) {
+    /**
+     * Hands each unit of [data] to [block] in order, and ends at the first whose header byte
+     * [stopAt] answers true for, before searching past it.
+     */
+    private inline fun forEachNal(data: ByteArray, nalLengthSize: Int, stopAt: (header: Byte) -> Boolean, block: (from: Int, to: Int) -> Unit) {
         if (nalLengthSize > 0) {
             var at = 0
             while (at + nalLengthSize <= data.size) {
@@ -51,6 +65,7 @@ internal object SeiCaptions {
                 for (i in 0 until nalLengthSize) length = (length shl 8) or (data[at + i].toLong() and 0xFF)
                 at += nalLengthSize
                 if (length <= 0 || length > data.size - at) return
+                if (stopAt(data[at])) return
                 block(at, at + length.toInt())
                 at += length.toInt()
             }
@@ -59,6 +74,8 @@ internal object SeiCaptions {
         var start = nextStartCode(data, 0)
         while (start >= 0) {
             val from = start + 3
+            // A unit the walk stops at is never searched past, which is where the saving is.
+            if (from < data.size && stopAt(data[from])) return
             val next = nextStartCode(data, from)
             var to = if (next < 0) data.size else next
             // A four byte start code leaves its leading zero on the unit before it.

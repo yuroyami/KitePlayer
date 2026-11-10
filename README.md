@@ -211,7 +211,9 @@ fun MovieScreen() {
 ```
 
 By default, `KitePlayerVideo` hosts the platform's own video view. The system compositor then shows
-the frames, and the GPU stays idle during long playback. Pass `path = KiteRenderPath.ComposeCanvas`
+the frames, and the GPU stays idle during long playback. With controls drawn over the video, as
+above, the desktop draws the video as Compose content instead, because a native view there takes
+every click and the controls would get none. Pass `path = KiteRenderPath.ComposeCanvas`
 when the video has to clip, fade or take part in a shared element transition. That path draws the
 frames inside Compose. You can switch paths while the video plays.
 

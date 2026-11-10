@@ -20,3 +20,6 @@ internal actual fun rememberPlatformKiteVideoState(): KiteVideoState {
         .firstOrNull()
     return if (activity != null) rememberKiteVideoState(activity.window) else rememberKiteVideoState()
 }
+
+/** Compose content over the native view takes clicks here. */
+internal actual val nativeViewTakesOverlayClicks: Boolean = true

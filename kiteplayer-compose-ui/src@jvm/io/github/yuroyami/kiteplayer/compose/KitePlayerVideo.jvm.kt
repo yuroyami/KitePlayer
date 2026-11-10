@@ -28,3 +28,6 @@ internal actual fun resolveRenderPath(requested: KiteRenderPath): KiteRenderPath
 
 @Composable
 internal actual fun rememberPlatformKiteVideoState(): KiteVideoState = rememberKiteVideoState()
+
+/** macOS routes a click to the topmost native view, so Compose content over it receives none (#940). */
+internal actual val nativeViewTakesOverlayClicks: Boolean = false

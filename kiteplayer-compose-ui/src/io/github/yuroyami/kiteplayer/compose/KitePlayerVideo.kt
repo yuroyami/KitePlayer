@@ -103,8 +103,11 @@ public fun KitePlayerVideo(
  * the overload without controls, and [modifier] sizes the video and the controls together.
  *
  * On the desktop a native view takes every click, so controls drawn over
- * [KiteRenderPath.NativeView] receive none there. Ask for [KiteRenderPath.ComposeCanvas] when the
- * controls sit on the picture, or place them beside it.
+ * [KiteRenderPath.NativeView] receive none there. This overload therefore resolves
+ * [KiteRenderPath.Auto] to [KiteRenderPath.ComposeCanvas] on the desktop, so its controls can be
+ * clicked (#940), and says once in [io.github.yuroyami.kiteplayer.KiteLog] when it is asked for the
+ * native view there. Controls placed beside the video can use the native view, through the
+ * overload without controls.
  */
 @Composable
 public fun KitePlayerVideo(
@@ -118,11 +121,12 @@ public fun KitePlayerVideo(
     accessibilityStateFormat: ((PlaybackStatus, Duration, Duration?) -> String)? = null,
     controls: @Composable BoxScope.() -> Unit,
 ) {
+    val overlaid = remember(path) { overlaidControlsPath(path) }
     Box(modifier) {
         KitePlayerVideo(
             player,
             Modifier.matchParentSize(),
-            path,
+            overlaid,
             onEffectivePath,
             onRendererAttached,
             keepDisplayAwake,
@@ -238,3 +242,28 @@ private fun ComposeCanvasVideo(
         }
     }
 }
+
+/**
+ * The path for [requested] when controls are drawn over the video: [KiteRenderPath.Auto] becomes
+ * the Compose canvas where a native view takes every click, and a native view asked for there is
+ * reported once, since its controls will not respond (#940).
+ */
+internal fun overlaidControlsPath(requested: KiteRenderPath): KiteRenderPath {
+    if (!nativeViewTakesOverlayClicks) {
+        if (requested == KiteRenderPath.Auto) return KiteRenderPath.ComposeCanvas
+        if (requested == KiteRenderPath.NativeView && !nativeViewControlsReported) {
+            nativeViewControlsReported = true
+            io.github.yuroyami.kiteplayer.KiteLog.log(
+                "KitePlayerVideo",
+                "controls drawn over the native view receive no clicks on this platform; ask for KiteRenderPath.ComposeCanvas or place them beside the video",
+            )
+        }
+    }
+    return requested
+}
+
+/** Composition runs on the main thread, so a plain flag; a second report would be harmless. */
+private var nativeViewControlsReported = false
+
+/** Whether Compose content drawn over this platform's native video view receives clicks. */
+internal expect val nativeViewTakesOverlayClicks: Boolean

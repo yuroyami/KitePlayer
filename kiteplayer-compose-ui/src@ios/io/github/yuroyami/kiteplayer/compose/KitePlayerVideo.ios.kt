@@ -9,3 +9,6 @@ internal actual fun resolveRenderPath(requested: KiteRenderPath): KiteRenderPath
 
 @Composable
 internal actual fun rememberPlatformKiteVideoState(): KiteVideoState = rememberKiteVideoState()
+
+/** Compose content over the native view takes clicks here. */
+internal actual val nativeViewTakesOverlayClicks: Boolean = true

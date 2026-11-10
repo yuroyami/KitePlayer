@@ -87,6 +87,7 @@ base() {
     run kiteplayer-rt/native/scripts/source-discipline.sh
     run scan_em_dashes
     run python3 scripts/check-test-coverage.py
+    run python3 scripts/capabilities.py
 }
 build_logic() { kotlin test -m build-support; }
 publication() {

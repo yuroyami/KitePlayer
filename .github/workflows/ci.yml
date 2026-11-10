@@ -523,6 +523,11 @@ jobs:
       - name: Every test folder is run by a job
         run: python3 scripts/check-test-coverage.py
 
+      # The capability tables are built from the module files and the renderers, so a platform or a
+      # flag that changes without them fails here (#926).
+      - name: docs/capabilities.md matches the code
+        run: python3 scripts/capabilities.py
+
       # The gate's em dash scan, which only the macOS gate ran (#640). The two Kotlin Toolchain
       # wrappers are JetBrains' files, replaced at each toolchain upgrade.
       - name: No em dash in tracked source

@@ -479,6 +479,9 @@ in a live grid.
 <a name="modules"></a>
 ## Platforms
 
+What each platform means for an app is below. Every module's platforms and each video renderer's
+capabilities, built from the code, are in [docs/capabilities.md](docs/capabilities.md).
+
 | | `kiteplayer` | `kiteplayer-compose` | `kiteplayer-audioviz` |
 | --- | :---: | :---: | :---: |
 | **Android** | ✓ | ✓ | ✓ |

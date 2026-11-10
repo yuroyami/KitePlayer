@@ -8,11 +8,9 @@ import io.github.yuroyami.kiteplayer.subtitle.SubtitleSafeArea
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride
 import io.github.yuroyami.kiteplayer.view.KitePlayerPictureInPicture
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlin.js.JsAny
@@ -91,7 +89,10 @@ public class KitePlayerWorker private constructor(
     private val stateFlow = MutableStateFlow(PlayerSnapshot())
     private val progressFlow = MutableStateFlow(Progress())
     private val statsFlow = MutableStateFlow(PlaybackStats())
-    private val eventFlow = MutableSharedFlow<PlayerEvent>(extraBufferCapacity = 64)
+    private val eventFlow = CountedEvents()
+
+    /** The worker's stats as it last sent them, before this page's dropped events join them. */
+    private var workerStats = PlaybackStats()
 
     /** The player's state, as the worker last sent it. Position is not in it; see [progress]. */
     public val state: StateFlow<PlayerSnapshot> = stateFlow.asStateFlow()
@@ -99,14 +100,17 @@ public class KitePlayerWorker private constructor(
     /** The position and how far ahead the worker has read, as the worker last sent them. */
     public val progress: StateFlow<Progress> = progressFlow.asStateFlow()
 
-    /** Diagnostics, as the worker last sent them, once a second by default. */
+    /**
+     * Diagnostics, as the worker last sent them, once a second by default. [PlaybackStats.droppedEvents]
+     * also counts the events this page dropped because a collector of [events] fell behind (#903).
+     */
     public val stats: StateFlow<PlaybackStats> = statsFlow.asStateFlow()
 
     /**
      * What happened in the player. A worker that dies sends [PlayerEvent.Failed] from here, and a
      * setter the player refused sends [PlaybackWarning.CommandRefused].
      */
-    public val events: SharedFlow<PlayerEvent> = eventFlow.asSharedFlow()
+    public val events: SharedFlow<PlayerEvent> = eventFlow.events
 
     private val pending = HashMap<Int, CompletableDeferred<Answer?>>()
     private var nextId = 1
@@ -564,8 +568,11 @@ public class KitePlayerWorker private constructor(
                 holdDisplay(message.snapshot)
             }
             is WorkerMessage.Progressed -> progressFlow.value = message.progress
-            is WorkerMessage.Stats -> statsFlow.value = message.stats
-            is WorkerMessage.Event -> eventFlow.tryEmit(
+            is WorkerMessage.Stats -> {
+                workerStats = message.stats
+                statsFlow.value = eventFlow.withDrops(message.stats)
+            }
+            is WorkerMessage.Event -> emit(
                 when (val event = message.event) {
                     is PlayerEvent.Opened -> event.copy(media = own(event.media))
                     else -> event
@@ -573,6 +580,11 @@ public class KitePlayerWorker private constructor(
             )
             is WorkerMessage.Audio -> if (message.resume) audio?.resume() else audio?.suspend()
         }
+    }
+
+    /** Hands [event] to the collectors, and shows a drop in [stats] at once rather than at the next tick. */
+    private fun emit(event: PlayerEvent) {
+        if (!eventFlow.emit(event)) statsFlow.value = eventFlow.withDrops(workerStats)
     }
 
     /**
@@ -596,7 +608,7 @@ public class KitePlayerWorker private constructor(
             return
         }
         stateFlow.update { it.copy(status = PlaybackStatus.Failed, error = error) }
-        eventFlow.tryEmit(PlayerEvent.Failed(error))
+        emit(PlayerEvent.Failed(error))
         workerTerminate(worker)
         // A dead worker cannot come back through this player, so its page side goes with it, rather
         // than leaving the worklet running until the application closes a player it may replace (#686).

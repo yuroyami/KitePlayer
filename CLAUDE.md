@@ -91,7 +91,9 @@ Each line is something that bit someone. Delete a line when it stops being true.
   `library.module-template.yaml` and a mismatch fails before any work. It then runs the whole of `ci.yml` on the same commit, and the upload waits for it, so a
   release run takes as long as CI plus the upload and one flaky test stops a release. Leave the
   `release` input off to leave the validated deployment on the portal and press Publish there
-  yourself. Publishing from the maintainer's machine is `./kotlin publish mavenCentral`, with the
+  yourself. The attest job signs the file list before the upload job runs, and that job builds
+  again on a fresh runner and stops before the upload when one byte differs from the list (#777).
+  Publishing from the maintainer's machine is `./kotlin publish mavenCentral`, with the
   credentials in the `KOTLIN_TOOLCHAIN_MAVEN_CENTRAL_USERNAME`, `KOTLIN_TOOLCHAIN_MAVEN_CENTRAL_PASSWORD`,
   `KOTLIN_TOOLCHAIN_SIGNING_KEY` and `KOTLIN_TOOLCHAIN_SIGNING_KEY_PASSPHRASE` environment
   variables, and runs no tests.

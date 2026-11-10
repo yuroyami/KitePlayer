@@ -312,12 +312,18 @@ class WorkerProtocolTest {
             Command.DiagnosticsDump,
             Command.SupportBundle,
             Command.WarningHistory,
+            Command.ReadPlaylist("https://example.com/list.m3u", mapOf("Authorization" to "Bearer x")),
+            Command.ReadPlaylist("https://example.com/list.pls", emptyMap()),
+            Command.SeekToSubtitleLine(-2),
+            Command.StepSubtitleDelay(3),
+            Command.SetItemDetails("Song", null, "Album"),
+            Command.SetItemDetails(null, null, null),
         )
         commands.forEachIndexed { id, command ->
             val message = PageMessage.Call(id, command)
             assertEquals(message, message.roundTrip(), "the call ${command.member} changed on the way")
         }
-        assertEquals(24, commands.map { it.member }.distinct().size, "every command is here")
+        assertEquals(28, commands.map { it.member }.distinct().size, "every command is here")
     }
 
     @Test
@@ -406,6 +412,10 @@ class WorkerProtocolTest {
             WorkerMessage.Reply(7, answer = Answer.Text("KitePlayer support bundle\nplatform wasmJs")),
             WorkerMessage.Reply(8, answer = Answer.Warnings(warnings.mapIndexed { i, w -> TimedWarning(Long.MAX_VALUE - i, w) })),
             WorkerMessage.Reply(9, answer = Answer.Warnings(emptyList())),
+            WorkerMessage.Reply(90, answer = Answer.Time(12_345_678L.microseconds)),
+            WorkerMessage.Reply(91, answer = Answer.Time((-1500).milliseconds)),
+            WorkerMessage.Reply(92, answer = Answer.Items(listOf(item, MediaItem("https://example.com/b.mp3")))),
+            WorkerMessage.Reply(93, answer = Answer.Items(emptyList())),
             WorkerMessage.Reply(10, Failure.Playback(PlaybackError.NotMedia("https://example.com/x"))),
             WorkerMessage.Reply(11, Failure.Argument("speed must be within 0.25..4.0")),
             WorkerMessage.Reply(12, Failure.State("nothing is open")),

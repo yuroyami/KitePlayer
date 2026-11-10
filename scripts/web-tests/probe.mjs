@@ -90,6 +90,8 @@ export function probeHandler() {
       return send("application/dash+xml", liveDash(parsed.searchParams.get("origin") || "", parsed.searchParams.get("ended") === "1"));
     }
     if (name === "periods.mpd") return send("application/dash+xml", periods(["a", "b", "c"], false));
+    // A plain M3U list of two clips, for the worker's readPlaylist (#907).
+    if (name === "items.m3u") return send("audio/x-mpegurl", "#EXTM3U\n#EXTINF:10,Sync\n/testmedia/sync1080p30.mp4\n/testmedia/sparse-keyframes.mp4\n");
     if (name === "live-periods.mpd") {
       keep(name);
       return send("application/dash+xml", periods(++probe.periodFetches > 1 ? ["a", "b"] : ["a"], true));

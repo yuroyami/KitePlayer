@@ -95,6 +95,12 @@ internal sealed class Command(val member: String) {
     data object DiagnosticsDump : Command("diagnosticsDump")
     data object SupportBundle : Command("supportBundle")
     data object WarningHistory : Command("warningHistory")
+
+    /** Run in the worker, the only side that can read the network on the web (#907). */
+    data class ReadPlaylist(val uri: String, val headers: Map<String, String>) : Command("readPlaylist")
+    data class SeekToSubtitleLine(val offset: Int) : Command("seekToSubtitleLine")
+    data class StepSubtitleDelay(val offset: Int) : Command("stepSubtitleDelay")
+    data class SetItemDetails(val title: String?, val artist: String?, val album: String?) : Command("setItemDetails")
 }
 
 /**
@@ -156,6 +162,12 @@ internal sealed interface Answer {
     data class Track(val id: TrackId) : Answer
     data class Text(val text: String) : Answer
     data class Warnings(val warnings: List<TimedWarning>) : Answer
+
+    /** A time a call answers, as the subtitle line and delay calls do. */
+    data class Time(val value: Duration) : Answer
+
+    /** The items a playlist names. */
+    data class Items(val items: List<MediaItem>) : Answer
 }
 
 /**
@@ -203,7 +215,7 @@ internal sealed interface Failure {
  * of them cannot read went unanswered for ever. Raise it with every change to a message, a
  * command, a control or a field that the other half must read.
  */
-internal const val WORKER_PROTOCOL: Int = 1
+internal const val WORKER_PROTOCOL: Int = 2
 
 /** What the worker sends the page. */
 internal sealed interface WorkerMessage {
@@ -340,6 +352,17 @@ private fun encodeCommand(command: Command): JsAny = record {
             put("to", command.to)
             put("mode", command.mode)
         }
+        is Command.ReadPlaylist -> {
+            put("uri", command.uri)
+            put("headers", command.headers.toJsObject())
+        }
+        is Command.SeekToSubtitleLine -> put("offset", command.offset)
+        is Command.StepSubtitleDelay -> put("offset", command.offset)
+        is Command.SetItemDetails -> {
+            put("title", command.title)
+            put("artist", command.artist)
+            put("album", command.album)
+        }
         is Command.AddToQueue -> {
             put("items", command.items.encodeEach(::encodeItem))
             put("index", command.index)
@@ -446,6 +469,14 @@ private fun encodeAnswer(answer: Answer): JsAny = record {
         is Answer.Warnings -> {
             kind("warnings")
             put("warnings", answer.warnings.encodeEach(::encodeTimedWarning))
+        }
+        is Answer.Time -> {
+            kind("time")
+            put("value", answer.value)
+        }
+        is Answer.Items -> {
+            kind("items")
+            put("items", answer.items.encodeEach(::encodeItem))
         }
     }
 }
@@ -1362,6 +1393,10 @@ private fun decodeCommand(o: JsAny): Command? = when (o.str("t")) {
     "open" -> Command.Open(decodeItem(o.child("item") ?: missing("item")))
     "openQueue" -> Command.OpenQueue(o.list("items", ::decodeItem) ?: missing("items"), o.int("startIndex") ?: missing("startIndex"))
     "seek" -> Command.Seek(o.micros("to") ?: missing("to"), o.enum<SeekMode>("mode") ?: missing("mode"))
+    "readPlaylist" -> Command.ReadPlaylist(o.str("uri") ?: missing("uri"), o.map("headers"))
+    "seekToSubtitleLine" -> Command.SeekToSubtitleLine(o.int("offset") ?: missing("offset"))
+    "stepSubtitleDelay" -> Command.StepSubtitleDelay(o.int("offset") ?: missing("offset"))
+    "setItemDetails" -> Command.SetItemDetails(o.str("title"), o.str("artist"), o.str("album"))
     "stop" -> Command.Stop
     "next" -> Command.Next
     "previous" -> Command.Previous
@@ -1437,6 +1472,8 @@ private fun decodeAnswer(o: JsAny): Answer = when (o.str("t")) {
     "track" -> Answer.Track(TrackId(o.int("id") ?: missing("id")))
     "text" -> Answer.Text(o.str("text") ?: missing("text"))
     "warnings" -> Answer.Warnings(o.list("warnings", ::decodeTimedWarning) ?: missing("warnings"))
+    "time" -> Answer.Time(o.micros("value") ?: missing("value"))
+    "items" -> Answer.Items(o.list("items", ::decodeItem) ?: missing("items"))
     else -> missing("answer kind")
 }
 

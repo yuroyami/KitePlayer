@@ -65,6 +65,11 @@ import kotlin.time.Duration
  * - An item, or an external subtitle or a thumbnail file, with its own reader: it is refused with
  *   [PlaybackError.ConfigurationInvalid]. Give it an address instead.
  * - A `PlayerConfig`: the worker builds its player on the default one.
+ * - `setControlsInset` and `redrawPicture`: the canvas is the worker's, and it lays out and redraws
+ *   its own picture.
+ * - `losslessEvents`: [events] is the one flow, and it counts what a slow collector drops in
+ *   [PlaybackStats.droppedEvents].
+ * - `keyframeChoice` as a value to read: set it with [setKeyframeChoice].
  *
  * The page's own `KitePlayer` is unchanged and stays the web default.
  */
@@ -318,6 +323,34 @@ public class KitePlayerWorker private constructor(
 
     /** The worker player's last warnings, oldest first. */
     public suspend fun warningHistory(): List<TimedWarning> = ask<Answer.Warnings>(Command.WarningHistory).warnings
+
+    /**
+     * The items the playlist at [uri] names, read in the worker, as `KitePlayer.readPlaylist` reads
+     * them (#907). On the web only the worker reads the network, so this is how a page reads a
+     * network playlist. A relative [uri] is read against the page.
+     */
+    public suspend fun readPlaylist(uri: String, headers: Map<String, String> = emptyMap()): List<MediaItem> =
+        ask<Answer.Items>(Command.ReadPlaylist(pageAddress(uri), headers)).items
+
+    /** Opens the playlist at [uri] as a queue from [startIndex], as `KitePlayer.openPlaylist` does. */
+    public suspend fun openPlaylist(uri: String, startIndex: Int = 0, headers: Map<String, String> = emptyMap()) {
+        openQueue(readPlaylist(uri, headers), startIndex)
+    }
+
+    /**
+     * Seeks to the start of the subtitle line [offset] lines from the one showing, as
+     * `KitePlayer.seekToSubtitleLine` does, and returns where it went.
+     */
+    public suspend fun seekToSubtitleLine(offset: Int = 0): Duration =
+        ask<Answer.Time>(Command.SeekToSubtitleLine(offset)).value
+
+    /** Moves the subtitle delay to line up [offset] lines, as `KitePlayer.stepSubtitleDelay` does, and returns the new delay. */
+    public suspend fun stepSubtitleDelay(offset: Int): Duration = ask<Answer.Time>(Command.StepSubtitleDelay(offset)).value
+
+    /** Names the item for the system's media controls, as `KitePlayer.setItemDetails` does. */
+    public suspend fun setItemDetails(title: String?, artist: String?, album: String?) {
+        call(Command.SetItemDetails(title, artist, album))
+    }
 
     /** Sets the playback rate. */
     public fun setSpeed(value: Double): Unit = send(Control.SetSpeed(value))

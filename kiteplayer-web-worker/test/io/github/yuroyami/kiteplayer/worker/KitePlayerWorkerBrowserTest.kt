@@ -107,6 +107,35 @@ class KitePlayerWorkerBrowserTest {
         }
     }
 
+    /**
+     * A page reads and opens a network playlist through the worker, the only side that can read
+     * the network on the web (#907). The worker had no playlist calls, so a web app had no way to.
+     */
+    @Test
+    fun aNetworkPlaylistIsReadAndOpenedThroughTheWorker() = runTest(timeout = 3.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n")
+        if (setup == null) {
+            println("skipped: the worker player runs only in the browser half, where karma serves the worker")
+            return@runTest
+        }
+        val (workerUrl, codecUrl, media) = setup
+        val probe = probeOf(media)
+        withContext(Dispatchers.Default) {
+            val player = KitePlayerWorker.start(pageCanvas(320, 180), workerUrl, codecUrl)
+            try {
+                val items = player.readPlaylist("$probe/items.m3u")
+                assertEquals(2, items.size, "the list names two clips: $items")
+                assertTrue(items[0].uri.endsWith("/testmedia/sync1080p30.mp4"), "the first item is ${items[0].uri}")
+                player.openPlaylist("$probe/items.m3u", startIndex = 0)
+                val opened = withTimeout(30.seconds) { player.state.first { it.duration != null } }
+                assertEquals(10.seconds, opened.duration)
+                assertEquals(2, opened.queue.size, "the queue holds both clips")
+            } finally {
+                player.closeAndAwait()
+            }
+        }
+    }
+
     @Test
     fun aNetworkClipPlaysInTheWorkerWhileThePageKeepsItsFrames() = runTest(timeout = 3.minutes) {
         val setup = karmaWorkerConfig()?.split("\n")

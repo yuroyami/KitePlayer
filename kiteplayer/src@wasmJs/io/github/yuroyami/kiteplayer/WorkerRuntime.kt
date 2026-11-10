@@ -188,6 +188,10 @@ private class WorkerRuntime(private val scope: CoroutineScope) {
             Command.DiagnosticsDump -> return Answer.Text(diagnosticsDump())
             Command.SupportBundle -> return Answer.Text(supportBundle())
             Command.WarningHistory -> return Answer.Warnings(warningHistory())
+            is Command.ReadPlaylist -> return Answer.Items(readPlaylist(command.uri, command.headers))
+            is Command.SeekToSubtitleLine -> return Answer.Time(seekToSubtitleLine(command.offset))
+            is Command.StepSubtitleDelay -> return Answer.Time(stepSubtitleDelay(command.offset))
+            is Command.SetItemDetails -> setItemDetails(command.title, command.artist, command.album)
         }
         return null
     }

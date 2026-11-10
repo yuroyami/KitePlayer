@@ -249,7 +249,13 @@ public data class IoCachePolicy(
  * reports. Do not retune them without evidence from real content.
  */
 public data class BufferPolicy(
-    /** A stream is ready when it has this much buffered, or this many packets, or has ended. */
+    /**
+     * A stream is ready when it has this much buffered, or this many packets, or has ended.
+     *
+     * Behind a live sender this is also the delay the player holds: it waits for this much at the
+     * start and after every resume, and lets the delay grow to this plus half a second before it
+     * catches up to this plus a tenth. [DemuxPolicy.lowLatency] does not lower it (#809).
+     */
     val readyDuration: Duration = 1.seconds,
     val readyPackets: Int = 25,
     /** Per-stream soft target. Exceeding it only marks the stream as well buffered. */

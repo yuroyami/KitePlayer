@@ -87,6 +87,10 @@ public data class DemuxPolicy(
      * Drops the packets read while probing instead of keeping them for playback, and does not wait
      * to reorder network packets. For a live source only: on a file, playback can start after the
      * true beginning.
+     *
+     * This reaches FFmpeg's demuxer only. How far the player itself stays behind a live sender is
+     * [BufferPolicy.readyDuration], which this does not change: lower that too for a stream that
+     * should play close to the sender (#809).
      */
     val lowLatency: Boolean = false,
     /** Bytes to skip before probing, for a file with junk in front of its header. */

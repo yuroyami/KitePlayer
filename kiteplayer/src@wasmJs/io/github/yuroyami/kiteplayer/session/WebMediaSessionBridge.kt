@@ -10,11 +10,47 @@ import kotlin.time.DurationUnit
  * The whole JavaScript surface of the web media session, over any object shaped like
  * `navigator.mediaSession`. It takes the object rather than reading the global, so a test can hand
  * it a fake and run in node.
+ *
+ * A page has one media session and may have several players, so one bridge owns the session at a
+ * time: the newest that has not closed (#904). Each bridge keeps what it last published, and only
+ * the owner writes it to the session. A bridge that closes clears the session only while it owns
+ * it, and the session then passes back to the newest bridge left, which publishes what it kept.
+ * Before, every close cleared the session whoever had set it, so closing one player took a newer
+ * one's buttons and title away, and they did not come back.
  */
 internal class WebMediaSessionBridge(private val session: JsAny) {
 
     private val handlers = mutableMapOf<String, (Double, Double) -> Unit>()
     private val offered = mutableSetOf<String>()
+    private var lastMetadata: Pair<MediaSessionMetadata, String?>? = null
+    private var lastPlayback: MediaSessionState? = null
+    private var closed = false
+
+    init {
+        claim()
+    }
+
+    /** Whether this bridge owns its session now. */
+    private val owns: Boolean get() = !closed && owners(session).lastOrNull() === this
+
+    private fun claim() {
+        val stack = owners(session)
+        // The bridge that showed until now is no longer drawn: its buttons go before this one's come.
+        stack.lastOrNull()?.withdraw()
+        stack += this
+    }
+
+    /** Takes this bridge's buttons off the session, keeping what it published for when it owns it again. */
+    private fun withdraw() {
+        for (name in offered) webClearActionHandler(session, name)
+        offered.clear()
+    }
+
+    /** Writes what this bridge last published, now that it owns the session again. */
+    private fun republish() {
+        lastMetadata?.let { (metadata, artwork) -> publishMetadata(metadata, artwork) }
+        lastPlayback?.let(::publishPlayback)
+    }
 
     /**
      * Remembers what [name] does. The browser is offered it only while the state can honour it.
@@ -25,10 +61,14 @@ internal class WebMediaSessionBridge(private val session: JsAny) {
     }
 
     fun publishMetadata(metadata: MediaSessionMetadata, artworkUrl: String?) {
+        lastMetadata = metadata to artworkUrl
+        if (!owns) return
         webSetMetadata(session, metadata.title ?: "", metadata.artist ?: "", metadata.album ?: "", artworkUrl ?: "")
     }
 
     fun publishPlayback(state: MediaSessionState) {
+        lastPlayback = state
+        if (!owns) return
         webSetPlaybackState(
             session,
             when (state.phase) {
@@ -53,12 +93,25 @@ internal class WebMediaSessionBridge(private val session: JsAny) {
         offer(webActionsFor(state))
     }
 
+    /**
+     * Lets go of the session, once. While this bridge owns it, its buttons, its state and its
+     * metadata are cleared, and the newest bridge left takes the session over and publishes what it
+     * kept. A bridge that did not own it changes nothing on the session.
+     */
     fun clear() {
+        if (closed) return
+        val stack = owners(session)
+        val owned = stack.lastOrNull() === this
+        closed = true
+        stack.remove(this)
+        if (stack.isEmpty()) forgetSession(session)
+        if (!owned) return
         for (name in ACTIONS) webClearActionHandler(session, name)
         offered.clear()
         webSetPlaybackState(session, "none")
         webClearPositionState(session)
         webClearMetadata(session)
+        stack.lastOrNull()?.republish()
     }
 
     /** A browser draws a button for every action with a handler, so one that cannot work is withdrawn. */
@@ -77,6 +130,17 @@ internal class WebMediaSessionBridge(private val session: JsAny) {
     }
 
     companion object {
+        /** The live bridges of each session object, oldest first. The web runs on one thread. */
+        private val sessions = ArrayList<Pair<JsAny, MutableList<WebMediaSessionBridge>>>()
+
+        private fun owners(session: JsAny): MutableList<WebMediaSessionBridge> =
+            sessions.firstOrNull { sameObject(it.first, session) }?.second
+                ?: ArrayList<WebMediaSessionBridge>().also { sessions += session to it }
+
+        private fun forgetSession(session: JsAny) {
+            sessions.removeAll { sameObject(it.first, session) }
+        }
+
         val ACTIONS: List<String> = listOf(
             "play", "pause", "stop", "previoustrack", "nexttrack", "seekbackward", "seekforward", "seekto",
         )
@@ -136,3 +200,6 @@ private external fun webSetActionHandler(s: JsAny, name: String, f: (Double, Dou
 
 @JsFun("(s, name) => { try { s.setActionHandler(name, null); } catch (e) {} }")
 private external fun webClearActionHandler(s: JsAny, name: String)
+
+@JsFun("(a, b) => a === b")
+private external fun sameObject(a: JsAny, b: JsAny): Boolean

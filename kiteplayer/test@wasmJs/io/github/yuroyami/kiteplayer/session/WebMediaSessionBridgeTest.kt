@@ -120,6 +120,47 @@ class WebMediaSessionBridgeTest {
         assertEquals(-1.0, seenOffset)
     }
 
+    /**
+     * Two players on one page share the one media session (#904). Closing the older one used to
+     * clear the newer one's buttons and title, and they did not come back on the next update.
+     */
+    @Test
+    fun closingAnOlderPlayerLeavesTheNewerOnesControls() {
+        val session = fakeSession()
+        val older = bridgeWithEveryAction(session)
+        older.publishPlayback(state())
+        val newer = bridgeWithEveryAction(session)
+        newer.publishMetadata(MediaSessionMetadata(title = "Newer", artist = null, album = null, duration = null, hasVideo = false), null)
+        newer.publishPlayback(state())
+        older.publishMetadata(MediaSessionMetadata(title = "Older", artist = null, album = null, duration = null, hasVideo = false), null)
+        assertEquals("Newer", metadataTitle(session), "a player that no longer owns the session does not write to it")
+        older.clear()
+        assertTrue(hasHandler(session, "play"), "the newer player's play button went with the older player")
+        assertEquals("Newer", metadataTitle(session))
+        assertEquals("playing", playbackState(session))
+        older.clear()
+        assertTrue(hasHandler(session, "play"), "a second close changes nothing")
+        newer.clear()
+        assertFalse(hasHandler(session, "play"))
+    }
+
+    /** The newer player closing gives the session back to the older one, as it last stood (#904). */
+    @Test
+    fun closingTheNewerPlayerGivesTheSessionBack() {
+        val session = fakeSession()
+        val older = bridgeWithEveryAction(session)
+        older.publishMetadata(MediaSessionMetadata(title = "Older", artist = null, album = null, duration = null, hasVideo = false), null)
+        older.publishPlayback(state(phase = MediaSessionPhase.Paused))
+        val newer = bridgeWithEveryAction(session)
+        newer.publishMetadata(MediaSessionMetadata(title = "Newer", artist = null, album = null, duration = null, hasVideo = false), null)
+        newer.publishPlayback(state())
+        newer.clear()
+        assertEquals("Older", metadataTitle(session), "the older player's title is back")
+        assertEquals("paused", playbackState(session))
+        assertTrue(hasHandler(session, "play"), "the older player's buttons are back")
+        older.clear()
+    }
+
     @Test
     fun clearRemovesEveryHandlerAndTheState() {
         val session = fakeSession()

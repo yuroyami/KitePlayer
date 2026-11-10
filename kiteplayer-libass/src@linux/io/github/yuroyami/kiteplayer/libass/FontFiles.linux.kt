@@ -11,6 +11,9 @@ import kotlinx.cinterop.ptr
 import kotlinx.cinterop.toKString
 import kotlinx.cinterop.usePinned
 import platform.posix.DT_DIR
+import platform.posix.S_IFDIR
+import platform.posix.S_IFMT
+import platform.posix.S_IFREG
 import platform.posix.SEEK_END
 import platform.posix.SEEK_SET
 import platform.posix.closedir
@@ -44,11 +47,24 @@ private fun walk(path: String, depth: Int, into: MutableList<FontFileCandidate>)
             val child = "$path/$name"
             if (entry.pointed.d_type.toInt() == DT_DIR) {
                 walk(child, depth + 1, into)
-            } else {
-                memScoped {
-                    val info = alloc<stat>()
-                    if (stat(child, info.ptr) == 0) into += FontFileCandidate(name, info.st_size.toLong(), child)
+                continue
+            }
+            // A filesystem that does not fill d_type answers DT_UNKNOWN, and a link answers DT_LNK
+            // whatever it points at, so the kind comes from stat, which follows the link, as the
+            // JVM's isDirectory does (#886). The depth limit also stops a link loop.
+            val kind = memScoped {
+                val info = alloc<stat>()
+                if (stat(child, info.ptr) != 0) return@memScoped null
+                when (info.st_mode.toInt() and S_IFMT) {
+                    S_IFDIR -> -1L
+                    S_IFREG -> info.st_size.toLong()
+                    else -> null
                 }
+            }
+            when {
+                kind == null -> {}
+                kind < 0 -> walk(child, depth + 1, into)
+                else -> into += FontFileCandidate(name, kind, child)
             }
         }
     } finally {

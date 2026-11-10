@@ -126,7 +126,9 @@ public class KitePlayerPictureInPicture private constructor(
 
     private fun togglePlayback() {
         val player = view.player ?: return
-        if (player.state.value.status.isActive) player.pause() else player.play()
+        // As the controls decide it: a player opening or buffering after a play is paused by the
+        // button, not asked to play again (#943).
+        if (player.state.value.playRequested) player.pause() else player.play()
     }
 
     private fun restore() {

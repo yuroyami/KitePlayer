@@ -151,7 +151,7 @@ public class KitePlayerPictureInPicture internal constructor(
     /** The window reads its play button and range only when told they may have changed. */
     private suspend fun followWindowState() {
         player.state
-            .map { WindowFacts(it.status, it.duration, it.seekable) }
+            .map { WindowFacts(it.status, it.duration, it.seekable, it.playRequested) }
             .distinctUntilChanged()
             .collect { facts ->
                 control.requiresLinearPlayback = !facts.seekable
@@ -169,7 +169,7 @@ public class KitePlayerPictureInPicture internal constructor(
             }
     }
 
-    private data class WindowFacts(val status: PlaybackStatus, val duration: Duration?, val seekable: Boolean)
+    private data class WindowFacts(val status: PlaybackStatus, val duration: Duration?, val seekable: Boolean, val playRequested: Boolean)
 
     /** A new generation means the position jumped: a seek, or a new stream. */
     private data class ClockFacts(val playing: Boolean, val speed: Double, val generation: Generation)
@@ -227,8 +227,11 @@ internal class PlaybackDelegate(
         if (playing) player.play() else player.pause()
     }
 
-    /** What the window's play button shows. */
-    fun paused(): Boolean = player.state.value.status != PlaybackStatus.Playing
+    /**
+     * What the window's play button shows: paused unless play was asked for, as the controls draw
+     * it, so a player buffering after a play shows pause and its button does not play again (#943).
+     */
+    fun paused(): Boolean = !player.state.value.playRequested
 
     /** The range the window's progress bar covers. */
     fun range(): CValue<CMTimeRange> {

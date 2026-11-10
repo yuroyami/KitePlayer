@@ -57,24 +57,32 @@ class AudioVizFeedTest {
         assertTrue(assertNotNull(feed.timeline.newest()).level > 0f)
     }
 
+    /**
+     * A full queue loses only the block it refused (#962). It used to retire every queued block
+     * with a new epoch, and the queued blocks are the sound heard first after a seek: at double
+     * speed the decoder's burst outran the worker, and the picture stayed empty for that time.
+     * The block after the hole starts the analysis over, as a jump in time does.
+     */
     @Test
-    fun `a stalled worker drops visual blocks and recovers with a new local revision`() {
+    fun `a full queue drops only the refused block and starts over after it`() {
         val feed = feed(AudioPcmQueue(capacity = 2))
         hear(feed, 0L, 0.2f)
-        val revision = assertNotNull(feed.timeline.newest()).analysisRevision
         val block = FloatArray(2048) { 0.3f }
         val format = AudioFormat(44_100, 2, SampleFormat.F32)
         repeat(3) { feed.onAudio(Pts(200_000L + it * 23_220L), block, 1024, format) }
         assertEquals(1L, feed.stats.droppedBlocks)
         assertEquals(1024L, feed.stats.droppedSampleFrames)
-        assertNull(feed.timeline.newest(), "overflow must invalidate visuals immediately")
+        val resetsBefore = feed.stats.discontinuities
         worker.runAll()
-        assertNull(feed.timeline.newest(), "queued pre-gap work must not repopulate the timeline")
+        val queued = assertNotNull(feed.timeline.newest(), "the queued blocks before the hole were thrown away")
+        assertTrue(queued.ptsMicros >= 200_000L, "the queued blocks were not analysed: newest at ${queued.ptsMicros}")
         assertEquals(0L, feed.stats.queuedPcmNanos)
+        // The block after the hole, which a block of the same length makes continuous with the refused one.
+        feed.onAudio(Pts(200_000L + 3 * 23_220L), block, 1024, format)
+        worker.runAll()
+        assertTrue(feed.stats.discontinuities > resetsBefore, "the analysis ran on across the hole")
         hear(feed, 300_000L, 0.2f)
-        val recovered = assertNotNull(feed.timeline.newest())
-        assertEquals(Generation.Initial, recovered.generation)
-        assertTrue(recovered.analysisRevision > revision)
+        assertTrue(assertNotNull(feed.timeline.newest()).ptsMicros >= 300_000L)
     }
 
     @Test

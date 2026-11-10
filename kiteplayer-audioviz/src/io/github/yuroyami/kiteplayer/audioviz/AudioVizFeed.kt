@@ -144,7 +144,7 @@ internal class AudioVizFeed(
         val pending = queue.load() ?: return
         val started = clock.nanos()
         val result = if (format.channels > 64 || format.sampleRate !in 1_000..768_000) AudioPcmQueue.Offer.Invalid else
-            pending.offer(current.generation, current.revision, pts.micros, interleaved, frames, format)
+            pending.offer(current.generation, current.revision, pts.micros, interleaved, frames, format, afterHole = gapOpen)
         if (result == AudioPcmQueue.Offer.Accepted) {
             stats.copies.fetchAndAdd(1L)
             gapOpen = false
@@ -152,10 +152,11 @@ internal class AudioVizFeed(
             stats.drops.fetchAndAdd(1L)
             stats.droppedFrames.fetchAndAdd(frames.coerceAtLeast(0).toLong())
             if (result == AudioPcmQueue.Offer.Invalid) stats.invalid.fetchAndAdd(1L)
-            if (!gapOpen) {
-                resetEpoch(generation)
-                gapOpen = true
-            }
+            // Only this block is lost. The queued blocks are the sound heard first after a seek, and
+            // retiring them with a new epoch threw their analysis away whenever the decoder's burst
+            // outran the worker, as at double speed, where 200 ms of output is 400 ms of media (#962).
+            // The next block that fits starts after the hole, and the worker starts over there.
+            gapOpen = true
         }
         // Wake even after a drop so the worker releases queued data from the retired local epoch.
         wake.trySend(Unit)
@@ -190,7 +191,7 @@ internal class AudioVizFeed(
     private fun process(slot: AudioPcmQueue.Slot, current: Epoch) {
         val started = clock.nanos()
         val nextFormat = checkNotNull(slot.format)
-        val jumped = expectedMicros?.let { abs(slot.ptsMicros - it) > JUMP_MICROS } ?: false
+        val jumped = slot.afterHole || (expectedMicros?.let { abs(slot.ptsMicros - it) > JUMP_MICROS } ?: false)
         var active = analyzer
         if (active == null || handled !== current || nextFormat != format || jumped) {
             timeline.reset(current.generation)

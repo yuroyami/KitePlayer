@@ -27,6 +27,9 @@ internal class AudioPcmQueue(
         var generation = Generation.Initial
         var revision = 0L
         var format: AudioFormat? = null
+
+        /** True for the first slot of a block that follows one the queue refused (#962). */
+        var afterHole = false
         internal var endNanos = 0L
         internal var sequence = -1L
     }
@@ -48,7 +51,15 @@ internal class AudioPcmQueue(
     }
 
     /** Producer only. Rejects a whole block before copying; never waits for a free slot. */
-    fun offer(generation: Generation, revision: Long, ptsMicros: Long, samples: FloatArray, frames: Int, format: AudioFormat): Offer {
+    fun offer(
+        generation: Generation,
+        revision: Long,
+        ptsMicros: Long,
+        samples: FloatArray,
+        frames: Int,
+        format: AudioFormat,
+        afterHole: Boolean = false,
+    ): Offer {
         val channels = format.channels
         if (channels <= 0 || channels > samplesPerSlot || format.sampleRate <= 0 ||
             frames <= 0 || frames > samples.size / channels
@@ -75,6 +86,7 @@ internal class AudioPcmQueue(
             slot.generation = generation
             slot.revision = revision
             slot.format = format
+            slot.afterHole = afterHole && offset == 0
             slot.sequence = sequence
             offset += count
             slot.endNanos = baseNanos + offset * 1_000_000_000L / format.sampleRate

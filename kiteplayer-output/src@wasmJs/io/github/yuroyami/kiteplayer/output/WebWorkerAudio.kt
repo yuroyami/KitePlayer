@@ -67,11 +67,26 @@ public class WebWorkletAudio private constructor(private val state: JsAny) {
  *
  * An application uses `KitePlayerWorker` in `kiteplayer`, which builds this inside its worker.
  */
+@OptIn(io.github.yuroyami.kiteplayer.KitePlayerInternalApi::class)
 public fun workerOutputBackend(
     port: JsAny,
     sampleRate: Int,
     channels: Int,
     outputLatencySeconds: Double?,
+    control: (resume: Boolean) -> Unit,
+): OutputBackend = workerOutputBackend(port, sampleRate, channels, { outputLatencySeconds }, control)
+
+/**
+ * [workerOutputBackend] whose output latency is read from [outputLatencySeconds] on every ask, so
+ * the page can send the figure again when it changes, as when the sound moves to Bluetooth
+ * headphones (#901). The worker of `KitePlayerWorker` builds its backend through this one.
+ */
+@io.github.yuroyami.kiteplayer.KitePlayerInternalApi
+public fun workerOutputBackend(
+    port: JsAny,
+    sampleRate: Int,
+    channels: Int,
+    outputLatencySeconds: () -> Double?,
     control: (resume: Boolean) -> Unit,
 ): OutputBackend {
     val shared = WorkletPort(port, channels)
@@ -104,7 +119,8 @@ internal class WorkletPortDevice(
     private val port: WorkletPort,
     override val sampleRate: Int,
     override val channels: Int,
-    private val latencySeconds: Double?,
+    /** The page's latest output latency, read on every ask (#901). */
+    private val latencySeconds: () -> Double?,
     private val control: (Boolean) -> Unit,
 ) : WebAudioDevice {
 
@@ -112,7 +128,7 @@ internal class WorkletPortDevice(
 
     override fun underrunFrames(): Int = webAudioSilence(port.state)
 
-    override fun outputLatencySeconds(): Double? = latencySeconds
+    override fun outputLatencySeconds(): Double? = latencySeconds()
 
     /** The same per-sample crossing as the page's sink, now on the worker's thread instead of the page's. */
     override fun enqueue(samples: FloatArray, frames: Int) {

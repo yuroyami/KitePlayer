@@ -1,4 +1,4 @@
-@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class)
+@file:OptIn(kotlin.js.ExperimentalWasmJsInterop::class, io.github.yuroyami.kiteplayer.KitePlayerInternalApi::class)
 
 package io.github.yuroyami.kiteplayer
 
@@ -54,6 +54,9 @@ private class WorkerRuntime(private val scope: CoroutineScope) {
         }
     }
 
+    /** The page's audio output latency, as it last sent it (#901). */
+    private var outputLatency: Double? = null
+
     private suspend fun start(init: PageMessage.Init, canvas: JsAny?, port: JsAny?) {
         check(player == null) { "this worker already has a player" }
         // Beside the codec module and without holding back Ready: an ASS track that opens before
@@ -63,8 +66,10 @@ private class WorkerRuntime(private val scope: CoroutineScope) {
         KiteFFmpegWeb.load(init.codecUrl)
         // With no port the page has no Web Audio, and the web output's own fallback is a silent
         // clock that keeps the picture moving.
+        outputLatency = init.latencySeconds
         val output = port?.let {
-            workerOutputBackend(it, init.sampleRate, init.channels, init.latencySeconds) { resume ->
+            // Read on every ask, so a figure the page sends again reaches the clock (#901).
+            workerOutputBackend(it, init.sampleRate, init.channels, { outputLatency }) { resume ->
                 post(WorkerMessage.Audio(resume))
             }
         } ?: WebOutputBackend
@@ -148,6 +153,7 @@ private class WorkerRuntime(private val scope: CoroutineScope) {
             Control.Play -> play()
             Control.Pause -> pause()
             is Control.SetViewport -> renderer?.setViewport(control.width, control.height, control.scale)
+            is Control.SetOutputLatency -> outputLatency = control.seconds
             is Control.RequestSeek -> requestSeek(control.to, control.mode)
             is Control.SetSpeed -> setSpeed(control.value)
             is Control.SetPreservePitch -> setPreservePitch(control.value)

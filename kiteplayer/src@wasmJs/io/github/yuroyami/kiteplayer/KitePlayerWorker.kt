@@ -526,7 +526,25 @@ public class KitePlayerWorker private constructor(
         if (dead == null) workerPostTo(worker, message.encode())
     }
 
+    /**
+     * The output latency the worker was last given. The page reads the figure afresh on each
+     * message from the worker, which come several times a second while it plays, and sends it when
+     * it moved, as when the sound moves to Bluetooth headphones: the worker used to keep the one it
+     * was given at the start for good, and the picture ran ahead of the sound by the difference (#901).
+     */
+    internal var sentLatency: Double? = null
+
+    private fun sendLatencyWhenMoved() {
+        val now = audio?.outputLatencySeconds
+        val last = sentLatency
+        val moved = if (now == null || last == null) (now == null) != (last == null) else kotlin.math.abs(now - last) >= LATENCY_STEP_SECONDS
+        if (!moved || closed || dead != null) return
+        sentLatency = now
+        post(PageMessage.Send(Control.SetOutputLatency(now)))
+    }
+
     internal fun receive(data: JsAny?) {
+        if (audio != null) sendLatencyWhenMoved()
         when (val message = decodeWorkerMessage(data) ?: return) {
             WorkerMessage.Hello -> Unit
             WorkerMessage.Ready -> started?.complete(Unit)
@@ -709,7 +727,7 @@ public class KitePlayerWorker private constructor(
                     channels = audio?.channels ?: 0,
                     latencySeconds = audio?.outputLatencySeconds,
                     libassUrl = libassUrl?.let(::pageAddress),
-                ).encode()
+                ).also { created.sentLatency = it.latencySeconds }.encode()
                 workerPostInit(worker, init, offscreen, audio?.workerPort)
                 ready.await()
                 created.started = null
@@ -767,6 +785,9 @@ private external fun workerTerminate(worker: JsAny)
 
 /** How long a close waits for the worker's answer before the page ends the worker. */
 private const val CLOSE_GRACE_MILLIS = 3_000
+
+/** A move of the output latency smaller than this is not sent to the worker (#901). */
+private const val LATENCY_STEP_SECONDS = 0.005
 
 @JsFun("(millis, run) => { setTimeout(run, millis); }")
 private external fun afterMillis(millis: Int, run: () -> Unit)

@@ -100,6 +100,13 @@ internal sealed class Control(val member: String) {
 
     /** The renderer's call rather than the player's: the canvas belongs to the worker. */
     data class SetViewport(val width: Int, val height: Int, val scale: Float) : Control("setViewport")
+
+    /**
+     * The page's audio output latency now, in seconds, or null when the browser gives no figure.
+     * The page's call rather than the player's: the device belongs to the page, and its latency
+     * moves when the sound moves to other headphones (#901).
+     */
+    data class SetOutputLatency(val seconds: Double?) : Control("setOutputLatency")
     data class RequestSeek(val to: Duration, val mode: SeekMode) : Control("requestSeek")
     data class SetSpeed(val value: Double) : Control("setSpeed")
     data class SetPreservePitch(val value: Boolean) : Control("setPreservePitch")
@@ -350,6 +357,7 @@ private fun encodeControl(control: Control): JsAny = record {
             put("height", control.height)
             put("scale", control.scale)
         }
+        is Control.SetOutputLatency -> put("seconds", control.seconds)
         is Control.RequestSeek -> {
             put("to", control.to)
             put("mode", control.mode)
@@ -1330,6 +1338,7 @@ private fun decodeControl(o: JsAny): Control? = when (o.str("t")) {
         o.int("height") ?: missing("height"),
         o.float("scale") ?: missing("scale"),
     )
+    "setOutputLatency" -> Control.SetOutputLatency(o.num("seconds"))
     "requestSeek" -> Control.RequestSeek(o.micros("to") ?: missing("to"), o.enum<SeekMode>("mode") ?: missing("mode"))
     "setSpeed" -> Control.SetSpeed(o.num("value") ?: missing("value"))
     "setPreservePitch" -> Control.SetPreservePitch(o.flag("value"))

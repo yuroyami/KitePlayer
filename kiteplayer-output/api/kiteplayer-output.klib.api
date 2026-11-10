@@ -376,3 +376,4 @@ final object io.github.yuroyami.kiteplayer.output/WebOutputBackend : io.github.y
 
 // Targets: [wasmJs]
 final fun io.github.yuroyami.kiteplayer.output/workerOutputBackend(kotlin.js/JsAny, kotlin/Int, kotlin/Int, kotlin/Double?, kotlin/Function1<kotlin/Boolean, kotlin/Unit>): io.github.yuroyami.kiteplayer.spi/OutputBackend // io.github.yuroyami.kiteplayer.output/workerOutputBackend|workerOutputBackend(kotlin.js.JsAny;kotlin.Int;kotlin.Int;kotlin.Double?;kotlin.Function1<kotlin.Boolean,kotlin.Unit>){}[0]
+final fun io.github.yuroyami.kiteplayer.output/workerOutputBackend(kotlin.js/JsAny, kotlin/Int, kotlin/Int, kotlin/Function0<kotlin/Double?>, kotlin/Function1<kotlin/Boolean, kotlin/Unit>): io.github.yuroyami.kiteplayer.spi/OutputBackend // io.github.yuroyami.kiteplayer.output/workerOutputBackend|workerOutputBackend(kotlin.js.JsAny;kotlin.Int;kotlin.Int;kotlin.Function0<kotlin.Double?>;kotlin.Function1<kotlin.Boolean,kotlin.Unit>){}[0]

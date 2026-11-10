@@ -1051,7 +1051,11 @@ internal class ScriptedSession(
     var closeCount: Int = 0
         private set
 
+    /** Runs inside [close] before anything is closed: a source whose close will not return. */
+    var closing: (() -> Unit)? = null
+
     override fun close() {
+        closing?.invoke()
         closeCount++
         scriptedSource.close()
         if (faults.sessionCloseThrows) error("the scripted session refuses to close")

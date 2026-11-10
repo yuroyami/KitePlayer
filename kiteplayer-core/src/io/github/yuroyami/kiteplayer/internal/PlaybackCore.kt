@@ -11535,7 +11535,7 @@ internal class PlaybackCore(
             // A build the player's own cancellation stopped released what it opened, and awaiting
             // it would throw into the teardown that is running now.
             prepared == null && next.job.isCompleted -> if (!next.job.isCancelled) {
-                next.job.await().getOrNull()?.session?.let { releaseSession(it) }
+                next.job.await().getOrNull()?.session?.let { releaseWithinDeadline(it) }
             }
             prepared == null -> {
                 // Still opening: its own rollback releases what it opened.
@@ -11548,7 +11548,9 @@ internal class PlaybackCore(
                 // A fade that took the next item's sound gives it back first, and the current item
                 // fades out on its own to its end (#434).
                 if (next.fading && active != null) withdrawCrossfade(active, prepared.session)
-                releaseSession(prepared.session)
+                // Off the actor and inside the close deadline, as the current item's release is,
+                // so a preload whose source or decoder never returns cannot hold the mailbox (#707).
+                releaseWithinDeadline(prepared.session)
             }
         }
     }
@@ -11569,8 +11571,9 @@ internal class PlaybackCore(
         if (parked) audio?.flush(requestedEpoch)
         incoming.audio = null
         incoming.sink = null
-        releaseSession(incoming)
-        // Its feeder is joined by now, whatever the park answered.
+        releaseWithinDeadline(incoming)
+        // Its feeder is joined by now, whatever the park answered, unless the release overran its
+        // deadline: the runtime is then marked wedged and the flush below clears what it can.
         if (!parked) audio?.flush(requestedEpoch)
         active.ownsAudio = true
         if (midItem) {
@@ -11590,7 +11593,9 @@ internal class PlaybackCore(
         is CoreCommand.QueueNext -> primedFor(neighbourInOrder(1)) == null
         is CoreCommand.Open, is CoreCommand.OpenQueue, is CoreCommand.QueuePrevious,
         is CoreCommand.EditQueue, is CoreCommand.SetShuffle, is CoreCommand.RestoreQueueOrder,
-        is CoreCommand.Seek, is CoreCommand.SeekLater, is CoreCommand.Close,
+        // Not Close: it takes the preload itself, so that its release runs inside the close
+        // deadline (#707).
+        is CoreCommand.Seek, is CoreCommand.SeekLater,
         is CoreCommand.SelectTrack, is CoreCommand.SelectSecondarySubtitle,
         is CoreCommand.AttachRenderer, is CoreCommand.DetachRenderer, is CoreCommand.StepFrame,
         is CoreCommand.SetSleepTimer, is CoreCommand.SetAbLoop,

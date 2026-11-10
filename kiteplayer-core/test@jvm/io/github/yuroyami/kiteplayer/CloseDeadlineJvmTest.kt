@@ -12,6 +12,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -55,6 +57,50 @@ class CloseDeadlineJvmTest {
             harness.stopDevice()
         } finally {
             trailer.countDown()
+            releaseLane.close()
+        }
+    }
+
+    @Test
+    fun aPreloadWhoseSourceWillNotCloseCannotHoldACloseOverItsDeadline() = runTest {
+        val releaseLane = Executors.newSingleThreadExecutor { Thread(it, "kiteplayer-test-release").apply { isDaemon = true } }
+            .asCoroutineDispatcher()
+        val stuck = CountDownLatch(1)
+        try {
+            val harness = CoreHarness(
+                this,
+                script = MediaScript(durationUs = 3_000_000, hasVideo = false),
+                releaseDispatcher = releaseLane,
+                closeDeadline = 1.seconds,
+            )
+            harness.core.openQueue(listOf(MediaItem("scripted://first"), MediaItem("scripted://second")), 0)
+            harness.core.play()
+            var waited = 0
+            while (harness.core.snapshots.value.preloadedIndex != 1 && waited < 600) {
+                harness.run(5.milliseconds)
+                waited++
+            }
+            assertEquals(1, harness.core.snapshots.value.preloadedIndex, "the second item preloads")
+            val preload = harness.backend.sessions.last()
+            // Bounded, so a close that waits for it fails after five seconds rather than hanging.
+            preload.closing = { stuck.await(5, TimeUnit.SECONDS) }
+
+            // Before #707 the close dropped the preload on the actor first, outside any deadline,
+            // and so waited the whole five seconds for this source before it answered.
+            val started = System.nanoTime()
+            val failure = assertFailsWith<PlaybackException> { harness.core.closeAndAwait() }
+            val tookMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)
+            assertIs<PlaybackError.RuntimeCompromised>(failure.error, "a close past its deadline must say so")
+            assertTrue(tookMs < 4_000, "the close waited for the preload's source: $tookMs ms")
+            assertEquals(0, preload.closeCount, "the preload's source was still closing when close answered")
+
+            stuck.countDown()
+            val until = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (preload.closeCount == 0 && System.nanoTime() < until) withContext(Dispatchers.Default) { delay(10) }
+            assertEquals(1, preload.closeCount, "the preload was never released once its source returned")
+            harness.stopDevice()
+        } finally {
+            stuck.countDown()
             releaseLane.close()
         }
     }

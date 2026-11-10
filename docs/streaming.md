@@ -192,3 +192,35 @@ uses a stored segment.
 The item's own `io` source wins, then a resolver that you set in `NetworkConfig.ioResolver`, then
 the automatic provider. `NetworkConfig.autoResolve = false` turns the automatic provider off. No
 HTTP client exists until network media opens, and the reader that created one closes it.
+
+## Through a proxy
+
+The player has no proxy setting of its own yet (#703). What reaches a proxy today depends on the
+transport.
+
+- **The automatic transport** follows the platform's proxy settings, because it uses each
+  engine's defaults. On Android and the JVM that is OkHttp, which asks Java's default
+  `ProxySelector`: Android fills it from the device's proxy, and a desktop JVM reads the
+  `https.proxyHost` and `https.proxyPort` system properties, or the operating system's own
+  settings with `-Djava.net.useSystemProxies=true`. On Apple platforms NSURLSession uses the
+  system's proxy. A web worker's requests go through the browser, and so its proxy.
+- **A proxy of your choosing** needs a client of your own, handed to the player through
+  `KtorMediaIoResolver`:
+
+  ```kotlin
+  val client = HttpClient(OkHttp) {   // HttpClient(Darwin) on Apple platforms
+      engine { proxy = ProxyBuilder.http("http://proxy.example.com:3128") }
+  }
+  val player = KitePlayer {
+      network { ioResolver = KtorMediaIoResolver(client = client) }
+  }
+  ```
+
+  The resolver serves HLS, DASH and plain files on that client, segments included. The client stays
+  yours to close. A proxy that asks for credentials needs the engine's own authenticator, for
+  OkHttp `engine { config { proxyAuthenticator(...) } }`. A segment store goes to the resolver's
+  own `segmentStore` parameter, because an explicit resolver does not read the player's.
+- **Addresses FFmpeg reads itself**, such as `rtmp`, `rtsp`, or plain `http` with the automatic
+  transport off, never see that client. FFmpeg's `http` reader takes the `http_proxy` environment
+  variable of the process, or the `http_proxy` option in `MediaItem.openOptions`, for one item. Its
+  `rtmp` and `rtsp` readers take no proxy.

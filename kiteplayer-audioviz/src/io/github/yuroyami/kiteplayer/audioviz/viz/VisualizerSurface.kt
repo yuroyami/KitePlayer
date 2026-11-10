@@ -92,14 +92,16 @@ public fun VisualizerSurface(
         VisualizerCanvas(visualization, frame, palette, clock, modifier.fillMaxSize(), future, stats, renderQuality, framesPerSecond, motion, flashes)
         return
     }
+    val allowance = remember { FloatArray(1) { 1f } }
     PostProcessedBox(
         spec = { if (post) visualization.post.masked(switches).calmed(reducedMotion) else PostSpec.Off },
         frame = { clock.tick?.frame ?: frame() },
         modifier = modifier,
         stats = stats,
         calm = reducedMotion,
+        lightScale = { allowance[0] },
     ) {
-        VisualizerCanvas(visualization, frame, palette, clock, Modifier.fillMaxSize(), future, stats, renderQuality, framesPerSecond, motion, flashes)
+        VisualizerCanvas(visualization, frame, palette, clock, Modifier.fillMaxSize(), future, stats, renderQuality, framesPerSecond, motion, flashes, allowance)
     }
 }
 
@@ -117,6 +119,8 @@ private fun VisualizerCanvas(
     framesPerSecond: Int = 0,
     motionScale: Float = 1f,
     flashesPerSecond: Int = FLASHES_PER_SECOND,
+    /** Where the flash guard's allowance of each drawn frame goes, for the finishing pass over it (#957). */
+    allowance: FloatArray? = null,
 ) {
     val guard = remember(flashesPerSecond) { FlashGuard(flashesPerSecond) }
     val calmReading = remember { CalmReading() }
@@ -159,6 +163,7 @@ private fun VisualizerCanvas(
         state.instant = tick?.instant ?: 0.0
         state.motionScale = motionScale
         state.lightScale = guard.allowance(lightFor(current.energy), deltaSeconds)
+        allowance?.set(0, state.lightScale)
         val trail = visualization.trailAt(current.mood).coerceIn(0f, 0.995f)
         if (trail <= 0f) {
             composeFrame(visualization, state, null, stats)
@@ -652,14 +657,16 @@ public fun DirectedVisualizerSurface(
         DirectedCanvas(director, frame, palette, clock, framesPerSecond, modifier.fillMaxSize(), future, stats, renderQuality, motion, flashes)
         return
     }
+    val allowance = remember { FloatArray(1) { 1f } }
     PostProcessedBox(
         spec = { if (post) director.current.post.masked(switches).calmed(reducedMotion) else PostSpec.Off },
         frame = { clock.tick?.frame ?: frame() },
         modifier = modifier,
         stats = stats,
         calm = reducedMotion,
+        lightScale = { allowance[0] },
     ) {
-        DirectedCanvas(director, frame, palette, clock, framesPerSecond, Modifier.fillMaxSize(), future, stats, renderQuality, motion, flashes)
+        DirectedCanvas(director, frame, palette, clock, framesPerSecond, Modifier.fillMaxSize(), future, stats, renderQuality, motion, flashes, allowance)
     }
 }
 
@@ -677,6 +684,8 @@ private fun DirectedCanvas(
     quality: RenderQuality? = null,
     motionScale: Float = 1f,
     flashesPerSecond: Int = FLASHES_PER_SECOND,
+    /** Where the flash guard's allowance of each drawn frame goes, for the finishing pass over it (#957). */
+    allowance: FloatArray? = null,
 ) {
     val guard = remember(flashesPerSecond) { FlashGuard(flashesPerSecond) }
     val calmReading = remember { CalmReading() }
@@ -707,6 +716,7 @@ private fun DirectedCanvas(
         state.instant = tick?.instant ?: 0.0
         state.motionScale = motionScale
         state.lightScale = guard.allowance(lightFor(current.energy), deltaSeconds)
+        allowance?.set(0, state.lightScale)
         stage.follow(director)
         val next = director.incoming
         val scale = quality?.stepped ?: 1f

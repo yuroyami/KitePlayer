@@ -16,6 +16,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.masked
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
 import kotlin.math.sqrt
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -233,10 +234,26 @@ class PostProcessTest {
     }
 
     /** [count] successive renders of the same frame, each drawn again as a new step would be. */
-    private fun renderSteps(spec: PostSpec, frame: SpectrumFrame, calm: Boolean, count: Int): List<PixelMap> {
+    private fun renderSteps(spec: PostSpec, frame: SpectrumFrame, calm: Boolean, count: Int, light: Float = 1f): List<PixelMap> =
+        renderSteps(spec, { frame }, calm, count, light)
+
+    /** [count] successive renders, step `n` of [frameAt] each, each drawn again as a new step would be. */
+    private fun renderSteps(
+        spec: PostSpec,
+        frameAt: (Int) -> SpectrumFrame,
+        calm: Boolean,
+        count: Int,
+        light: Float = 1f,
+    ): List<PixelMap> {
         val tick = mutableStateOf(0)
         val scene = ImageComposeScene(width, height, Density(1f), content = {
-            PostProcessedBox(spec = { spec }, frame = { frame }, modifier = Modifier.fillMaxSize(), calm = calm) {
+            PostProcessedBox(
+                spec = { spec },
+                frame = { frameAt(tick.value) },
+                modifier = Modifier.fillMaxSize(),
+                calm = calm,
+                lightScale = { light },
+            ) {
                 Canvas(Modifier.fillMaxSize()) {
                     // Read, so each step draws the picture again.
                     tick.value
@@ -262,19 +279,59 @@ class PostProcessTest {
         }
     }
 
-    private fun bareFrame(dropPulse: Float = 0f, kick: Float = 0f, level: Float = 0f) = SpectrumFrame(
-        ptsMicros = 0L, bands = FloatArray(8), peaks = FloatArray(8), scope = FloatArray(16),
+    private fun bareFrame(dropPulse: Float = 0f, kick: Float = 0f, level: Float = 0f, ptsMicros: Long = 0L) = SpectrumFrame(
+        ptsMicros = ptsMicros, bands = FloatArray(8), peaks = FloatArray(8), scope = FloatArray(16),
         level = level, bass = 0f, mid = 0f, treble = 0f, beat = 0f, pulse = 0f, kick = kick, dropPulse = dropPulse,
     )
 
+    /** The strips of a playing tear move, but at most every 120 ms of the music, not on every draw (#957). */
     @Test
-    fun aPlayingPictureTearsDifferentlyOnEveryDraw() {
+    fun aPlayingPictureTearsAnewAtMostEvery120Milliseconds() {
         val spec = PostSpec(bloom = 0f, vignette = 0f, grain = 0f, glitch = true, aberration = 0f)
-        val playing = bareFrame(dropPulse = 0.6f, level = 0.5f)
-        assertTrue(playing.audible > 0f && !playing.held, "the fixture must be a playing frame")
-        val pictures = renderSteps(spec, playing, calm = false, count = 4)
-        val moved = (1 until pictures.size).count { differing(pictures[0], pictures[it]) > 0 }
-        assertTrue(moved >= 2, "the strips should move on most draws of a playing picture, moved on $moved of 3")
+        // A frame every 40 ms of music: the strips stay for steps 1 and 2 and move at step 3, 120 ms on.
+        val playing = { step: Int -> bareFrame(dropPulse = 0.6f, level = 0.5f, ptsMicros = step * 40_000L) }
+        assertTrue(playing(0).audible > 0f && !playing(0).held, "the fixture must be a playing frame")
+        val pictures = renderSteps(spec, playing, calm = false, count = 6)
+        // The blue copy shifts with the same pulse at every step, so only the strips can differ.
+        assertEquals(0, differing(pictures[0], pictures[1]), "the strips moved after 40 ms")
+        assertEquals(0, differing(pictures[0], pictures[2]), "the strips moved after 80 ms")
+        assertTrue(differing(pictures[0], pictures[3]) > 0, "the strips should move 120 ms on")
+        assertEquals(0, differing(pictures[3], pictures[4]), "and then stay again")
+    }
+
+    /** The light a kick and a tear add follows the flash guard's allowance (#957). */
+    @Test
+    fun theAddedLightFollowsTheFlashGuard() {
+        val glowSpec = PostSpec(bloom = 1f, bloomRadius = 0.05f, threshold = 0.3f, vignette = 0f, grain = 0f, glitch = false, aberration = 0f)
+        fun glow(kick: Float, light: Float) = ring(renderSteps(glowSpec, bareFrame(kick = kick), calm = false, count = 1, light = light).first(), 8f, 30f)
+        val held = glow(1f, light = 0f)
+        assertTrue(kotlin.math.abs(held - glow(0f, light = 0f)) < 0.0005f, "a kick at no allowance must not flare")
+        assertTrue(glow(1f, light = 1f) > held + 0.005f, "and at full allowance it does")
+
+        val tearSpec = PostSpec(bloom = 0f, vignette = 0f, grain = 0f, glitch = true, aberration = 0f)
+        val drop = bareFrame(dropPulse = 1f)
+        val full = renderSteps(tearSpec, drop, calm = false, count = 1, light = 1f).first()
+        val none = renderSteps(tearSpec, drop, calm = false, count = 1, light = 0f).first()
+        var blueAdded = 0f
+        var blueHeld = 0f
+        for (y in 0 until height) for (x in 0 until width) {
+            blueAdded += full[x, y].blue - full[x, y].red
+            blueHeld += none[x, y].blue - none[x, y].red
+        }
+        assertTrue(blueAdded > blueHeld + 1f, "the tear's blue copy should shrink with the allowance: $blueAdded then $blueHeld")
+    }
+
+    /** The tear adds no red-only copy, which would be saturated red flashing (#957). */
+    @Test
+    fun aTearAddsNoRedOnlyLight() {
+        val spec = PostSpec(bloom = 0f, vignette = 0f, grain = 0f, glitch = true, aberration = 0f)
+        val torn = renderSteps(spec, bareFrame(dropPulse = 1f), calm = false, count = 1).first()
+        var reddest = 0f
+        for (y in 0 until height) for (x in 0 until width) {
+            val c = torn[x, y]
+            reddest = maxOf(reddest, c.red - maxOf(c.green, c.blue))
+        }
+        assertTrue(reddest < 0.05f, "a pixel of the tear is red over its other colours by $reddest")
     }
 
     @Test

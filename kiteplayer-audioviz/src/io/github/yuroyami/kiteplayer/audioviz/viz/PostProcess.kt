@@ -150,13 +150,17 @@ internal fun PostProcessedBox(
     stats: RenderStats? = null,
     /** True under reduced motion: a kick no longer makes the glow flare. */
     calm: Boolean = false,
+    /**
+     * The flash guard's allowance for the frame [content] just drew, 0 to 1. The light this pass
+     * adds on a kick and in a tear scales by it, so the guard holds this layer too (#957).
+     */
+    lightScale: () -> Float = { 1f },
     content: @Composable () -> Unit,
 ) {
     val scene = rememberGraphicsLayer()
     val bright = rememberGraphicsLayer()
     val levels = List(BLOOM_LEVELS) { rememberGraphicsLayer() }
     val fringe = List(3) { rememberGraphicsLayer() }
-    val redSplit = rememberGraphicsLayer()
     val blueSplit = rememberGraphicsLayer()
     val grain = remember { lazy { ShaderBrush(ImageShader(grainTile(), TileMode.Repeated, TileMode.Repeated)) } }
     val lines = remember { lazy { ShaderBrush(ImageShader(scanlineTile(), TileMode.Repeated, TileMode.Repeated)) } }
@@ -176,6 +180,8 @@ internal fun PostProcessedBox(
             }
         }
     }
+    // When the torn strips last moved, in media time, so they move at most every TEAR_STEP_MICROS.
+    val tornAt = remember { LongArray(1) { Long.MIN_VALUE } }
     val effect = remember { lazy { ScenePostEffect() } }
     DisposableEffect(effect) { onDispose { if (effect.isInitialized()) effect.value.close() } }
 
@@ -196,7 +202,9 @@ internal fun PostProcessedBox(
             }
             val started = if (stats != null) TimeSource.Monotonic.markNow() else null
 
-            val flare = if (calm) 0f else current.kick
+            // Read after the scene was recorded, which is when the drawings set it for this frame.
+            val light = lightScale().coerceIn(0f, 1f)
+            val flare = if (calm) 0f else current.kick * light
             val split = post.aberration * (0.25f + 0.75f * current.trebleRel + flare)
             val strength = (post.bloom * (0.6f + 0.6f * current.energy + 0.5f * flare)).coerceIn(0f, 1f)
             val tearing = post.glitch && current.dropPulse > 0.02f
@@ -210,22 +218,25 @@ internal fun PostProcessedBox(
                 if (split > MIN_SPLIT) drawFringed(scene, fringe, split) else drawLayer(scene)
             }
 
-            // The tear. Only in the second after a drop, and fading with it: the red and blue parts
-            // of the picture pulled apart, and a few strips slid sideways the way a signal breaks.
+            // The tear. Only in the second after a drop, and fading with it: the blue part of the
+            // picture pulled aside, and a few strips slid sideways the way a signal breaks. There is
+            // no red copy: a red-only layer added at a drop is saturated red flashing, which the
+            // policy allows none of (#957). The added light scales by the guard's allowance.
             if (post.glitch && current.dropPulse > 0.02f) {
                 val amount = current.dropPulse.coerceIn(0f, 1f)
                 val shift = size.width * 0.012f * amount
-                redSplit.colorFilter = RED_ONLY
-                redSplit.blendMode = BlendMode.Plus
-                redSplit.alpha = 0.55f * amount
-                redSplit.record { translate(shift, 0f) { drawLayer(scene) } }
-                drawLayer(redSplit)
                 blueSplit.colorFilter = BLUE_ONLY
                 blueSplit.blendMode = BlendMode.Plus
-                blueSplit.alpha = 0.55f * amount
+                blueSplit.alpha = 0.55f * amount * light
                 blueSplit.record { translate(-shift, 0f) { drawLayer(scene) } }
                 drawLayer(blueSplit)
-                if (current.audible > 0f) {
+                // New strips while the music plays, at most every TEAR_STEP_MICROS of it: a new place
+                // on every display frame flickered at the display's own rate (#957).
+                val now = current.ptsMicros
+                val due = !current.hasTimestamp || tornAt[0] == Long.MIN_VALUE ||
+                    now - tornAt[0] >= TEAR_STEP_MICROS || now < tornAt[0]
+                if (current.audible > 0f && due) {
+                    tornAt[0] = now
                     for (strip in 0 until TORN_STRIPS) {
                         tears[strip * 3] = random.next()
                         tears[strip * 3 + 1] = random.next()
@@ -398,6 +409,9 @@ private const val GRAIN_SIZE = 128
 
 /** How many strips of the picture slide sideways when it tears. */
 private const val TORN_STRIPS = 5
+
+/** The shortest time the torn strips stay in one place, in microseconds of media (#957). */
+private const val TEAR_STEP_MICROS = 120_000L
 
 /** How many frames the picture sticks for when a drop lands. */
 private const val HOLD_FRAMES = 2

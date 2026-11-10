@@ -594,6 +594,11 @@ policy of at most three flashes a second. A preferred way that a caller
 sets still wins, except the strobe, which is never used. The camera still wanders slowly, because a
 still picture with a moving spectrum in it reads as broken rather than as calm.
 
+`rememberAudioVizState` starts the setting from the system's own: Reduce Motion on iOS, and Remove
+animations on Android, which sets the animator duration scale to zero. The desktop JVM has no
+setting it can read on every system, so it starts off there. The value is read when the state is
+made; the property stays writable, so an app with a setting of its own sets it.
+
 The reading a drawing sees is slowed down: its smooth values and its power spectrum glide to each
 new frame over half a second. The waveform, the hits, the delivered events and the pause stay those
 of the newest frame, so a drawing that draws the waveform still follows the music and a pause still

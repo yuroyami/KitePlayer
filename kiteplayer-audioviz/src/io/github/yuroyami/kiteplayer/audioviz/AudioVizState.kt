@@ -108,7 +108,11 @@ public class AudioVizState internal constructor(feed: AudioVizFeed? = null, priv
      * The camera stops punching, shaking and cutting, the trail stops swimming, every change of
      * drawing becomes a plain fade, and the flash guard allows no flash of the shared light. A way
      * of changing that the director's `preferred` names still wins, except the strobe, which is
-     * never used. Follow the host's own reduced-motion setting where the platform has one.
+     * never used.
+     *
+     * [rememberAudioVizState] starts it from the system's own setting: Reduce Motion on iOS, and
+     * Remove animations on Android. The desktop has no setting that can be read for every system,
+     * so there it starts false. It stays writable, so an app with its own setting can set it.
      *
      * This is not a promise of no flashing at all. The guard scales only the shared light: a
      * drawing's own bright marks and the finishing pass are outside it. What is measured is that the
@@ -315,6 +319,9 @@ public class AudioVizState internal constructor(feed: AudioVizFeed? = null, priv
  * already running when a song starts. [songScan] decides which items a background scan may read
  * to build a song map; see docs/audioviz-song-scan-api.md.
  *
+ * Its [AudioVizState.reducedMotion] starts from the system's reduce-motion setting where the platform
+ * has one (#964).
+ *
  * [songMapStore] keeps finished maps between runs, so a song played before is mapped from its
  * first note instead of scanned again. Give it a directory of the application's own, with
  * [SongMapStore.inDirectory]. Without one, a map lives only as long as the process.
@@ -325,11 +332,12 @@ public fun rememberAudioVizState(
     songScan: SongScanPolicy = SongScanPolicy.Default,
     songMapStore: SongMapStore = SongMapStore.None,
 ): AudioVizState {
+    val systemCalm = systemReducesMotion()
     val state = remember(player) {
         AudioVizState {
             val reading = player.audioClock()
             VizClockReading(reading.position?.micros, reading.rate, reading.generation)
-        }
+        }.also { it.reducedMotion = systemCalm }
     }
     DisposableEffect(player, state) {
         // Configured before a new feed attaches, because attaching starts its scanner (#289).

@@ -342,7 +342,7 @@ internal class HlsVariantSwitch(
     /** The segment served last and its variant, or null when it was served as it is. */
     private var written: Pair<Long, Int>? = null
 
-    /** The keys read so far, by address, under a lock of their own: a move reads one while it holds [lock]. */
+    /** The keys read so far, by address, under a lock of their own: a move reads one with [lock] released. */
     private val keys = HashMap<String, ByteArray>()
     private val keyLock = Mutex()
 
@@ -402,54 +402,88 @@ internal class HlsVariantSwitch(
      * codec than H.264, HEVC, AV1 and VP9, or laid out in other tracks, or they are WebM whose
      * headers count time in different scales.
      */
-    suspend fun request(index: Int?): Boolean = lock.withLock {
-        val current = listed ?: return false
-        if (passedThrough || frozen) return false
-        val wanted = index ?: choose()
-        if (wanted !in addresses.indices) return false
-        if (wanted == target.value) return true
-        if (!sameKind(traits[target.value], traits[wanted])) return false
+    suspend fun request(index: Int?): Boolean {
+        // What the move starts from, read under the lock. The network reads that follow run with
+        // it released: the demux thread waits on this lock inside FFmpeg's segment open, and a
+        // playlist and two initializations from a slow origin held it for round trips at the
+        // moment the bandwidth was short (#860).
+        val start = lock.withLock {
+            val current = listed ?: return false
+            if (passedThrough || frozen) return false
+            val wanted = index ?: choose()
+            if (wanted !in addresses.indices) return false
+            if (wanted == target.value) return true
+            if (!sameKind(traits[target.value], traits[wanted])) return false
+            Start(current, wanted, target.value, init, base, fits.copyOf())
+        }
         val next = try {
-            load(wanted)
+            load(start.wanted)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Throwable) {
             null
         } ?: return false
-        if (!sameSegments(current.playlist, next.playlist)) return false
-        if (current.playlist.init != null) {
-            val fits = try {
-                planned(current, next)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Throwable) {
-                false
-            }
-            if (!fits) return false
-            rewrites = true
+        if (!sameSegments(start.current.playlist, next.playlist)) return false
+        val planned = if (start.current.playlist.init == null) null else try {
+            planned(start, next) ?: return false
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Throwable) {
+            return false
         }
-        loaded[wanted] = next
-        target.value = wanted
-        true
+        return lock.withLock {
+            // Another move, or a playlist the switch stopped serving, while the lock was free.
+            if (passedThrough || frozen || target.value != start.from) return@withLock false
+            val now = listed ?: return@withLock false
+            // A live reload of the same variant is routine while the playlist was read; it still
+            // has to share its segments with the new one.
+            if (now !== start.current && (now.variant != start.current.variant || !sameSegments(now.playlist, next.playlist))) {
+                return@withLock false
+            }
+            if (planned != null) {
+                if (base == null) base = planned.base
+                planned.fits.forEachIndexed { variant, fit -> if (fit != null && fits[variant] == null) fits[variant] = fit }
+                rewrites = true
+            }
+            loaded[start.wanted] = next
+            target.value = start.wanted
+            true
+        }
     }
 
+    /** What [request] read under the lock before it went to the network. */
+    private class Start(
+        val current: Loaded,
+        val wanted: Int,
+        val from: Int,
+        val init: HlsInit?,
+        val base: Held?,
+        val fits: Array<Fit?>,
+    )
+
+    /** The fits a move found, and the first initialization's contents, for [request] to keep. */
+    private class Planned(val base: Held, val fits: Array<Fit?>)
+
     /**
-     * Finds how the segments of [next], and of [current] when that is not known yet, are written
-     * for the first initialization. False when either cannot be written for it.
+     * Finds how the segments of [next], and of the current variant when that is not known yet,
+     * are written for the first initialization, from what [start] read. Null when either cannot
+     * be written for it. Reads the network and changes no field.
      */
-    private suspend fun planned(current: Loaded, next: Loaded): Boolean {
-        val base = base ?: held(init ?: return false).also { base = it }
-        for (loaded in listOf(current, next)) {
+    private suspend fun planned(start: Start, next: Loaded): Planned? {
+        val first = start.init ?: return null
+        val base = start.base ?: held(first)
+        val fits = start.fits
+        for (loaded in listOf(start.current, next)) {
             if (fits[loaded.variant] != null) continue
-            val own = loaded.playlist.init ?: return false
-            val held = if (own.address == init?.address && own.offset == init?.offset && own.length == init?.length) base else held(own)
+            val own = loaded.playlist.init ?: return null
+            val held = if (own.address == first.address && own.offset == first.offset && own.length == first.length) base else held(own)
             fits[loaded.variant] = when {
                 held is Held.Tracks && base is Held.Tracks -> plansFor(held.tracks, base.tracks)?.let(Fit::Plans)
                 held is Held.Header && base is Held.Header -> Webm.numbersFor(held.header, base.header)?.let(Fit::Numbers)
                 else -> null
-            } ?: return false
+            } ?: return null
         }
-        return true
+        return Planned(base, fits)
     }
 
     /** What the initialization [of] holds, read whole. */

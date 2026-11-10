@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.mp4.Fmp4
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -247,6 +248,34 @@ class HlsSwitchingTest {
             atRange.toList(),
         )
         assertTrue(plain.none { it.endsWith(".ts") }, "a ranged segment must not open whole: $plain")
+    }
+
+    /**
+     * A move reads the other variant's playlist with the switch's lock released, so the segment
+     * FFmpeg asks for meanwhile is served rather than held behind a slow origin (#860).
+     */
+    @Test
+    fun aSegmentIsServedWhileAMoveWaitsForTheOtherPlaylist() = runTest {
+        val stream = Stream(files())
+        val slow = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val switch = HlsVariantSwitch(
+            addresses = listOf("https://cdn.test/low.m3u8", "https://cdn.test/high.m3u8", "https://cdn.test/hevc.m3u8"),
+            traits = traits,
+            initial = 0,
+            choose = { 1 },
+            openAddress = { address ->
+                if (address == "https://cdn.test/high.m3u8") slow.await()
+                stream.files[address]?.let { Text(it, address, stream.closed) }
+            },
+        )
+        assertNotNull(switch.open(HlsVariantSwitch.PLAYLIST)).text()
+        val move = async { switch.request(1) }
+        testScheduler.runCurrent()
+        assertFalse(move.isCompleted, "the move must still be waiting for the high playlist")
+        assertEquals("low 0", assertNotNull(switch.open("https://kite-hls.invalid/segment/7.ts")).text())
+        slow.complete(Unit)
+        assertTrue(move.await())
+        assertEquals("high 1", assertNotNull(switch.open("https://kite-hls.invalid/segment/8.ts")).text())
     }
 
     @Test

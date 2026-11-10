@@ -43,6 +43,12 @@ FLAGS = [
     ("projects", "360 degree video", False),
 ]
 
+# What the table says for a flag whose override is computed rather than a constant.
+CONDITIONAL = {
+    "appliesAdjustments": "only without a MediaCodec target",
+    "showsHdr": "when the screen and the stream allow",
+}
+
 
 def published_modules():
     out = subprocess.run([str(ROOT / "scripts/published-modules.sh")], capture_output=True, text=True, check=True)
@@ -105,7 +111,7 @@ def renderers():
                     elif over.group(1):
                         flags[flag] = "yes" if over.group(1) == "true" else "no"
                     else:
-                        flags[flag] = "when the screen and the stream allow"
+                        flags[flag] = CONDITIONAL[flag]
                 folder = path.relative_to(ROOT / module).parts[0]
                 platform = folder.removeprefix("src@") if folder != "src" else "common"
                 found.append((name, module, platform, flags))

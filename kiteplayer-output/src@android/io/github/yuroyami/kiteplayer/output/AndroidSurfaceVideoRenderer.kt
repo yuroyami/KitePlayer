@@ -414,6 +414,15 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         get() = hdrPolicy.value == HdrPolicy.Auto && codecTarget != null && displayShowsHdr(displayHdr.value?.types)
 
     /**
+     * Only the canvas target draws the picture controls, through its paint. A view with a
+     * MediaCodec target releases most of its frames straight to the Surface, with no paint, so it
+     * answers false and the engine warns `PictureControlsUnavailable` instead of a slider that
+     * moves nothing (#767).
+     */
+    override val appliesAdjustments: Boolean
+        get() = codecTarget == null
+
+    /**
      * True while the picture on screen came through the software path, whose pixels this renderer
      * keeps and draws again at a change of its look, playing or not (#541). False after a MediaCodec
      * frame, which goes to the Surface and leaves no copy, so a paused picture takes a change of its

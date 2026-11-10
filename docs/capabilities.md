@@ -39,7 +39,7 @@ otherwise, and shows no HDR and no 360 degree view unless it says it does.
 | `KiteVideoRenderer` | `kiteplayer-compose-video` | `threaded` | yes | no | yes |
 | `WebKiteVideoRenderer` | `kiteplayer-compose-video` | `wasmJs` | yes | no | yes |
 | `AndroidGpuImageVideoRenderer` | `kiteplayer-output` | `android` | yes | no | no |
-| `AndroidSurfaceVideoRenderer` | `kiteplayer-output` | `android` | yes | when the screen and the stream allow | no |
+| `AndroidSurfaceVideoRenderer` | `kiteplayer-output` | `android` | only without a MediaCodec target | when the screen and the stream allow | no |
 | `MetalVideoRenderer` | `kiteplayer-output` | `apple` | yes | when the screen and the stream allow | no |
 | `SampleBufferVideoRenderer` | `kiteplayer-output` | `apple` | no | no | no |
 | `UIKitVideoRenderer` | `kiteplayer-output` | `ios` | yes | no | no |

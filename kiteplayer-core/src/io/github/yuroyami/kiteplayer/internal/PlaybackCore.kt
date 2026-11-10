@@ -14750,6 +14750,27 @@ internal class PlaybackCore(
         // Each CEA-708 service is a track of its own, from the packets this picture completed.
         for ((service, data) in session.captionServices.read(bytes, epoch)) {
             offerCaptions(session, cea708StreamOf(video, service), data, pts, epoch)
+            session.captionServiceTicks[service] = pts.micros
+        }
+    }
+
+    /**
+     * Gives each CEA-708 service the stream has carried an empty packet at [pts] when it has had
+     * none for [CAPTION_SERVICE_TICK_US], so that a reader holding commands behind a Delay runs
+     * them when the delay ends. The reader looks at the time only when a packet reaches it, and
+     * the engine hands a service a packet only for its own bytes, so a delay with nothing after it
+     * held its window back for as long as the service stayed quiet (#880). A tenth of a second is
+     * the unit a Delay counts in. A seek back moves the time before the last tick, which ticks at
+     * once. Video lane.
+     */
+    private fun tickCaptionServices(session: OpenSession, pts: Pts, epoch: Generation) {
+        if (session.captionServiceTicks.isEmpty()) return
+        val video = session.videoStream ?: return
+        for (entry in session.captionServiceTicks.entries) {
+            val last = entry.value
+            if (pts.micros >= last && pts.micros - last < CAPTION_SERVICE_TICK_US) continue
+            offerCaptions(session, cea708StreamOf(video, entry.key), EMPTY_CAPTION_BYTES, pts, epoch)
+            entry.setValue(pts.micros)
         }
     }
 
@@ -14800,6 +14821,7 @@ internal class PlaybackCore(
             val own = frame.closedCaptions
             own?.let { takeCaptions(session, it, frame.pts, epoch) }
             captions?.picture(frame.pts.micros, epoch, own) { ptsUs, bytes -> takeCaptions(session, bytes, Pts(ptsUs), epoch) }
+            tickCaptionServices(session, frame.pts, epoch)
             // Recorded before the discard, because this is where the seek actually landed and that is what
             // the overshoot ladder has to judge. A precise seek that landed correctly still throws away up to
             // a whole group of pictures, so judging the landing by the first frame that survived the discard
@@ -16057,6 +16079,9 @@ internal class PlaybackCore(
         /** The CEA-708 packets of the picture, read across pictures (#678). Video lane only. */
         val captionServices: DtvccServices = DtvccServices()
 
+        /** Each CEA-708 service seen, by number, and the time of the last packet it was given (#880). Video lane only. */
+        val captionServiceTicks: HashMap<Int, Long> = HashMap()
+
         /**
          * The tracks the engine made of the captions inside the picture (#236), each listed from the
          * first picture that carried captions. Actor only.
@@ -16707,6 +16732,12 @@ private val VARIANT_STEP_DOWN_SAMPLE: Duration = 6.seconds
 
 /** How far the link must exceed a lower variant's bitrate for a step down to choose it. */
 private const val VARIANT_FIT_HEADROOM: Double = 1.2
+
+/** How long a CEA-708 service goes without a packet before it is given an empty one (#880). */
+private const val CAPTION_SERVICE_TICK_US: Long = 100_000L
+
+/** The bytes of a CEA-708 service's tick: none, so it only moves the reader's time on. */
+private val EMPTY_CAPTION_BYTES: ByteArray = ByteArray(0)
 
 /** How long a step up waits after a step down (#376). Doubled after each step up that did not last. */
 private val VARIANT_STEP_UP_WAIT: Duration = 30.seconds

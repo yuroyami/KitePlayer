@@ -820,6 +820,10 @@ internal object ScriptedCaptionDecoderFactory : SubtitleDecoderFactory {
 internal object ScriptedServiceDecoderFactory : SubtitleDecoderFactory {
     override val name: String = "scripted-708"
 
+    /** Each packet a service's decoder is sent: its track, its time and its bytes. Tests set and clear it. */
+    @kotlin.concurrent.Volatile
+    var sent: ((index: Int, ptsUs: Long, bytes: ByteArray) -> Unit)? = null
+
     override suspend fun create(stream: PlayerStreamInfo): SubtitleDecoder? {
         if (stream.codec != io.github.yuroyami.kiteplayer.spi.CEA708_CAPTIONS_CODEC) return null
         return object : SubtitleDecoder {
@@ -827,7 +831,11 @@ internal object ScriptedServiceDecoderFactory : SubtitleDecoderFactory {
 
             override suspend fun send(packet: PlayerPacket?): Boolean {
                 val pts = packet?.pts?.micros ?: return true
-                val spans = listOf(io.github.yuroyami.kiteplayer.subtitle.StyledSpan(packet.copyBytes().decodeToString()))
+                val bytes = packet.copyBytes()
+                sent?.invoke(stream.index, pts, bytes)
+                // No bytes change nothing, as for the real reader: the engine's tick only moves time on (#880).
+                if (bytes.isEmpty()) return true
+                val spans = listOf(io.github.yuroyami.kiteplayer.subtitle.StyledSpan(bytes.decodeToString()))
                 pending.addLast(io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text(pts, io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.OPEN_END, spans))
                 return true
             }

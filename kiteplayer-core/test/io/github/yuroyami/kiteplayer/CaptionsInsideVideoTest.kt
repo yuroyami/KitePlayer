@@ -235,6 +235,39 @@ class CaptionsInsideVideoTest {
         assertEquals(0, harness.ledger.liveCount)
     }
 
+    /**
+     * A quiet CEA-708 service still hears time pass (#880). Its reader runs commands held behind a
+     * Delay only when a packet reaches it, and a service was handed packets only for its own bytes,
+     * so a Delay with nothing after it held its window back for good. Here service 1 speaks once, at
+     * one second, and every later picture carries caption padding with no service block.
+     */
+    @Test
+    fun aQuietCea708ServiceIsStillGivenTheTime() = runTest {
+        val padding = byteArrayOf(0xFA.toByte(), 0, 0)
+        val script = MediaScript(
+            durationUs = 6_000_000,
+            videoCaptionBytes = { pts -> if (pts == 1_000_000L) dtvccTriplets(0, 1 to "HELLO".encodeToByteArray()) else padding },
+        )
+        // The harness runs every lane on the test's one dispatcher, so a plain list is safe.
+        val times = ArrayList<Long>()
+        ScriptedServiceDecoderFactory.sent = { index, pts, _ -> if (index == service1.value) times += pts }
+        try {
+            val harness = opened(script)
+            harness.core.play()
+            harness.run(1500.milliseconds)
+            assertIs<TrackChange.Applied>(harness.core.selectTrack(TrackKind.Subtitle, service1))
+            harness.run(2500.milliseconds)
+            val after = times.filter { it in 1_500_000L..3_500_000L }.sorted()
+            assertTrue(after.size >= 10, "service 1 was given ${after.size} packets between 1.5 and 3.5 s: $after")
+            val widest = after.zipWithNext { a, b -> b - a }.maxOrNull() ?: Long.MAX_VALUE
+            assertTrue(widest <= 200_000L, "service 1 went $widest us without a packet: $after")
+            assertEquals(listOf("HELLO"), harness.shown, "the empty packets change nothing on screen")
+            harness.close()
+        } finally {
+            ScriptedServiceDecoderFactory.sent = null
+        }
+    }
+
     @Test
     fun theItemEndsWithACea708ServiceChosen() = runTest {
         val harness = opened(services(durationUs = 6_000_000))

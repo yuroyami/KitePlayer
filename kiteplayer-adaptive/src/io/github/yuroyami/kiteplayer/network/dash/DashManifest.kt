@@ -355,6 +355,9 @@ public object DashManifestParser {
         val periods = root.children("Period").map { period ->
             val periodBase = resolveBaseUrl(mpdBase, period, policy, budget, alternatives)
             val periodTemplate = TemplateLevel.under(null, period)
+            // Each segment element inherits level by level, Period to Representation (ISO/IEC
+            // 23009-1, 5.3.9.1), the Period's SegmentList included, which was never read (#744).
+            val periodSegmentList = period.child("SegmentList")
             val periodSegmentBase = period.child("SegmentBase")
             DashPeriod(
                 baseUrl = periodBase.url,
@@ -372,15 +375,15 @@ public object DashManifestParser {
                     // Read once per set, not once per representation: a set can hold many
                     // representations, and each lookup walks the set's children.
                     val setTemplate = TemplateLevel.under(periodTemplate, set)
-                    val setSegmentList = set.child("SegmentList")
-                    val setSegmentBase = set.child("SegmentBase") ?: periodSegmentBase
+                    val setSegmentLists = listOfNotNull(set.child("SegmentList"), periodSegmentList)
+                    val setSegmentBases = listOfNotNull(set.child("SegmentBase"), periodSegmentBase)
                     DashAdaptationSet(
                         contentType = set.attr("contentType"),
                         mimeType = set.attr("mimeType"),
                         segmentTemplate = setTemplate?.template,
                         representations = understood.map { rep ->
                             parseRepresentation(
-                                rep, setBase, set, setSegmentList, setSegmentBase, setTemplate, policy, budget, urlLimits,
+                                rep, setBase, set, setSegmentLists, setSegmentBases, setTemplate, policy, budget, urlLimits,
                                 alternatives,
                             )
                         },
@@ -420,12 +423,34 @@ public object DashManifestParser {
         )
     }
 
+    /**
+     * A SegmentList or SegmentBase as its levels make it, the Representation's own first (#744). An
+     * attribute or a child element comes from the nearest level that has it, and the SegmentURL
+     * entries from the nearest level that lists any, so a Representation that lists only its URLs
+     * keeps the duration and the Initialization its AdaptationSet states. Taking the nearest
+     * element whole lost them.
+     */
+    private class SegmentLevels private constructor(private val nearestFirst: List<XmlElement>) {
+        fun attr(name: String): String? = nearestFirst.firstNotNullOfOrNull { it.attr(name) }
+
+        fun child(name: String): XmlElement? = nearestFirst.firstNotNullOfOrNull { it.child(name) }
+
+        fun children(name: String): List<XmlElement> =
+            nearestFirst.firstOrNull { it.children(name).isNotEmpty() }?.children(name).orEmpty()
+
+        companion object {
+            fun of(nearestFirst: List<XmlElement>): SegmentLevels? = nearestFirst.takeIf { it.isNotEmpty() }?.let(::SegmentLevels)
+        }
+    }
+
     private fun parseRepresentation(
         rep: XmlElement,
         setBase: UrlBase,
         set: XmlElement,
-        setSegmentList: XmlElement?,
-        setSegmentBase: XmlElement?,
+        /** The SegmentList elements above [rep], nearest first. */
+        setSegmentLists: List<XmlElement>,
+        /** The SegmentBase elements above [rep], nearest first. */
+        setSegmentBases: List<XmlElement>,
         setTemplate: TemplateLevel?,
         policy: DashUrlPolicy,
         budget: UrlBudget,
@@ -433,7 +458,7 @@ public object DashManifestParser {
         alternatives: MutableMap<String, DashBaseUrls>,
     ): DashRepresentation {
         val repBase = resolveBaseUrl(setBase, rep, policy, budget, alternatives)
-        val segmentList = rep.child("SegmentList") ?: setSegmentList
+        val segmentList = SegmentLevels.of(listOfNotNull(rep.child("SegmentList")) + setSegmentLists)
         // A representation's SegmentList is its segment plan, so it has the same ceilings as one,
         // and it also counts against the manifest's.
         val listBudget = UrlBudget(urlLimits.planUrls, urlLimits.planChars, "a representation's SegmentList", budget)
@@ -477,7 +502,7 @@ public object DashManifestParser {
                     presentationTimeOffset = list.attr("presentationTimeOffset")?.toLongOrNull() ?: 0L,
                 )
             },
-            segmentBase = (rep.child("SegmentBase") ?: setSegmentBase)?.let { base ->
+            segmentBase = SegmentLevels.of(listOfNotNull(rep.child("SegmentBase")) + setSegmentBases)?.let { base ->
                 val baseInitialization = base.child("Initialization")
                 DashSegmentBase(
                     timescale = positiveTimescale(base.attr("timescale")),

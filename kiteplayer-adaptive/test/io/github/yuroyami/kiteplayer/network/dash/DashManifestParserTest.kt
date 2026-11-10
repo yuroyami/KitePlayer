@@ -17,6 +17,41 @@ class DashManifestParserTest {
      * does (#748). Without the offset a 60 s Period with a 10 s offset listed 25 two-second
      * segments instead of 30, and one when the offset passed the Period's length.
      */
+    /**
+     * A SegmentList inherits level by level, Period to Representation (#744): the Period's own list
+     * was never read, and a Representation's list replaced its set's whole, losing the duration and
+     * the Initialization it left to the set.
+     */
+    @Test
+    fun aSegmentListInheritsFromThePeriodAndTheSetAttributeByAttribute() {
+        fun parse(xml: String) = DashManifestParser.parse(xml, "https://cdn.test/vod/movie.mpd", DashUrlPolicy.Default)
+        val fromPeriod = parse(
+            """<MPD mediaPresentationDuration="PT4S"><Period>
+                <SegmentList timescale="1" duration="2"><Initialization sourceURL="init.mp4"/>
+                    <SegmentURL media="s0.m4s"/><SegmentURL media="s1.m4s"/>
+                </SegmentList>
+                <AdaptationSet contentType="video" mimeType="video/mp4"><Representation id="v" bandwidth="1"/></AdaptationSet>
+            </Period></MPD>""",
+        ).periods.single().adaptationSets.single().representations.single()
+        assertEquals(listOf("https://cdn.test/vod/s0.m4s", "https://cdn.test/vod/s1.m4s"), fromPeriod.segmentUrls, "the Period's list was not read")
+        assertEquals("https://cdn.test/vod/init.mp4", fromPeriod.initializationUrl)
+
+        val partly = parse(
+            """<MPD mediaPresentationDuration="PT4S"><Period>
+                <AdaptationSet contentType="video" mimeType="video/mp4">
+                    <SegmentList timescale="1000" duration="2000"><Initialization sourceURL="init.mp4"/></SegmentList>
+                    <Representation id="v" bandwidth="1">
+                        <SegmentList><SegmentURL media="a.m4s"/><SegmentURL media="b.m4s"/></SegmentList>
+                    </Representation>
+                </AdaptationSet>
+            </Period></MPD>""",
+        ).periods.single().adaptationSets.single().representations.single()
+        assertEquals(listOf("https://cdn.test/vod/a.m4s", "https://cdn.test/vod/b.m4s"), partly.segmentUrls)
+        assertEquals("https://cdn.test/vod/init.mp4", partly.initializationUrl, "the set's Initialization was lost")
+        assertEquals(2000L, partly.segmentList?.duration, "the set's duration was lost")
+        assertEquals(1000L, partly.segmentList?.timescale)
+    }
+
     @Test
     fun aRepeatToThePeriodsEndCountsFromThePresentationTimeOffset() {
         fun countFor(offsetSeconds: Int): Int {

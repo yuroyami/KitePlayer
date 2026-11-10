@@ -18,8 +18,9 @@ class FlashGuardReachTest {
 
     init { useSkiaGraphics() }
 
-    private fun meanLuma(index: Int, light: Float): Pair<String, Float> {
-        val drawing = DriverProbe.drawing(index)
+    private fun meanLuma(index: Int, light: Float): Pair<String, Float> = meanLuma(DriverProbe.drawing(index), light)
+
+    private fun meanLuma(drawing: io.github.yuroyami.kiteplayer.audioviz.viz.Visualization, light: Float): Pair<String, Float> {
         val (width, height) = if (drawing is ShaderPreset) {
             DriverProbe.SHADER_WIDTH to DriverProbe.SHADER_HEIGHT
         } else {
@@ -149,6 +150,31 @@ class FlashGuardReachTest {
         }
     }
 
+    /**
+     * A drawing that scales only its ground by the allowed light, a fifth of its picture, and keeps
+     * the rest at full strength, is caught (#780). It dims to about 0.9 of full at half the light,
+     * which the old limit of 0.92 let through.
+     */
+    @Test
+    fun aDrawingThatDimsOnlyItsGroundIsCaught() {
+        val groundOnly = object : io.github.yuroyami.kiteplayer.audioviz.viz.Visualization {
+            override val name: String = "ground only"
+            override val transitions: List<io.github.yuroyami.kiteplayer.audioviz.viz.VizTransition> get() = emptyList()
+            override fun androidx.compose.ui.graphics.drawscope.DrawScope.draw(state: io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState) {
+                val ground = size.height * 0.2f
+                drawRect(androidx.compose.ui.graphics.Color.White.copy(alpha = state.lightScale.coerceIn(0f, 1f)), size = size.copy(height = ground))
+                drawRect(
+                    androidx.compose.ui.graphics.Color.White,
+                    topLeft = androidx.compose.ui.geometry.Offset(0f, ground),
+                    size = size.copy(height = size.height - ground),
+                )
+            }
+        }
+        val (_, full) = meanLuma(groundOnly, 1f)
+        val (_, half) = meanLuma(groundOnly, 0.5f)
+        assertTrue(half > full * MOST_SHARE, "the fixture dims more than its ground: full $full, half $half")
+    }
+
     private companion object {
         /** Long enough for every trail and spring to settle. */
         const val FRAMES = 150
@@ -156,7 +182,12 @@ class FlashGuardReachTest {
         /** A picture darker than this has no light to lose. */
         const val MINIMUM = 0.01f
 
-        /** Half the light must leave clearly less than the full picture. *Judgement.* */
-        const val MOST_SHARE = 0.92f
+        /**
+         * Half the light must leave clearly less than the full picture. A drawing whose light is
+         * its energy's light times the allowed share falls to about half; every drawing in the
+         * catalogue is at 0.76 or under. At 0.92, the old limit, a drawing that scaled only a fifth
+         * of its picture passed (#780). *Judgement.*
+         */
+        const val MOST_SHARE = 0.8f
     }
 }

@@ -153,7 +153,7 @@ linux() {
 }
 windows() {
     # These are link checks on a Mac. Only the Windows CI job executes Windows tests.
-    kotlin task :kiteplayer-core:linkMingwX64TestDebug :kiteplayer-subtitles:linkMingwX64TestDebug \
+    kotlin task :kiteplayer-core:linkMingwX64TestDebug :kiteplayer-subtitles:linkMingwX64TestDebug :kiteplayer-io:linkMingwX64TestDebug \
         :kiteplayer-output:linkMingwX64TestDebug :kiteplayer-rt:linkMingwX64TestDebug \
         :kiteplayer-ffmpeg:linkMingwX64TestDebug :kiteplayer:linkMingwX64TestDebug
 }

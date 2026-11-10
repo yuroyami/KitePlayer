@@ -1149,7 +1149,7 @@ jobs:
       - name: mingwX64 tests, media-free modules
         run: >
           kotlin.bat test -p mingwX64
-          -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-output -m kiteplayer-rt
+          -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io -m kiteplayer-output -m kiteplayer-rt
           -m kiteplayer-libass -m kiteplayer
 
       - name: Link the FFmpeg backend for mingwX64

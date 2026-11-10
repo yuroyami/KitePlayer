@@ -728,7 +728,8 @@ public class KtorMediaIo private constructor(
          * Probes [uri] and returns a reader positioned at byte zero. The probe's own response
          * body becomes the first stream, so a plain open costs exactly one request.
          *
-         * A null [client] creates a private one from the platform engine on the classpath and
+         * A null [client] creates a private one on the platform engine (OkHttp on Android and the JVM,
+         * Darwin on Apple, fetch on the web), named rather than found on the classpath, and
          * closes it with the reader; a shared client stays the caller's to close. [policy] limits
          * every wait, this probe's included.
          */
@@ -1005,7 +1006,7 @@ private val STATION_HEADERS = listOf("icy-name", "icy-genre", "icy-description",
  * with the client, so one item's session never reaches another item or another player. A cookie
  * the item sets in its headers is kept with the others.
  */
-internal fun itemClient(): HttpClient = HttpClient {
+internal fun itemClient(): HttpClient = playerHttpClient {
     install(HttpCookies) { storage = AcceptAllCookiesStorage() }
 }
 
@@ -1206,7 +1207,7 @@ public class KtorMediaIoResolver(
 
     private var created: HttpClient? = null
 
-    private val shared: HttpClient by lazy { client ?: HttpClient().also { created = it } }
+    private val shared: HttpClient by lazy { client ?: playerHttpClient().also { created = it } }
 
     override suspend fun resolve(uri: String): MediaIo? = resolve(uri, emptyMap())
 

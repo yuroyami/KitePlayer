@@ -89,6 +89,14 @@ private fun Map<String, String>.tag(name: String): String? =
  */
 internal val MediaSessionState.offersPrevious: Boolean get() = hasPrevious || canSeek
 
+/**
+ * Whether the system's skip-by-interval buttons are offered. Apple's lock screen, Control Centre
+ * and CarPlay draw one pair beside play, and with both the track and the interval pairs on they
+ * draw the interval pair, so a queue lost its next track there (#836). The interval pair is on only
+ * for a seekable item with no neighbour in the queue, such as a single long item or a podcast.
+ */
+internal val MediaSessionState.offersSkipInterval: Boolean get() = canSeek && !hasNext && !hasPrevious
+
 /** What one press of the system's previous button does. */
 internal enum class PreviousPress { Restart, GoBack, Nothing }
 

@@ -43,7 +43,16 @@ class PreviousPressTest {
         assertFalse(state(canSeek = false, hasPrevious = false).offersPrevious, "a lone live stream has nothing to go back to")
     }
 
-    private fun state(canSeek: Boolean, hasPrevious: Boolean) = MediaSessionState(
+    // A queue keeps its track buttons on the lock screen; only a lone item gets the interval pair (#836).
+    @Test
+    fun theIntervalButtonsAreOfferedOnlyWithNoTrackToGoTo() {
+        assertTrue(state(canSeek = true, hasPrevious = false).offersSkipInterval, "a lone seekable item")
+        assertFalse(state(canSeek = true, hasPrevious = true).offersSkipInterval, "an item after another in a queue")
+        assertFalse(state(canSeek = true, hasPrevious = false, hasNext = true).offersSkipInterval, "the first item of a queue")
+        assertFalse(state(canSeek = false, hasPrevious = false).offersSkipInterval, "a live stream cannot skip")
+    }
+
+    private fun state(canSeek: Boolean, hasPrevious: Boolean, hasNext: Boolean = false) = MediaSessionState(
         phase = MediaSessionPhase.Playing,
         position = 10.seconds,
         duration = 60.seconds,
@@ -53,7 +62,7 @@ class PreviousPressTest {
         title = null,
         artist = null,
         album = null,
-        hasNext = false,
+        hasNext = hasNext,
         hasPrevious = hasPrevious,
     )
 }

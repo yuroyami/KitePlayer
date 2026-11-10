@@ -145,8 +145,9 @@ internal class AppleNowPlaying(
         // Previous also starts the item again, so it is there whenever the item can seek (#424).
         commands.previousTrackCommand.enabled = state.offersPrevious
         commands.changePlaybackPositionCommand.enabled = state.canSeek
-        commands.skipForwardCommand.enabled = state.canSeek
-        commands.skipBackwardCommand.enabled = state.canSeek
+        // One pair beside play: the interval pair only where there is no track to go to (#836).
+        commands.skipForwardCommand.enabled = state.offersSkipInterval
+        commands.skipBackwardCommand.enabled = state.offersSkipInterval
         onPlayback(state)
     }
 

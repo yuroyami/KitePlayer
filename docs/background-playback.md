@@ -14,7 +14,9 @@ does when the app is in the background.
   another picture, which wins over the cover. `player.coverArt` gives the cover's bytes to your
   own screens too.
 - Skip back and skip forward move 15 seconds. Pass `skipInterval` to `attachMediaSession` for
-  another interval.
+  another interval. On Apple platforms the lock screen, Control Centre and CarPlay show one pair
+  of buttons beside play, so the skip pair is offered only for an item with no other item in the
+  queue; a queue shows next and previous there (#836).
 - The session takes audio focus, so a call or another app pauses or ducks the player, and the
   player pauses when the headphones come out. The focus request and the audio track say whether
   the item is music, speech or a film, from `MediaItem.audioContent`, which by default says film

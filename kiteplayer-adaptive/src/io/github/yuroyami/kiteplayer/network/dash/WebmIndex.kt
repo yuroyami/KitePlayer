@@ -197,17 +197,28 @@ internal object WebmIndex {
             }
         }
 
+        /**
+         * Where [position] falls in [bytes], or -1 when it is before them or at or past their end.
+         * Compared as 64 bits before it becomes an index: a skip of a size read from the file, about
+         * 4 GiB, made the 32-bit index wrap back onto the element just read, and the top-level loop
+         * read it, skipped it and landed on it again for ever (#747).
+         */
+        private fun indexOf(position: Long): Int {
+            val offset = position - base
+            return if (offset < 0 || offset >= bytes.size) -1 else offset.toInt()
+        }
+
         private fun byte(): Long {
-            val at = (position - base).toInt()
-            if (at !in bytes.indices) throw DashUnsupportedException("the WebM data ends inside an element")
+            val at = indexOf(position)
+            if (at < 0) throw DashUnsupportedException("the WebM data ends inside an element")
             position++
             return (bytes[at].toInt() and 0xFF).toLong()
         }
 
         /** A variable-length integer, with its length marker kept for an ID, or removed for a size. */
         private fun vint(keepMarker: Boolean): Long? {
-            val at = (position - base).toInt()
-            if (at !in bytes.indices) return null
+            val at = indexOf(position)
+            if (at < 0) return null
             val first = bytes[at].toInt() and 0xFF
             if (first == 0) throw DashUnsupportedException("a WebM element length passes eight bytes")
             val length = first.countLeadingZeroBits() - 24 + 1

@@ -10,6 +10,24 @@ import kotlin.test.assertNull
 /** The WebM index that names a single file's clusters, read from EBML bytes written here (#401). */
 class WebmIndexTest {
 
+    /**
+     * An element of about 4 GiB ends the read rather than looping on itself (#747). A Void element
+     * of 2^32 - 6 bytes after a six byte header skipped to a position whose 32-bit index was its
+     * own start again, so the reader read it, skipped it and landed on it again for ever.
+     */
+    @Test
+    fun anElementOfAboutFourGibEndsTheReadRatherThanLoopingOnItself() {
+        val head = byteArrayOf(
+            0x1A, 0x45, 0xDF.toByte(), 0xA3.toByte(), 0x80.toByte(), // an empty EBML header
+            0x18, 0x53, 0x80.toByte(), 0x67, // a Segment
+            0x01, -1, -1, -1, -1, -1, -1, -1, // of unknown size
+            0xEC.toByte(), 0x08, -1, -1, -1, 0xFA.toByte(), // a Void of 2^32 - 6 bytes
+            0, 0, 0, 0,
+        )
+        // Whatever it answers, it answers: the old reader never returned.
+        runCatching { WebmIndex.layout(head) }
+    }
+
     @Test
     fun theLayoutFindsTheSegmentTheScaleAndTheCuesThatTheSeekHeadNames() {
         val file = WebmBytes.file(listOf(0, 2000, 4000), blockBytes = 100, durationMillis = 5000.0)

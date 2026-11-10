@@ -243,6 +243,23 @@ class MementoTest {
         assertEquals(memento, PlayerMemento.fromProperties(memento.asProperties()))
     }
 
+    /** The text form can leave out what would be a leaked credential, for a store that is backed up (#915). */
+    @Test
+    fun theTextFormWithoutSecretsKeepsNoHeaderQueryOrLogin() {
+        val item = MediaItem(
+            uri = "https://user:secret@host.test/a.mkv?token=abc#t=10",
+            headers = mapOf("Authorization" to "Bearer x"),
+            externalAudio = listOf(AudioSource("https://host.test/dub.m4a?sig=1")),
+        )
+        val text = memento().copy(queue = listOf(item)).asProperties(includeSecrets = false)
+        assertEquals("https://host.test/a.mkv", text["queue.0.uri"])
+        assertEquals("https://host.test/dub.m4a", text["queue.0.externalAudio.0.uri"])
+        assertTrue(text.keys.none { "header" in it }, "a header was kept: ${text.keys}")
+        assertTrue(text.values.none { "secret" in it || "token" in it || "Bearer" in it }, "a secret was kept: $text")
+        assertEquals("https://user:secret@host.test/a.mkv?token=abc#t=10", memento().copy(queue = listOf(item)).asProperties()["queue.0.uri"])
+        assertEquals("/music/a.flac", withoutSecrets("/music/a.flac"))
+    }
+
     @Test
     fun `a queue size larger than the text form can hold is refused rather than allocated`() {
         val forged = mapOf("version" to PlayerMemento.FORMAT_VERSION.toString(), "queue.size" to Int.MAX_VALUE.toString())

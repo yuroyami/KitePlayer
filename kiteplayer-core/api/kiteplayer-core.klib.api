@@ -4107,6 +4107,7 @@ final class io.github.yuroyami.kiteplayer/PlayerMemento { // io.github.yuroyami.
         final fun <get-volume>(): kotlin/Float // io.github.yuroyami.kiteplayer/PlayerMemento.volume.<get-volume>|<get-volume>(){}[0]
 
     final fun asProperties(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/PlayerMemento.asProperties|asProperties(){}[0]
+    final fun asProperties(kotlin/Boolean): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/PlayerMemento.asProperties|asProperties(kotlin.Boolean){}[0]
     final fun component1(): kotlin.collections/List<io.github.yuroyami.kiteplayer/MediaItem> // io.github.yuroyami.kiteplayer/PlayerMemento.component1|component1(){}[0]
     final fun component10(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/PlayerMemento.component10|component10(){}[0]
     final fun component11(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/PlayerMemento.component11|component11(){}[0]

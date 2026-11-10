@@ -100,13 +100,24 @@ public data class PlayerMemento(
      * `queue.N.linkedFile.M.uri`; then `queueOrder` as space-separated
      * positions when there is one, one key per setting, durations in microseconds, and
      * `audioLanguage` and `subtitleLanguage` only when known.
+     *
+     * The text carries credentials by default (#915): each address whole, its query string and any
+     * login in it included, and each request header's value, an `Authorization` header among them,
+     * because [fromProperties] needs them to play the queue again. Store it as you would store a
+     * password. With `asProperties(includeSecrets = false)` the addresses lose their query strings and
+     * logins and the headers are left out, so the text can be kept or backed up as it is, and the
+     * app supplies them again on restore.
      */
+    public fun asProperties(): Map<String, String> = asProperties(includeSecrets = true)
+
+    /** [asProperties], with the credentials it carries kept only when [includeSecrets] is true (#915). */
     @OptIn(KitePlayerLowLevelApi::class)
-    public fun asProperties(): Map<String, String> = buildMap {
+    public fun asProperties(includeSecrets: Boolean): Map<String, String> = buildMap {
+        fun address(uri: String) = if (includeSecrets) uri else withoutSecrets(uri)
         put("version", FORMAT_VERSION.toString())
         put("queue.size", queue.size.toString())
         queue.forEachIndexed { n, item ->
-            put("queue.$n.uri", item.uri)
+            put("queue.$n.uri", address(item.uri))
             item.formatHint?.let { put("queue.$n.formatHint", it) }
             item.startPosition?.let { put("queue.$n.startPosition", it.inWholeMicroseconds.toString()) }
             item.clip?.let { clip ->
@@ -119,15 +130,15 @@ public data class PlayerMemento(
             item.album?.let { put("queue.$n.album", it) }
             if (item.audioContent != AudioContent.Automatic) put("queue.$n.audioContent", item.audioContent.name)
             if (item.runsIntoNext) put("queue.$n.runsIntoNext", "true")
-            item.headers.forEach { (name, value) -> put("queue.$n.header.$name", value) }
+            if (includeSecrets) item.headers.forEach { (name, value) -> put("queue.$n.header.$name", value) }
             item.openOptions.forEach { (key, value) -> put("queue.$n.option.$key", value) }
             putDemux("queue.$n.demux.", item.demux)
             item.externalAudio.forEachIndexed { m, audio ->
-                put("queue.$n.externalAudio.$m.uri", audio.uri)
+                put("queue.$n.externalAudio.$m.uri", address(audio.uri))
                 audio.title?.let { put("queue.$n.externalAudio.$m.title", it) }
                 audio.language?.let { put("queue.$n.externalAudio.$m.language", it) }
             }
-            item.linkedFiles.forEachIndexed { m, file -> put("queue.$n.linkedFile.$m.uri", file.uri) }
+            item.linkedFiles.forEachIndexed { m, file -> put("queue.$n.linkedFile.$m.uri", address(file.uri)) }
         }
         put("queueIndex", queueIndex.toString())
         if (queueOrder.isNotEmpty()) put("queueOrder", queueOrder.joinToString(" "))
@@ -427,4 +438,15 @@ private fun demuxFrom(properties: Map<String, String>, prefix: String): DemuxPol
         edition = properties["${prefix}edition"]?.toInt(),
         orderedEditions = properties["${prefix}orderedEditions"]?.toBooleanStrict() ?: true,
     )
+}
+
+/** [uri] without its query string, its fragment and any login before its host (#915). */
+internal fun withoutSecrets(uri: String): String {
+    val bare = uri.substringBefore('#').substringBefore('?')
+    val scheme = bare.indexOf("://")
+    if (scheme < 0) return bare
+    val authorityStart = scheme + 3
+    val authorityEnd = bare.indexOf('/', authorityStart).let { if (it < 0) bare.length else it }
+    val login = bare.lastIndexOf('@', authorityEnd - 1)
+    return if (login >= authorityStart) bare.substring(0, authorityStart) + bare.substring(login + 1) else bare
 }

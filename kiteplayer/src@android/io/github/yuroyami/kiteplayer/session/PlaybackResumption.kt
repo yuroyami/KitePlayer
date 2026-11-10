@@ -24,7 +24,14 @@ import io.github.yuroyami.kiteplayer.PlayerMemento
  * private preferences, as the text of [PlayerMemento.asProperties].
  */
 public object KitePlayerResumption {
-    /** Keeps [memento] for the resume card, which shows [title] and [subtitle]. Replaces what was saved. */
+    /**
+     * Keeps [memento] for the resume card, which shows [title] and [subtitle]. Replaces what was saved.
+     *
+     * The text keeps every address whole and every request header's value, an `Authorization`
+     * header or a signed address among them, in plain preferences that Android backs up unless the
+     * application opts out (#915). An application whose items carry credentials keeps them out of
+     * its backups, or saves items that need none.
+     */
     public fun save(context: Context, memento: PlayerMemento, title: String, subtitle: String? = null) {
         val editor = preferences(context).edit().clear()
         resumptionEntries(memento, title, subtitle).forEach { (key, value) -> editor.putString(key, value) }

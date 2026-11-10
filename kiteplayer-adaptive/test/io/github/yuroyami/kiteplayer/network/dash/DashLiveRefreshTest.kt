@@ -176,6 +176,41 @@ class DashLiveRefreshTest {
         assertTrue(playlist.trimEnd().endsWith("#EXT-X-ENDLIST"), playlist)
     }
 
+    /**
+     * A reload lists from the segment FFmpeg last asked for, not the whole time-shift buffer,
+     * because FFmpeg never reads behind it in a live playlist; the numbering goes on as before, and
+     * a pause keeps its place (#969). Ten minutes of one second segments were built again at every
+     * reload.
+     */
+    @Test
+    fun aReloadListsFromTheSegmentLastRead() = runTest {
+        val manifest = DashManifestParser.parse(mpd(video).replace("PT10S", "PT600S"), base)
+        var now = 3_000_000_000L
+        val presentation = DashHls.presentation(manifest.periods.single(), live = true)
+        val io = DashHlsMediaIo(presentation, manifest, base, DashUrlPolicy.Default, { BytesMediaIo(ByteArray(0)) }, null, { now })
+        val track = presentation.tracks.video()
+        suspend fun load() = io.openRelated(track.address)!!
+        fun listed(playlist: String) = playlist.lines().filter { it.endsWith(".m4s") && !it.startsWith("#") }
+        fun sequence(playlist: String) = playlist.lines().first { it.startsWith("#EXT-X-MEDIA-SEQUENCE:") }.substringAfter(':').toLong()
+
+        val first = load().readAll().decodeToString()
+        assertEquals(600, listed(first).size, "the first load lists the whole buffer, from which FFmpeg chooses its start")
+        val read = listed(first).size - 3
+        io.openRelated(listed(first)[read])!!.close()
+
+        now += 2_000_000L
+        val second = load().readAll().decodeToString()
+        assertEquals(listed(first)[read], listed(second).first(), "the reload starts at the segment FFmpeg read last")
+        assertEquals(5, listed(second).size, "three segments up to the old edge and two new ones")
+        assertEquals(sequence(first) + read, sequence(second), "the numbering moved")
+
+        // Nothing read for a while, as in a pause: the place holds.
+        now += 60_000_000L
+        val paused = load().readAll().decodeToString()
+        assertEquals(listed(first)[read], listed(paused).first(), "a pause lost its place")
+        assertEquals(sequence(first) + read, sequence(paused))
+    }
+
     private suspend fun MediaIo.readAll(): ByteArray {
         var out = ByteArray(0)
         val buffer = ByteArray(4096)

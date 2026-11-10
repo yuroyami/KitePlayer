@@ -823,11 +823,20 @@ public object DashManifestParser {
         urlLimits: UrlLimits = UrlLimits(),
         periodStartMicros: Long = period.startMicros ?: 0L,
         periodDurationMicros: Long? = period.durationMicros ?: manifest.durationMicros,
+        /**
+         * For a live presentation, the Period time before which nothing is listed, or null to list
+         * the whole time-shift buffer. The segment that holds it is listed. The reader passes the
+         * start of the last segment FFmpeg asked for, since FFmpeg never reads behind it in a live
+         * playlist, so a reload builds only the segments it may still read (#969).
+         */
+        notBeforeMicros: Long? = null,
     ): DashTimedPlan? {
         val totalMicros = periodDurationMicros?.also {
             require(it >= 0) { "a duration of $it microseconds is negative" }
         }
-        val window = liveWindow(manifest, periodStartMicros, nowMicros)
+        val window = liveWindow(manifest, periodStartMicros, nowMicros)?.let { whole ->
+            if (notBeforeMicros != null && notBeforeMicros > whole.fromMicros) LiveWindow(minOf(notBeforeMicros, whole.edgeMicros), whole.edgeMicros) else whole
+        }
         val list = representation.segmentList
         val template = representation.segmentTemplate
         return when {

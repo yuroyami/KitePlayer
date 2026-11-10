@@ -101,6 +101,14 @@ internal class DashHlsMediaIo(
     private val pieces = HashMap<String, Piece>()
 
     /**
+     * Each segment address a live playlist lists, with its track and its start on the plan's
+     * timeline, and for each track the start of the latest segment FFmpeg asked for. FFmpeg never
+     * reads behind that segment in a live playlist, so each reload lists from it (#969).
+     */
+    private val segmentStarts = HashMap<String, Pair<String, Long>>()
+    private val readFrom = HashMap<String, Long>()
+
+    /**
      * For each track of a live presentation, the addresses of this reader's own host that its
      * current playlist and the one before it list. Nothing else is kept (#405).
      */
@@ -177,7 +185,10 @@ internal class DashHlsMediaIo(
         if (closed) throw IllegalStateException("openRelated after close")
         if (uri == presentation.masterAddress) return MemoryMediaIo(master, uri)
         presentation.track(uri)?.let { track -> return MemoryMediaIo(playlist(track).encodeToByteArray(), uri) }
-        lock.withLock { conversions[uri] }?.let { conversion ->
+        lock.withLock {
+            segmentStarts[uri]?.let { (track, start) -> if (start > (readFrom[track] ?: Long.MIN_VALUE)) readFrom[track] = start }
+            conversions[uri]
+        }?.let { conversion ->
             return MemoryMediaIo(convert(conversion).encodeToByteArray(), uri, WEBVTT_MEDIA_TYPE)
         }
         lock.withLock { pieces[uri] }?.let { piece ->
@@ -254,8 +265,9 @@ internal class DashHlsMediaIo(
         // The refresh follows the device's own clock, which only measures how long has passed.
         refreshIfDue(nowMicros())
         val now = clock.nowMicros()
-        val plan = servedPlan(track, manifest, now)
+        val plan = servedPlan(track, manifest, now, readFrom[track.address])
         retainListed(track, plan)
+        for (segment in plan.segments) segmentStarts[segment.url] = track.address to segment.startMicros
         val sequence = sequences.getOrPut(track.address) { LiveSequence() }.first(plan)
         // An event that ended, by an update that made the manifest static or by a stated length the
         // clock has passed, ends its playlist, so FFmpeg ends there instead of reloading a playlist
@@ -283,9 +295,9 @@ internal class DashHlsMediaIo(
     }
 
     /** [track]'s plan as FFmpeg is to read it: one Period's, or every Period's joined when [from] has more or another. */
-    private suspend fun servedPlan(track: DashHlsTrack, from: DashManifest, now: Long?): DashTimedPlan {
+    private suspend fun servedPlan(track: DashHlsTrack, from: DashManifest, now: Long?, notBefore: Long? = null): DashTimedPlan {
         val single = from.periods.size == 1 && from.periodTimings().first().startMicros == referenceStartMicros
-        return if (single) served(track, plan(track, from, now)) else joinedPlan(track, from, now)
+        return if (single) served(track, plan(track, from, now, notBefore)) else joinedPlan(track, from, now, notBefore)
     }
 
     /**
@@ -295,7 +307,7 @@ internal class DashHlsMediaIo(
      * past it is listed only until it, because the next Period's time begins there. Every segment
      * and initialization is named under this reader's own host, with what serving it takes.
      */
-    private suspend fun joinedPlan(track: DashHlsTrack, from: DashManifest, now: Long?): DashTimedPlan {
+    private suspend fun joinedPlan(track: DashHlsTrack, from: DashManifest, now: Long?, notBefore: Long? = null): DashTimedPlan {
         val timings = from.periodTimings()
         val segments = ArrayList<DashTimedSegment>()
         val root = "https://${DashHls.HOST}/${track.setIndex}-${track.representationIndex}"
@@ -314,6 +326,8 @@ internal class DashHlsMediaIo(
             val periodPlan = DashManifestParser.timedPlan(
                 from, timing.period, representation, policy, now,
                 periodStartMicros = timing.startMicros, periodDurationMicros = timing.durationMicros,
+                // The joined plan counts in the presentation's time, and the Period's in its own.
+                notBeforeMicros = notBefore?.let { it - timing.startMicros },
             ) ?: run {
                 val base = checkNotNull(representation.segmentBase) { "a representation without segments" }
                 indexed.getOrPut("${representation.baseUrl}#${base.indexRange}") {
@@ -502,6 +516,7 @@ internal class DashHlsMediaIo(
         }
         conversions.keys.retainAll(keep)
         pieces.keys.retainAll(keep)
+        segmentStarts.keys.retainAll(keep)
         val needed = HashSet<String>()
         for (piece in pieces.values) {
             when (piece) {
@@ -605,13 +620,13 @@ internal class DashHlsMediaIo(
         val offsetMicros: Long,
     )
 
-    private suspend fun plan(track: DashHlsTrack, from: DashManifest, now: Long?): DashTimedPlan {
+    private suspend fun plan(track: DashHlsTrack, from: DashManifest, now: Long?, notBefore: Long? = null): DashTimedPlan {
         val period = from.periods.single()
         // A refresh may have moved the track's set or representation, or dropped it (#406).
         val (setIndex, representationIndex) = DashPeriods.bind(track, period) ?: throw gone(track)
         val set = period.adaptationSets[setIndex]
         val representation = set.representations[representationIndex]
-        DashManifestParser.timedPlan(from, period, representation, policy, now)?.let { return it }
+        DashManifestParser.timedPlan(from, period, representation, policy, now, notBeforeMicros = notBefore)?.let { return it }
         val base = checkNotNull(representation.segmentBase) { "a representation without segments" }
         return indexed.getOrPut(track.address) {
             if (DashHls.isWebm(set, representation)) {

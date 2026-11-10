@@ -5,6 +5,7 @@ package io.github.yuroyami.kiteplayer
 import io.github.yuroyami.kiteplayer.internal.PlaybackCore
 import io.github.yuroyami.kiteplayer.internal.PlaybackDispatchers
 import io.github.yuroyami.kiteplayer.internal.SeekResult
+import io.github.yuroyami.kiteplayer.internal.platformPlaybackDispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -72,12 +73,31 @@ class RealThreadStressTest {
 
     @Test
     fun `seeks and a close hammered through a real thread pipeline hold every invariant`() = runBlocking {
+        val dispatchers = RealDispatchers()
+        try {
+            hammer(dispatchers)
+        } finally {
+            dispatchers.close()
+        }
+    }
+
+    /**
+     * The same hammer on the dispatchers production builds, whose lanes share two pools rather
+     * than each owning a thread (#721): a lane that hops threads between two suspensions is the
+     * shape the park handshake has to hold on.
+     */
+    @Test
+    fun `the same hammer holds on the shared lane dispatchers production uses`() = runBlocking {
+        // The platform's own answer, a SharedLaneDispatchers over Default and IO on every target here.
+        hammer(platformPlaybackDispatchers())
+    }
+
+    private suspend fun hammer(dispatchers: PlaybackDispatchers) {
         val ledger = LeakLedger()
         val renderer = RecordingRenderer()
         val script = MediaScript(durationUs = 8_000_000)
         val backend = ScriptedBackend(script, ledger)
         val sink = ScriptedSink()
-        val dispatchers = RealDispatchers()
         val deviceContext = newSingleThreadContext("stress-device")
         val deviceScope = CoroutineScope(deviceContext + SupervisorJob())
         val core = PlaybackCore(
@@ -164,7 +184,6 @@ class RealThreadStressTest {
             device.cancel()
             deviceScope.cancel()
             deviceContext.close()
-            dispatchers.close()
         }
     }
 

@@ -30,6 +30,9 @@ product:
 aliases:
   # Every native platform but Android's, for the code that reads folders with opendir.
   - nativeButAndroid: [ iosArm64, iosSimulatorArm64, iosX64, macosArm64, tvosArm64, tvosSimulatorArm64, watchosArm32, watchosArm64, watchosDeviceArm64, watchosSimulatorArm64, linuxX64, linuxArm64, mingwX64 ]
+  # The platforms whose CI jobs run the real-thread tests of the worker park (#721): the JVM and
+  # the desktop native targets, all of which have threads the tests can start.
+  - realThreads: [ jvm, macosArm64, linuxX64, linuxArm64, mingwX64 ]
 
 apply:
   - //kiteplayer.module-template.yaml

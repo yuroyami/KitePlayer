@@ -59,6 +59,44 @@ class FlashGuardTest {
         assertTrue(shown.any { it > 0.5f }, "the guard held the picture black rather than holding it back")
     }
 
+    /**
+     * Three quick flashes fill the limit, and then the light asks for 0.9 on every frame. The
+     * guard holds that rise, and it used to let it out whole 0.3 s after the last fall, as a fade,
+     * with all three flashes still in the second and no leg counted, so what was shown held four
+     * flashes in one second (#946). It may come out only once the oldest flash left the second.
+     */
+    @Test
+    fun aHeldRiseComesOutOnlyWhenTheCountHasRoom() {
+        val frames = List(40) { if ((it / 5) % 2 == 0) 0.2f else 0.9f } + List(5) { 0.2f } + List(60) { 0.9f }
+        val guard = FlashGuard(mostPerSecond = 3)
+        val shown = run(guard, frames)
+        assertTrue(shown.drop(45).any { it > 0.85f }, "the rise never came out")
+        // Counted by a reference with no fade exemption, which this fixture has no fade for: a
+        // FlashGuard as the counter shares the guard's own fade test, and so its mistake.
+        val most = referenceBusiest(shown)
+        assertTrue(most <= 3, "the guard let $most flashes into one second")
+    }
+
+    /** The most flashes in any second of [shown], every opposing swing of a step below the dark state a leg. */
+    private fun referenceBusiest(shown: List<Float>): Int {
+        val flashes = ArrayList<Int>()
+        var extreme = shown.first()
+        var rising = true
+        var legs = 0
+        shown.forEachIndexed { frame, value ->
+            val away = if (rising) value >= extreme else value <= extreme
+            if (away) {
+                extreme = value
+            } else if (kotlin.math.abs(value - extreme) >= 0.10f && minOf(value, extreme) < 0.80f) {
+                legs++
+                if (legs % 2 == 0) flashes += frame
+                rising = !rising
+                extreme = value
+            }
+        }
+        return flashes.indices.maxOfOrNull { i -> flashes.count { it in flashes[i] until flashes[i] + 60 } } ?: 0
+    }
+
     @Test
     fun aBrightPairIsNotAFlash() {
         // Both states are above 0.80, so the policy does not count the pair, however fast it runs.

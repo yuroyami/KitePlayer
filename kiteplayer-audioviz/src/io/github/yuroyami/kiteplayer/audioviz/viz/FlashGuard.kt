@@ -100,10 +100,47 @@ public class FlashGuard(
             extreme = Float.NaN
             halfway = false
             flashes.clear()
+            shownCount = 0
+        }
+
+        /**
+         * What was shown in the last [QUICK] seconds, newest last, in fixed arrays because this runs
+         * every frame. A change is a flash when the light crossed the step within that time, which
+         * these say, and not when the last extreme was recent (#946): a trough above the stored low
+         * left that extreme old, and a quick flash, or a held rise, then passed at full light.
+         */
+        private val shownAt = DoubleArray(HISTORY)
+        private val shownValue = FloatArray(HISTORY)
+        private var shownHead = 0
+        private var shownCount = 0
+
+        private fun remember(now: Double, value: Float) {
+            shownAt[shownHead] = now
+            shownValue[shownHead] = value
+            shownHead = (shownHead + 1) % HISTORY
+            if (shownCount < HISTORY) shownCount++
+        }
+
+        /** The lowest, or with [highest] the highest, light shown in the last [QUICK] seconds, or null. */
+        private fun shownWithin(now: Double, highest: Boolean): Float? {
+            var found: Float? = null
+            for (back in 1..shownCount) {
+                val at = (shownHead - back + HISTORY) % HISTORY
+                if (now - shownAt[at] > QUICK) break
+                val value = shownValue[at]
+                found = when {
+                    found == null -> value
+                    highest -> maxOf(found, value)
+                    else -> minOf(found, value)
+                }
+            }
+            return found
         }
 
         /** The value that may be shown, and the state updated to what will be shown. */
-        fun allow(wanted: Float, now: Double): Float {
+        fun allow(wanted: Float, now: Double): Float = decide(wanted, now).also { remember(now, it) }
+
+        private fun decide(wanted: Float, now: Double): Float {
             forget(now)
             if (extreme.isNaN()) {
                 extreme = wanted
@@ -120,8 +157,12 @@ public class FlashGuard(
             val back = if (rising) extreme - wanted else wanted - extreme
             if (back < step || minOf(wanted, extreme) >= dark) return wanted
             // A flash is a fast change. A picture that takes longer than this to cross the step is
-            // fading, and holding a fade would stop the picture rather than protect anyone.
-            if (now - extremeAt > QUICK) {
+            // fading, and holding a fade would stop the picture rather than protect anyone. It
+            // crossed quickly when the light shown within QUICK lies a whole step away, on the side
+            // it comes from: below a rise, above a fall (#946).
+            val from = shownWithin(now, highest = rising)
+            val quick = from != null && (if (rising) from - wanted else wanted - from) >= step
+            if (!quick) {
                 halfway = false
                 rising = !rising
                 extreme = wanted
@@ -176,5 +217,8 @@ public class FlashGuard(
          * this is slower than anything the policy counts. *Judgement.*
          */
         const val QUICK = 0.3
+
+        /** How many shown values a channel keeps, which covers [QUICK] at 480 Hz. */
+        const val HISTORY = 160
     }
 }

@@ -184,6 +184,79 @@ class DashLiveAndNamesTest {
         assertEquals(2, asks, "an answer is kept")
     }
 
+    /**
+     * The clock measures again every five minutes, so a device clock that the system sets during a
+     * long session does not move the window for good, and a measurement that fails keeps the last
+     * one (#966).
+     */
+    @Test
+    fun theClockMeasuresAgainAndKeepsTheLastAnswerWhenNoneComes() = runTest {
+        var device = 0L
+        var server: String? = "1970-01-01T00:01:00Z"
+        var asks = 0
+        val clock = DashLiveClock(
+            listOf(DashUtcTiming("urn:mpeg:dash:utc:http-xsdate:2014", "https://time.test/now")),
+            deviceMicros = { device },
+            fetchText = { asks++; server ?: error("timed out") },
+            fetchDate = { error("not asked") },
+        )
+        assertEquals(60_000_000L, clock.nowMicros(), "a minute ahead of the device")
+        // The system sets the device ten seconds on, while the packager's time moved one second.
+        device = 11_000_000L
+        assertEquals(71_000_000L, clock.nowMicros(), "inside five minutes the first difference stands")
+        assertEquals(1, asks)
+        device = DashLiveClock.RESYNC_MICROS + 1_000_000L
+        // The device has drifted ten seconds slow against the packager since the first measurement.
+        server = "1970-01-01T00:06:11Z"
+        assertEquals(371_000_000L, clock.nowMicros(), "five minutes on it measures again, and follows the drift")
+        assertEquals(2, asks)
+        device += DashLiveClock.RESYNC_MICROS
+        server = null
+        assertEquals(device + 70_000_000L, clock.nowMicros(), "a measurement that fails keeps the last one")
+        assertEquals(3, asks)
+    }
+
+    /** A refreshed manifest's clocks are followed: one that names a source the first did not (#966). */
+    @Test
+    fun aRefreshedManifestsClocksAreFollowed() = runTest {
+        var asks = 0
+        val clock = DashLiveClock(
+            emptyList(),
+            deviceMicros = { 5_000_000L },
+            fetchText = { asks++; "1970-01-01T00:00:35Z" },
+            fetchDate = { error("not asked") },
+        )
+        assertEquals(5_000_000L, clock.nowMicros(), "no clock named: the device's")
+        clock.update(listOf(DashUtcTiming("urn:mpeg:dash:utc:http-iso:2014", "https://time.test/now")))
+        assertEquals(35_000_000L, clock.nowMicros(), "the refreshed manifest's clock answers at once")
+        assertEquals(1, asks)
+    }
+
+    /**
+     * When no clock answers, the `Date` of the manifest's own response gives the time to the second,
+     * and a device within that second keeps its own finer time (#966).
+     */
+    @Test
+    fun theManifestsDateStandsInWhenNoClockAnswers() = runTest {
+        var device = 0L
+        val clock = DashLiveClock(
+            listOf(DashUtcTiming("urn:mpeg:dash:utc:http-xsdate:2014", "https://time.test/now")),
+            deviceMicros = { device },
+            fetchText = { error("timed out") },
+            fetchDate = { error("not asked") },
+            manifestDate = { "Thu, 01 Jan 1970 00:00:30 GMT" },
+        )
+        assertEquals(30_000_000L, clock.nowMicros(), "thirty seconds ahead, from the manifest's Date")
+        val close = DashLiveClock(
+            emptyList(),
+            deviceMicros = { 29_600_000L },
+            fetchText = { error("not asked") },
+            fetchDate = { error("not asked") },
+            manifestDate = { "Thu, 01 Jan 1970 00:00:30 GMT" },
+        )
+        assertEquals(29_600_000L, close.nowMicros(), "a device within the Date's second keeps its own time")
+    }
+
     private val live = """
         <MPD type="dynamic" availabilityStartTime="1970-01-01T00:01:00Z" minimumUpdatePeriod="PT2S" timeShiftBufferDepth="PT10S">
             <Location>https://cdn.test/live/next.mpd</Location>

@@ -141,6 +141,8 @@ internal class DashHlsMediaIo(
             fetch(DashManifestParser.resolveUrl(manifestUrl, url, policy), null, MAX_TIME_BYTES, segment = false).decodeToString()
         },
         fetchDate = { url -> fetchDate(DashManifestParser.resolveUrl(manifestUrl, url, policy)) },
+        // The manifest's own response, the last word before the device's clock (#966).
+        manifestDate = { fetchDate(manifestAddress) },
     )
 
     override val size: Long get() = master.size.toLong()
@@ -659,6 +661,8 @@ internal class DashHlsMediaIo(
         if (fresh.periods.isNotEmpty()) {
             manifest = fresh
             allowedLocation(fresh)?.let { manifestAddress = it }
+            // The refreshed manifest may name other clocks, or mend a broken one (#966).
+            clock.update(fresh.utcTimings)
             onManifest(fresh)
         }
     }

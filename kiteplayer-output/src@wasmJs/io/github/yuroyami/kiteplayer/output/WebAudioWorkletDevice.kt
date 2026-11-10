@@ -64,6 +64,7 @@ internal class WebAudioWorkletDevice private constructor(
          * to create a player at all.
          */
         suspend fun createOrNull(requestedChannels: Int, blockFrames: Int): WebAudioWorkletDevice? {
+            installWebAudioUnlock()
             val state = awaitJs(
                 webAudioSetup(PROCESSOR_SOURCE, requestedChannels, blockFrames),
                 discardLate = ::webAudioClose,
@@ -222,9 +223,19 @@ registerProcessor('kite-sink', KiteSinkProcessor);
         });
         const s = {
           ctx: ctx, node: node, channels: channels,
-          sent: 0, consumed: 0, silence: 0,
+          sent: 0, consumed: 0, silence: 0, paused: false, closed: false,
         };
         node.port.onmessage = (e) => { s.consumed = e.data.consumed; s.silence = e.data.silence; };
+        // A browser starts audio only inside a user gesture, and the engine resumes the context
+        // after an await, outside the click that asked for play (#910). So the context is resumed
+        // from the page's own gestures too, the first stage of the same click included. Capture
+        // phase, so a handler that stops the event still lets it through.
+        const doc = globalThis.document;
+        if (doc && doc.addEventListener) {
+          s.unlock = () => globalThis.__kiteAudioUnlock(s);
+          s.gestures = ['pointerdown', 'keydown', 'touchend', 'mousedown'];
+          for (const type of s.gestures) doc.addEventListener(type, s.unlock, { capture: true, passive: true });
+        }
         try { ctx.destination.channelCount = channels; } catch (e) {}
         node.connect(ctx.destination);
         return s;
@@ -265,14 +276,48 @@ private external fun webAudioPush(state: JsAny, samples: JsAny, frames: Int)
 @JsFun("(s) => { s.node.port.postMessage({ cmd: 'flush' }); }")
 private external fun webAudioFlush(state: JsAny)
 
-@JsFun("(s) => s.ctx.resume()")
+@JsFun("(s) => { s.paused = false; return s.ctx.resume(); }")
 private external fun webAudioResume(state: JsAny): Promise<JsAny?>
 
-@JsFun("(s) => s.ctx.suspend()")
+@JsFun("(s) => { s.paused = true; return s.ctx.suspend(); }")
 private external fun webAudioSuspend(state: JsAny): Promise<JsAny?>
 
-@JsFun("(s) => { try { s.node.disconnect(); } catch (e) {} try { s.ctx.close(); } catch (e) {} }")
+@JsFun(
+    """(s) => {
+      s.closed = true;
+      const doc = globalThis.document;
+      if (doc && s.unlock) for (const type of s.gestures) doc.removeEventListener(type, s.unlock, { capture: true });
+      try { s.node.disconnect(); } catch (e) {}
+      try { s.ctx.close(); } catch (e) {}
+    }""",
+)
 private external fun webAudioClose(state: JsAny)
+
+/**
+ * What a gesture on the page does to the device's context [state] (#910): resumes a context the
+ * browser holds suspended, inside the gesture, unless the player paused it or the device closed.
+ * A resume before play plays only silence, because the feeder fills the queue after its own
+ * resume; a resume while paused would play what was left queued, so a paused device is left alone.
+ * Installed as a page global, so the gesture listeners and the tests call the same code.
+ */
+internal fun webAudioUnlock(state: JsAny) {
+    installWebAudioUnlock()
+    callWebAudioUnlock(state)
+}
+
+@JsFun(
+    """() => {
+      if (globalThis.__kiteAudioUnlock) return;
+      globalThis.__kiteAudioUnlock = (s) => {
+        if (s.closed || s.paused || !s.ctx || s.ctx.state !== 'suspended') return;
+        try { const p = s.ctx.resume(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+      };
+    }""",
+)
+internal external fun installWebAudioUnlock()
+
+@JsFun("(s) => globalThis.__kiteAudioUnlock(s)")
+private external fun callWebAudioUnlock(state: JsAny)
 
 /**
  * Awaits a JS promise, treating a rejection as null.

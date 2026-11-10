@@ -33,8 +33,16 @@ class WebSubtitleRasterizerTest {
         layout: CueLayout = CueLayout(),
     ) = SubtitleCue.Text(startMicros = 0, endMicros = 1_000_000, spans = listOf(StyledSpan(text, style)), layout = layout)
 
-    private fun rasterize(vararg cues: SubtitleCue, width: Int = 640, height: Int = 360): List<OverlayImage>? =
-        WebSubtitleRasterizer.orNull()?.rasterize(cues.toList(), width, height, 1f, 1f)
+    /**
+     * The rasterizer's pictures, or null where there is no text canvas, which only Node lacks. In
+     * the page that `scripts/web-tests` serves a canvas must exist, so there a missing one fails
+     * rather than letting every test return as passed (#727).
+     */
+    private fun rasterize(vararg cues: SubtitleCue, width: Int = 640, height: Int = 360): List<OverlayImage>? {
+        val rasterizer = WebSubtitleRasterizer.orNull()
+        if (rasterizer == null && inTestPage()) error("the browser page has no text canvas, so no subtitle could be drawn")
+        return rasterizer?.rasterize(cues.toList(), width, height, 1f, 1f)
+    }
 
     private fun OverlayImage.alpha(x: Int, y: Int): Int = bitmap.pixels[(y * bitmap.width + x) * 4 + 3].toInt() and 0xFF
     private fun OverlayImage.channel(x: Int, y: Int, c: Int): Int = bitmap.pixels[(y * bitmap.width + x) * 4 + c].toInt() and 0xFF
@@ -313,3 +321,7 @@ private external fun subtitleFillBlack(destination: kotlin.js.JsAny)
 
 @JsFun("(c, x, y) => c.getContext('2d').getImageData(x, y, 1, 1).data[0]")
 private external fun subtitleCanvasRed(canvas: kotlin.js.JsAny, x: Int, y: Int): Int
+
+/** True in the page that `scripts/web-tests` serves, which has every mount and a real canvas (#727). */
+@JsFun("() => globalThis.__kiteWebTests === true")
+private external fun inTestPage(): Boolean

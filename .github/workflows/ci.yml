@@ -1216,7 +1216,9 @@ jobs:
             awk '/^# Format conformance/ { on = 1 } on { if (/^\|/) table = 1; else if (table) exit; print }' "$log" |
               tee -a "$GITHUB_STEP_SUMMARY"
           else
-            echo "::warning::The browser format matrix left no conformance report"
+            # The matrix prints its table on every run that reaches it, so none means it never ran (#727).
+            echo "::error::The browser format matrix left no conformance report"
+            exit 1
           fi
 
       - name: The web modules' sizes

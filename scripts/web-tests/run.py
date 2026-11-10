@@ -70,6 +70,12 @@ def kotlin(*args):
     run(ROOT / ("kotlin.bat" if sys.platform == "win32" else "kotlin"), *args)
 
 
+# The modules whose browser half exists to run what Node cannot: there a test the harness ignores is
+# a test that never ran, so the run fails on one (#727). A test that finds its mount or its canvas
+# missing in that page fails by itself.
+MUST_RUN_IN_BROWSER = ("kiteplayer-web-worker", "kiteplayer-ffmpeg", "kiteplayer-output", "kiteplayer-compose-video")
+
+
 def run_tests(module, platform, *args):
     """Runs one test command, prints and keeps its output, and fails when it reports a failure or no test."""
     LOGS.mkdir(parents=True, exist_ok=True)
@@ -87,6 +93,8 @@ def run_tests(module, platform, *args):
     print(f"{module} {platform}: " + (result.group(0)[len("RESULT "):] if result else "no result"), flush=True)
     if process.returncode != 0 or not result or int(result.group(2)) > 0 or int(result.group(1)) == 0:
         raise RuntimeError(f"the {platform} tests of {module} failed")
+    if platform == "wasmJsBrowser" and module in MUST_RUN_IN_BROWSER and int(result.group(3)) > 0:
+        raise RuntimeError(f"the {platform} tests of {module} ignored {result.group(3)}, and this browser half must run them all")
 
 
 def js_tests(module, executable):

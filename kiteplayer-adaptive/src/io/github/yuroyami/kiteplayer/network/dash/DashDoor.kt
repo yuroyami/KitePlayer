@@ -185,8 +185,12 @@ public object DashDoor {
                 open = ::openChecked,
                 fetch = { url, limit, what -> openChecked(url).use { readAllBounded(it, limit, what) } },
                 refetch = { url ->
-                    val body = openChecked(url).use { readAllBounded(it, maxManifestBytes, "the manifest at ${shownUri(url)}") }
-                    manifest(body, url, policy, maxManifestBytes)
+                    // Parsed against where the refresh landed after its redirects, as the first
+                    // open is, so its relative addresses name the server's new place (#741).
+                    openChecked(url).use { reader ->
+                        val body = readAllBounded(reader, maxManifestBytes, "the manifest at ${shownUri(url)}")
+                        manifest(body, reader.location ?: url, policy, maxManifestBytes)
+                    }
                 },
                 date = { url -> openChecked(url).use(dateOf) },
                 bitsPerSecond = io::networkBitsPerSecond,

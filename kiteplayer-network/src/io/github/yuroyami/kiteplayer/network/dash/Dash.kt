@@ -81,7 +81,21 @@ private suspend fun fetchBounded(
     reader: HttpReaderPolicy,
     redirects: RedirectRule,
     refusal: (HttpStatusCode) -> String,
-): ByteArray = coroutineScope {
+): ByteArray = fetchBoundedAt(client, url, limit, what, reader, redirects, refusal).first
+
+/**
+ * [fetchBounded], with the address the response came from after its redirects, which a manifest's
+ * relative references resolve against (RFC 3986, 5.1.3; #741).
+ */
+private suspend fun fetchBoundedAt(
+    client: HttpClient,
+    url: String,
+    limit: Long,
+    what: String,
+    reader: HttpReaderPolicy,
+    redirects: RedirectRule,
+    refusal: (HttpStatusCode) -> String,
+): Pair<ByteArray, String> = coroutineScope {
     val answered = CompletableDeferred<Unit>()
     val body = async {
         try {
@@ -90,7 +104,7 @@ private suspend fun fetchBounded(
                     answered.complete(Unit)
                     redirects.refuseHidden(response, shownUri(url))
                     require(response.status.isSuccess()) { refusal(response.status) }
-                    readBounded(response, limit, what, reader.readTimeout)
+                    readBounded(response, limit, what, reader.readTimeout) to response.call.request.url.toString()
                 }
             }
         } catch (failure: Throwable) {
@@ -165,10 +179,11 @@ public object Dash {
             DashManifestParser.requireAllowedScheme(mpdUrl, policy)
             val shown = shownUri(mpdUrl)
             val redirects = DashRedirectRule(policy, mpdUrl)
-            val body = fetchBounded(client, mpdUrl, maxManifestBytes, "the manifest at $shown", readerPolicy, redirects) { status ->
+            val (body, landed) = fetchBoundedAt(client, mpdUrl, maxManifestBytes, "the manifest at $shown", readerPolicy, redirects) { status ->
                 "cannot fetch $shown: $status"
             }
-            DashDoor.manifest(body, mpdUrl, policy, maxManifestBytes)
+            // Its relative references name the place the server redirected to, not the one asked for (#741).
+            DashDoor.manifest(body, landed, policy, maxManifestBytes)
         }
 
     /**

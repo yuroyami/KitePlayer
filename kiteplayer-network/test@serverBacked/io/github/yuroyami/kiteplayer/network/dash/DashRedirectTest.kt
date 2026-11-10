@@ -120,6 +120,8 @@ class DashRedirectTest {
                         uri == "/to-other.m4s" -> call.redirectTo("$elsewhere/collect")
                         uri == "/to-other.mpd" -> call.redirectTo("$elsewhere/movie.mpd")
                         uri == "/to-other.mp4" -> call.redirectTo("$elsewhere/movie.mp4")
+                        uri == "/entry/movie.mpd" -> call.redirectTo("/cdn/movie.mpd")
+                        uri == "/cdn/movie.mpd" -> call.respondText(segmentList("s-1.m4s"))
                         uri == "/moved.m4s" -> call.redirectTo("/real.m4s")
                         uri == "/real.m4s" -> call.respondText("REAL")
                         uri.startsWith("/hop/") -> call.redirectTo("/hop/${uri.substringAfter("/hop/").toInt() + 1}")
@@ -217,6 +219,18 @@ class DashRedirectTest {
     fun sameOriginFollowsARedirectInsideTheManifestsOrigin() = runBlocking {
         val bytes = readSegments("$trusted/list.mpd?seg=/moved.m4s", DashUrlPolicy.SameOrigin)
         assertEquals("REAL", bytes.decodeToString())
+    }
+
+    /**
+     * A redirected manifest's relative addresses name the place it was redirected to, as RFC 3986,
+     * 5.1.3, says (#741). They were resolved against the address asked for, so a segment beside the
+     * manifest's real home was looked for beside its old one.
+     */
+    @Test
+    fun aRedirectedManifestResolvesAgainstWhereItLanded() = runBlocking {
+        val manifest = Dash.manifest("$trusted/entry/movie.mpd", client, DashUrlPolicy.Default)
+        val segment = manifest.periods.single().adaptationSets.single().representations.single().segmentUrls.single()
+        assertEquals("$trusted/cdn/s-1.m4s", segment, "the segment was resolved against the address asked for")
     }
 
     @Test

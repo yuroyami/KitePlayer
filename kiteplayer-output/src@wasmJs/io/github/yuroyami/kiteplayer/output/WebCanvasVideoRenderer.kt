@@ -18,6 +18,7 @@ import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlin.js.JsAny
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
 
 /**
@@ -205,6 +206,7 @@ public class WebCanvasVideoRenderer(
             drawStage(s, layout, flashFactor)
             drawOverlay(s)
             pictureCleared = false
+            lastPresent = timeSource.markNow()
             presentedFrames++
             if (keepDisplayAwake) WebDisplayAwake.framePresented()
             return true
@@ -364,22 +366,37 @@ public class WebCanvasVideoRenderer(
     /** The canvas draws the decoded picture as it is, so the engine warns when picture controls are set (#610). */
     override val appliesAdjustments: Boolean get() = false
 
+    /**
+     * The renderer answers `redrawsHeldPicture` true, so the engine sends no frame after a change of
+     * look under a pause: each of these draws the held picture again itself (#734).
+     */
     override fun setScaleMode(mode: VideoScale) {
+        if (scaleMode == mode) return
         scaleMode = mode
+        state?.let(::redrawRetained)
     }
 
     override fun setTransform(transform: VideoTransform) {
+        if (this.transform == transform) return
         this.transform = transform
+        state?.let(::redrawRetained)
     }
 
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
         this.overlay = overlay
-        // Not drawn here while a picture plays: the next present draws it above that frame, and
-        // drawing now would put subtitles over a picture that is about to be cleared and replaced.
-        // With the picture taken off, no frame is coming, so the cue is drawn now.
+        // While a picture plays the next present draws the cue above that frame, and a cue can
+        // change at every frame, so it is not drawn twice. With no frame for a while, as under a
+        // pause, or with the picture taken off, none is coming, so the cue is drawn now (#734).
         val s = state ?: return
-        if (pictureCleared && !closed) drawBackground(s)
+        if (closed) return
+        if (pictureCleared || lastPresent.elapsedNow() >= OVERLAY_ALONE_AFTER) redrawRetained(s)
     }
+
+    /** The clock [lastPresent] reads, which a test replaces. */
+    internal var timeSource: TimeSource = TimeSource.Monotonic
+
+    /** When [present] last drew a frame. */
+    private var lastPresent = timeSource.markNow()
 
     /**
      * Takes the picture off (#530): the canvas shows its background, transparent as between the
@@ -624,3 +641,6 @@ private external fun webClearOverlay(state: JsAny)
 
 @JsFun("(s) => { s.overlay = []; s.stage = null; s.sctx = null; s.image = null; s.w = 0; s.h = 0; s.cells = null; s.cellBytes = null; }")
 private external fun webReleaseState(state: JsAny)
+
+/** How long with no frame before a new cue is drawn over the held picture instead of with the next one. */
+private val OVERLAY_ALONE_AFTER = 200.milliseconds

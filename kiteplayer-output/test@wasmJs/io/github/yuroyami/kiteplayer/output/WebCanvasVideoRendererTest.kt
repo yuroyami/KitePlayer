@@ -325,6 +325,43 @@ class WebCanvasVideoRendererTest {
         }
     }
 
+    /**
+     * A paused picture shows a change of look at once (#734). The renderer tells the engine it
+     * redraws its held picture itself, so no frame follows a new scale mode, zoom or cue under a
+     * pause, and the old framing and no cue stayed until play.
+     */
+    @Test
+    fun aHeldPictureIsDrawnAgainForANewScaleTransformOrCue() = runTest {
+        val installed = installStageCanvasIfMissing()
+        try {
+            val canvas = recordingCanvas()
+            val renderer = WebCanvasVideoRenderer(canvas, painter)
+            val clock = kotlin.time.TestTimeSource()
+            renderer.timeSource = clock
+            assertTrue(renderer.present(CountingFrame(size = VideoSize(640, 360)), 0))
+            val drawn = drawCount(canvas)
+
+            renderer.setScaleMode(io.github.yuroyami.kiteplayer.VideoScale.Fill)
+            assertEquals(drawn + 1, drawCount(canvas), "a new scale mode redraws the held picture")
+            renderer.setScaleMode(io.github.yuroyami.kiteplayer.VideoScale.Fill)
+            assertEquals(drawn + 1, drawCount(canvas), "the same mode again draws nothing")
+            renderer.setTransform(io.github.yuroyami.kiteplayer.VideoTransform(zoom = 2f))
+            assertEquals(drawn + 2, drawCount(canvas), "a zoom redraws it")
+
+            // Right after a frame the cue waits for the next one, which a playing picture brings.
+            renderer.setOverlay(cue(width = 40, height = 20, hash = 1))
+            assertEquals(drawn + 2, drawCount(canvas))
+            // With no frame for a while, as under a pause, the picture and the cue are drawn now.
+            clock += kotlin.time.Duration.parse("300ms")
+            renderer.setOverlay(cue(width = 60, height = 30, hash = 2))
+            assertEquals(drawn + 4, drawCount(canvas), "the held picture and its new cue")
+            assertEquals(60.0, lastDrawWidth(canvas))
+            renderer.close()
+        } finally {
+            if (installed) removeStageCanvas()
+        }
+    }
+
     @Test
     fun aPictureAfterAClearDrawsItsCuesWithItsFramesAgain() = runTest {
         val installed = installStageCanvasIfMissing()

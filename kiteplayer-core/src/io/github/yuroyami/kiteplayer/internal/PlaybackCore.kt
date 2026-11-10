@@ -6143,9 +6143,17 @@ internal class PlaybackCore(
             timeline = session.timeline,
             run = session.run,
         )
+        // A seek the stall caught waiting is where the viewer wants to be, so the item opens again
+        // there rather than where it stalled (#713), and its callers hear that it applied.
+        val waiting = pendingSeek.takeIf { wait.atUs != null }
         teardownSession()
-        resolveSeekReplies(SeekResult.Superseded(requestedEpoch))
         pendingSeek = null
+        if (waiting != null) {
+            seekWhileReconnecting(wait, waiting, null)
+            resolveSeekReplies(SeekResult.Applied(Pts(checkNotNull(wait.atUs))))
+        } else {
+            resolveSeekReplies(SeekResult.Superseded(requestedEpoch))
+        }
         clearSeekMaskUnlessPending()
         reconnect = wait
         networkBack.value = false
@@ -7680,6 +7688,17 @@ internal class PlaybackCore(
             teardownSession()
             throw PlaybackException(softwareRecoveryFailure(recovery, recoveryFailure))
         }
+    }
+
+    /**
+     * The network error behind [failure], a seek's, or null when it is not one: a source that said
+     * so itself, or a demux lane that died on its read.
+     */
+    private fun networkLossOf(session: OpenSession, failure: Throwable): PlaybackError? {
+        val error = (failure as? PlaybackException)?.error
+            ?: session.firstWorkerOutcome.value?.takeIf { it.name == DEMUX_WORKER }
+                ?.let { workerOutcomeException(session, "during the seek").error }
+        return error?.takeIf { it is PlaybackError.SourceStalled || it is PlaybackError.SourceUnavailable }
     }
 
     private fun workerOutcomeException(session: OpenSession, context: String): PlaybackException {
@@ -12158,6 +12177,15 @@ internal class PlaybackCore(
                 }
             }
             if (failed != null && renewSeekIfRefused(failed, request)) return
+            // A seek whose reads the network failed waits for the network as a read in playback
+            // does (#461), and the item opens again where the seek was going (#713). It failed the
+            // player outright before.
+            val lost = failed?.let { networkLossOf(it, failure) }
+            if (failed != null && lost != null) {
+                seekPhase = SeekPhase.Idle
+                if (pendingSeek == null) pendingSeek = request
+                if (startReconnect(failed, lost)) return
+            }
             // A source that throws mid-seek leaves the pipeline flushed and the cursor nowhere useful, so
             // the session is torn down rather than left in a position nothing knows.
             val error = PlaybackError.Internal("the seek failed", failure)

@@ -249,6 +249,32 @@ class NetworkRecoveryTest {
         harness.close()
     }
 
+    /**
+     * A seek the stall catches waiting sets where the item opens again (#713). The first seek's
+     * reads fail, so the second, held behind it until a picture of the first shows, is still
+     * waiting when the read gives up.
+     */
+    @Test
+    fun aSeekWaitingWhenTheReadFailsIsWhereTheItemOpensAgain() = runTest {
+        val faults = FaultPlan()
+        val network = FakeNetwork()
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 60_000_000), faults = faults, config = config(network))
+        harness.openWithRenderer(address)
+        harness.core.play()
+        harness.run(5.seconds)
+        harness.goOffline(faults, network)
+        harness.core.seekLater(Pts(20_000_000), SeekMode.Precise)
+        harness.core.seekLater(Pts(40_000_000), SeekMode.Precise)
+        assertTrue(harness.runUntil(5.seconds) { harness.snapshot().reconnecting }, "the read did not fail: ${harness.snapshot().status} ${harness.snapshot().error} ${harness.core.warningHistory().map { it.warning }}")
+        assertEquals(40.seconds, harness.core.position(), "the waiting seek is the position while the player waits")
+        harness.goOnline(faults, network)
+        assertTrue(harness.runUntil(5.seconds) { harness.snapshot().status == PlaybackStatus.Playing }, "status ${harness.snapshot().status}")
+        assertEquals(40_000_000L, harness.source.seekTargets.last(), "the item opened again where the viewer asked to go")
+        assertTrue(harness.core.position() >= 40.seconds, "at ${harness.core.position()}")
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount, "nothing leaked")
+    }
+
     /** A seek during the wait answers in the item's time, not its file's, as every other seek (#798). */
     @Test
     fun aSeekDuringTheWaitLandsInTheItemsTime() = runTest {
@@ -260,7 +286,7 @@ class NetworkRecoveryTest {
         harness.core.play()
         harness.run(5.seconds)
         harness.goOffline(faults, network)
-        assertTrue(harness.runUntil(5.seconds) { harness.snapshot().reconnecting }, "the read did not fail")
+        assertTrue(harness.runUntil(5.seconds) { harness.snapshot().reconnecting }, "the read did not fail: ${harness.snapshot().status} ${harness.snapshot().error} ${harness.core.warningHistory().map { it.warning }}")
         val result = harness.core.seek(Pts(20_000_000), SeekMode.Precise)
         assertEquals(SeekResult.Applied(Pts(20_000_000)), result, "the landing in the item's time")
         assertEquals(20.seconds, harness.core.position())

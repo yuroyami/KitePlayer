@@ -46,6 +46,18 @@ public fun interface WebFramePainter {
      * @return false when this frame cannot be painted. The renderer counts a drop and carries on.
      */
     public fun paintRgba(frame: VideoFrame, destination: JsAny): Boolean
+
+    /**
+     * Whether [paintRgba] tone mapped [frame] from HDR to standard range, asked after it painted
+     * the frame (#841).
+     *
+     * The renderer publishes `RendererEvent.ToneMapEngaged` on the strength of this and nothing
+     * else, which the engine turns into `PlaybackWarning.HdrToneMapped` and the snapshot's dynamic
+     * range. The default is false, the truthful answer for a painter that does not convert colour:
+     * a painter that does must say so, because only it can tell tone mapping apart from handing HDR
+     * through untouched. As `AwtFramePainter.toneMapped` on the desktop.
+     */
+    public fun toneMapped(frame: VideoFrame): Boolean = false
 }
 
 /**
@@ -136,6 +148,9 @@ public class WebCanvasVideoRenderer(
     private val _events = MutableSharedFlow<RendererEvent>(extraBufferCapacity = 8)
     override val events: Flow<RendererEvent> = _events
 
+    /** Reports a tone mapped stream after an open, at most once a second while it lasts (#841). */
+    private val hdrAnnouncer = HdrAnnouncer { _events.tryEmit(it) }
+
     /**
      * The canvas's backing store, in device pixels: the size [setViewport] set, or the canvas's own
      * size before that. The engine lays subtitles out for it, so text lands in the bars and at the
@@ -182,6 +197,7 @@ public class WebCanvasVideoRenderer(
                 failedFrames++
                 return false
             }
+            if (painter.toneMapped(frame)) hdrAnnouncer.announce(frame.colorSpace.transfer.name)
             val layout = frameLayout(
                 canvasWidth = viewportWidth,
                 canvasHeight = viewportHeight,

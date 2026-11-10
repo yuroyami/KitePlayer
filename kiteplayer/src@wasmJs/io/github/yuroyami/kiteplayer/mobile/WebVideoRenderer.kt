@@ -51,7 +51,17 @@ private class KiteFFmpegWebCanvasRenderer private constructor(
 
     private constructor(canvas: JsAny, painter: KiteFFmpegWebPainter, keepDisplayAwake: Boolean) : this(
         painter,
-        WebCanvasVideoRenderer(canvas = canvas, painter = WebFramePainter(painter::paint), keepDisplayAwake = keepDisplayAwake),
+        WebCanvasVideoRenderer(
+            canvas = canvas,
+            painter = object : WebFramePainter {
+                override fun paintRgba(frame: io.github.yuroyami.kiteplayer.spi.VideoFrame, destination: JsAny): Boolean =
+                    painter.paint(frame, destination)
+
+                // KiteFFmpeg's web converter takes every PQ and HLG frame to standard range (#841).
+                override fun toneMapped(frame: io.github.yuroyami.kiteplayer.spi.VideoFrame): Boolean = frame.colorSpace.isHdr
+            },
+            keepDisplayAwake = keepDisplayAwake,
+        ),
     )
 
     override fun close() {

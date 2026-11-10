@@ -9,6 +9,7 @@ import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlin.js.JsAny
 import kotlin.test.Test
@@ -42,12 +43,12 @@ class WebCanvasVideoRendererTest {
         override val size: VideoSize = VideoSize(640, 480),
         override val rotationDegrees: Int = 0,
         override val hardwareSurface: HwSurfaceKind? = null,
+        override val colorSpace: ColorSpaceInfo = ColorSpaceInfo(),
     ) : VideoFrame {
         var closes: Int = 0
         override val pts: Pts = Pts(0)
         override val duration: Pts? = null
         override val pixelFormat: PlayerPixelFormat = PlayerPixelFormat.Yuv420p
-        override val colorSpace: ColorSpaceInfo = ColorSpaceInfo()
         override val generation: Generation = Generation(0)
         override fun close() {
             closes++
@@ -117,6 +118,38 @@ class WebCanvasVideoRendererTest {
         assertEquals(1, frame.closes, "a frame must be closed exactly once, drawn or refused")
         assertEquals(if (drawn) 1 else 0, renderer.presentedFrames)
         assertEquals(if (drawn) 0 else 1, renderer.failedFrames, "a refusal must be counted, not silent")
+        renderer.close()
+    }
+
+    /** A painter that tone mapped a painted frame makes the renderer say so, and only then (#841). */
+    @Test
+    fun aToneMappingPainterIsAnnouncedOnceItPainted() = runTest {
+        val toneMaps = object : WebFramePainter {
+            override fun paintRgba(frame: VideoFrame, destination: JsAny): Boolean = true
+            override fun toneMapped(frame: VideoFrame): Boolean = frame.colorSpace.isHdr
+        }
+        val renderer = WebCanvasVideoRenderer(fakeCanvas(), toneMaps)
+        val events = mutableListOf<io.github.yuroyami.kiteplayer.spi.RendererEvent>()
+        val watch = launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) { renderer.events.collect { events += it } }
+        val hdr = ColorSpaceInfo(transfer = io.github.yuroyami.kiteplayer.spi.ColorTransfer.Pq)
+        val drawn = renderer.present(CountingFrame(colorSpace = hdr), 0)
+        renderer.present(CountingFrame(), 0)
+        val toneMapped = events.filterIsInstance<io.github.yuroyami.kiteplayer.spi.RendererEvent.ToneMapEngaged>()
+        // Node builds no stage, so nothing is painted there and nothing may be said.
+        assertEquals(if (drawn) 1 else 0, toneMapped.size, "events: $events")
+        if (drawn) assertEquals("Pq", toneMapped.single().transfer)
+        watch.cancel()
+        renderer.close()
+    }
+
+    @Test
+    fun aPainterThatDoesNotSayItToneMapsIsNeverAnnounced() = runTest {
+        val renderer = WebCanvasVideoRenderer(fakeCanvas(), painter)
+        val events = mutableListOf<io.github.yuroyami.kiteplayer.spi.RendererEvent>()
+        val watch = launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) { renderer.events.collect { events += it } }
+        renderer.present(CountingFrame(colorSpace = ColorSpaceInfo(transfer = io.github.yuroyami.kiteplayer.spi.ColorTransfer.Hlg)), 0)
+        assertEquals(emptyList(), events.filterIsInstance<io.github.yuroyami.kiteplayer.spi.RendererEvent.ToneMapEngaged>())
+        watch.cancel()
         renderer.close()
     }
 

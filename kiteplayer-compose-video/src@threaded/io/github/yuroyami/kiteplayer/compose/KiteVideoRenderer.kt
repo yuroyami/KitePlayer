@@ -331,6 +331,17 @@ internal class KiteVideoRenderer(
         is io.github.yuroyami.kiteplayer.spi.FrameShape.Surface -> hardwareRenderer?.accepts(shape) == true
     }
 
+    /** True while the last frame went to [hardwareRenderer] rather than this renderer's own image (#736). */
+    private val lastFromHardware = atomic(false)
+
+    /**
+     * The hardware tier's answer while its frame is the one shown, because its blit runs only when
+     * a codec frame latches and a held picture there shows a change only after the engine decodes
+     * it again (#736); this renderer's own image is drawn again by Compose, so true otherwise.
+     */
+    override val redrawsHeldPicture: Boolean
+        get() = if (lastFromHardware.value) hardwareRenderer?.redrawsHeldPicture ?: true else true
+
     override suspend fun present(frame: VideoFrame, targetNanos: Long): Boolean {
         if (closed.value) {
             frame.close()
@@ -340,8 +351,10 @@ internal class KiteVideoRenderer(
         val hardware = hardwareRenderer
         val surface = frame.hardwareSurface
         if (hardware != null && surface != null && surface in hardware.supportedHardwareSurfaces()) {
+            lastFromHardware.value = true
             return hardware.present(frame, targetNanos)
         }
+        lastFromHardware.value = false
         val displaced = pending.getAndSet(frame)
         if (displaced != null) {
             displaced.close()

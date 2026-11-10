@@ -359,6 +359,31 @@ class DesktopAudioSinkTest {
         s.close()
     }
 
+    /**
+     * A quiet signal between the 16-bit steps, as a low volume or a fade leaves it, is dithered: a
+     * constant level of a third of a step rounded to 0 every time, which is distortion that follows
+     * the music, and dithered it averages to the level it asked for (#815).
+     */
+    @Test
+    fun aLevelBetweenTheSixteenBitStepsIsDitheredToItsAverage() = runBlocking {
+        val s = sink()
+        s.open(stereo48k) { destination, frames, _ ->
+            destination.writeInterleaved(FloatArray(frames * 2) { (1f / 3f) / 32768f }, 0, 0, frames)
+            frames
+        }
+        s.start()
+        awaitUntil("eight blocks on the wire") {
+            synchronized(driver.writtenBytes) { driver.writtenBytes.size } >= 8 * 512 * 4
+        }
+        s.stop()
+        val count = 8 * 512 * 2
+        val values = (0 until count).map { driver.shortAt(it) }
+        val mean = values.sum().toDouble() / count
+        assertTrue(values.toSet().size > 1, "every sample came out the same, ${values.first()}: no dither")
+        assertTrue(kotlin.math.abs(mean - 1.0 / 3.0) < 0.05, "the dithered level averages $mean, not a third of a step")
+        s.close()
+    }
+
     /** A NaN sample plays as silence and the writer goes on, where it used to throw and die (#716). */
     @Test
     fun aNanSamplePlaysAsSilenceAndTheWriterGoesOn() = runBlocking {

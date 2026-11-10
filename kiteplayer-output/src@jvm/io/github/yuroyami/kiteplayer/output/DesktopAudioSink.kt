@@ -509,11 +509,24 @@ public class DesktopAudioSink internal constructor(
         for (i in 0 until samples) {
             // roundToInt throws on NaN, and a NaN from a sink's source killed the writer (#716).
             val sample = blockBuffer[i]
-            val v = if (sample.isNaN()) 0 else (sample * 32768f).roundToInt().coerceIn(-32768, 32767)
+            val v = if (sample.isNaN()) {
+                0
+            } else {
+                val scaled = sample * 32768f
+                val onGrid = scaled == kotlin.math.round(scaled)
+                // A sample already on the 16-bit grid, a 16-bit source at unity gain, goes out bit
+                // for bit (#260). Anything finer, after the volume, a fade, the equaliser or a
+                // resample, gets triangular dither of one step, as Android's 16-bit path does, so
+                // its quantisation is an even hiss and not distortion that follows the music (#815).
+                (if (onGrid) scaled else scaled + dither.next()).roundToInt().coerceIn(-32768, 32767)
+            }
             wireBuffer[b++] = (v and 0xFF).toByte()
             wireBuffer[b++] = ((v shr 8) and 0xFF).toByte()
         }
     }
+
+    /** The packer's noise, used by the writer thread alone (#815). */
+    private val dither = Pcm16Dither()
 
     /* ── The bound mixer's watch ────────────────────────────────────────────────────────────── */
 

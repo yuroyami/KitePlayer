@@ -55,6 +55,19 @@ player.open(MediaItem.from(io, label = "picked.mkv"))
 - Each `MediaIo.of...` door is an extension function that needs its own import: `ofBytes` from
   `io.github.yuroyami.kiteplayer`, and the others from `io.github.yuroyami.kiteplayer.io`.
 
+### Files on a network share
+
+The player has no SMB or NFS client, and FFmpeg reads neither without an outside library (#704).
+The platform can still hand the player such a file through a door above:
+
+- **Android:** a document provider that serves the share, such as the one a file manager app
+  offers, appears in the system file picker. The `content://` URI it returns plays through
+  `MediaIo.ofUri`, with seeking.
+- **iPhone, iPad and Mac:** the Files app and the Finder connect to an SMB server ("Connect to
+  Server"). A file picked from it with the document picker plays through `MediaIo.ofUrl`.
+- **Desktop:** a share that the operating system has mounted is an ordinary path for
+  `MediaIo.ofFile` or `MediaIo.ofPath`, or for the item's own address.
+
 ## Files that are still growing
 
 A file that is still being written, such as a recording in progress or a download that plays as it

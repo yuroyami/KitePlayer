@@ -31,6 +31,9 @@ internal class SampleLauncherActivity : Activity() {
         findViewById<Button>(R.id.compose_swap).setOnClickListener {
             open(ComposeSwapActivity::class.java)
         }
+        findViewById<Button>(R.id.view_model).setOnClickListener {
+            open(ViewModelPlayerActivity::class.java)
+        }
         findViewById<Button>(R.id.picked_file).setOnClickListener {
             val pick = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
             startActivityForResult(pick, PICK_FILE)

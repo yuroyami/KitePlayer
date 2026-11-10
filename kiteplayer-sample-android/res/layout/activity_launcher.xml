@@ -77,6 +77,19 @@
             android:text="@string/demo_compose_swap_detail" />
 
         <Button
+            android:id="@+id/view_model"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/demo_view_model" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:gravity="center"
+            android:text="@string/demo_view_model_detail" />
+
+        <Button
             android:id="@+id/picked_file"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

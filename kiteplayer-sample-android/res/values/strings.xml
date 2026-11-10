@@ -12,6 +12,8 @@
     <string name="demo_compose_native_detail">KiteVideo draws GPU-backed frames inside Compose so modifiers affect the pixels.</string>
     <string name="demo_compose_swap">Live renderer swap</string>
     <string name="demo_compose_swap_detail">KitePlayerVideo switches between the native view and the Compose canvas while the clip keeps playing.</string>
+    <string name="demo_view_model">Player in a ViewModel</string>
+    <string name="demo_view_model_detail">The player lives in a ViewModel, so a rotation recreates the screen and playback goes on with no new open.</string>
     <string name="demo_picked_file">Play a file you pick</string>
     <string name="demo_picked_file_detail">The system picker returns a content URI, and MediaIo.ofUri plays it.</string>
     <string name="demo_asset_door">Play the bundled clip from assets</string>

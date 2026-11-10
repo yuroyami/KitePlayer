@@ -60,6 +60,11 @@
             android:exported="false"
             android:label="@string/demo_compose_native"
             android:configChanges="orientation|screenSize" />
+        <!-- No configChanges on purpose: a rotation recreates it, and its ViewModel keeps the player (#945). -->
+        <activity
+            android:name=".ViewModelPlayerActivity"
+            android:exported="false"
+            android:label="@string/demo_view_model" />
         <activity
             android:name=".ComposeSwapActivity"
             android:exported="false"

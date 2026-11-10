@@ -35,6 +35,31 @@ class DashPeriodsTest {
         assertEquals(listOf(30_000_000L, 10_000_000L, 20_000_000L), timings.map { it.durationMicros })
     }
 
+    private val withAnAdSlot =
+        """<MPD type="static" mediaPresentationDuration="PT20S" xmlns:xlink="http://www.w3.org/1999/xlink">
+            <Period start="PT0S" duration="PT5S">${set("video")}</Period>
+            <Period start="PT5S" duration="PT3S" xlink:href="https://ads.test/slot.xml" xlink:actuate="onLoad"/>
+            <Period>${set("video")}</Period>
+        </MPD>"""
+
+    /**
+     * A Period with no picture and no sound, an ad slot that is only an xlink reference, is left out
+     * rather than refusing the whole presentation, and the Periods after it keep their place (#751).
+     */
+    @Test
+    fun aPeriodWithNoMediaIsLeftOutAndTheOthersKeepTheirPlace() {
+        val manifest = parse(withAnAdSlot)
+        val kept = manifest.withoutEmptyPeriods()
+        assertEquals(2, kept.periods.size, "the empty Period is left out")
+        assertEquals(listOf(0L, 8_000_000L), kept.periodTimings().map { it.startMicros }, "the last Period moved")
+    }
+
+    /** The presentation with that Period plays: it was refused for Periods "in a container the HLS path does not take" (#751). */
+    @Test
+    fun aPresentationWithAnEmptyPeriodIsNotRefused() {
+        DashDoor.route("https://cdn.test/vod/movie.mpd", parse(withAnAdSlot), DashUrlPolicy.Default, Long.MAX_VALUE)
+    }
+
     @Test
     fun aPeriodThatFollowsOneOfUnknownLengthNeedsItsOwnStart() {
         val manifest = parse(

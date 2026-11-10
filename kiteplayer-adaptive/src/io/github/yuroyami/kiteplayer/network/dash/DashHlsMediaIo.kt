@@ -649,7 +649,8 @@ internal class DashHlsMediaIo(
         if (now - fetchedAtMicros < period) return
         fetchedAtMicros = now
         val fresh = try {
-            fetch(manifestAddress)
+            // As the open left them out, so a refresh's Periods line up with the ones playing (#751).
+            fetch(manifestAddress).withoutEmptyPeriods()
         } catch (failure: Throwable) {
             if (failure is CancellationException) throw failure
             // The old manifest still describes the segments it named, and the window it writes

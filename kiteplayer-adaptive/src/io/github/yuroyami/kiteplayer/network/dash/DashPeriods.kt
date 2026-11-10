@@ -31,6 +31,21 @@ internal fun DashManifest.periodTimings(): List<DashPeriodTiming> {
     }
 }
 
+/**
+ * This manifest without its Periods that hold no picture and no sound, such as an ad slot that is
+ * only an `xlink:href`, which this tier does not resolve (#751). Each Period kept states the start
+ * and length it had among all of them, so leaving one out moves no later one: the joined plan has
+ * a gap where it was. A manifest with no such Period, or with nothing else, is returned as it is.
+ */
+internal fun DashManifest.withoutEmptyPeriods(): DashManifest {
+    fun DashPeriod.hasMedia() = adaptationSets.any { DashHls.roleOf(it).let { role -> role == DashHlsRole.Video || role == DashHlsRole.Audio } }
+    if (periods.all { it.hasMedia() } || periods.none { it.hasMedia() }) return this
+    val kept = periodTimings().filter { it.period.hasMedia() }.map { timing ->
+        timing.period.copy(startMicros = timing.startMicros, durationMicros = timing.durationMicros ?: timing.period.durationMicros)
+    }
+    return copy(periods = kept)
+}
+
 /** The presentation time offset of this [DashRepresentation], in microseconds: the media time its Period starts at. */
 internal fun DashRepresentation.offsetMicros(): Long {
     val (offset, timescale) = segmentTemplate?.let { it.presentationTimeOffset to it.timescale }

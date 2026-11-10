@@ -210,6 +210,10 @@ public object DashDoor {
      * stream. Every refusal happens here, before any reader exists.
      */
     public fun route(mpdUrl: String, manifest: DashManifest, policy: DashUrlPolicy, maxSegmentBytes: Long): DashRoute {
+        // A Period with no picture and no sound, an xlink-only ad slot among them, is left out
+        // rather than refusing the whole presentation (#751).
+        @Suppress("NAME_SHADOWING")
+        val manifest = manifest.withoutEmptyPeriods()
         val period = manifest.periods.firstOrNull()
             ?: throw IllegalArgumentException("${shownUri(mpdUrl)} has no Period")
         // Digital rights management is out of scope by decision (#404). An encrypted set beside

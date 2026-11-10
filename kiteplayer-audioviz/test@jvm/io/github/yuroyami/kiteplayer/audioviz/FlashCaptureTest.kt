@@ -39,6 +39,8 @@ class FlashCaptureTest {
         for (drawing in VizCatalog.create().filter { chosen == null || it.name in chosen }) {
             val fast = busiest(drawing, SyntheticSong.drumLoop(frames / 60f + 4f, beatsPerMinute = 200f))
             val fastSwing = swing
+            // The policy allows no saturated red flashing at all (#784).
+            if (redFlashesSeen > 0) problems += "${drawing.name}: $redFlashesSeen saturated red flashes a second"
             val loop = busiest(drawing, SyntheticSong.drumLoop(frames / 60f + 4f))
             val calm = busiest(drawing, SyntheticSong.drumLoop(frames / 60f + 4f, beatsPerMinute = 200f), reducedMotion = true)
             println("  ${drawing.name.padEnd(20)} $fast $loop calm $calm   swing ${(fastSwing * 100).toInt()} ${(swing * 100).toInt()}")
@@ -54,6 +56,9 @@ class FlashCaptureTest {
     /** The largest share of the picture that swung together in the last run. Diagnostics. */
     private var swing = 0f
 
+    /** The most saturated red flashes in a second of the last run (#784). */
+    private var redFlashesSeen = 0
+
     /**
      * Counts flashes the way a flash analyser does: by area, not by the picture's average.
      *
@@ -67,7 +72,12 @@ class FlashCaptureTest {
      * quarter of a ten degree field and the project's policy refuses that excuse, so this sits well
      * below it rather than at zero.
      */
-    internal class AreaFlashes {
+    internal class AreaFlashes(
+        /** The change that is one leg of a flash. */
+        private val step: Float = STEP,
+        /** A change whose darker state is at or above this does not count; above 1 counts every one. */
+        private val dark: Float = DARK,
+    ) {
         // A ring of frames from the last [QUICK] seconds, written round rather than allocated: a
         // fresh copy every frame is four gigabytes of rubbish over one catalogue.
         private var ring: Array<FloatArray>? = null
@@ -121,10 +131,10 @@ class FlashCaptureTest {
             for (index in light.indices) {
                 val was = then[index]
                 val now = light[index]
-                if (minOf(was, now) < DARK) {
+                if (minOf(was, now) < dark) {
                     val swing: Byte = when {
-                        now - was >= STEP -> 1
-                        was - now >= STEP -> -1
+                        now - was >= step -> 1
+                        was - now >= step -> -1
                         else -> 0
                     }
                     if (swing > 0) up++ else if (swing < 0) down++
@@ -178,8 +188,11 @@ class FlashCaptureTest {
             )
         })
         val counter = AreaFlashes()
+        val redCounter = redFlashes()
         var most = 0
+        var mostRed = 0
         val light = FloatArray(width * height)
+        val red = FloatArray(width * height)
         var nanos = 0L
         val pixels = IntArray(width * height)
         repeat(frames) {
@@ -187,12 +200,18 @@ class FlashCaptureTest {
             nanos += 16_666_667L
             val image = scene.render(nanos).toComposeImageBitmap()
             image.readPixels(pixels)
-            for (index in pixels.indices) light[index] = luma(pixels[index])
+            for (index in pixels.indices) {
+                light[index] = luma(pixels[index])
+                red[index] = redness(pixels[index])
+            }
             counter.add(light, 1f / 60f)
+            redCounter.add(red, 1f / 60f)
             if (counter.recent > most) most = counter.recent
+            if (redCounter.recent > mostRed) mostRed = redCounter.recent
         }
         scene.close()
         swing = counter.widest
+        redFlashesSeen = mostRed
         return most
     }
 
@@ -225,6 +244,27 @@ class FlashCaptureTest {
          * is slower than the policy counts. *Judgement.*
          */
         const val QUICK = 0.3f
+
+        /**
+         * The red rule of WCAG 2.2: a change of more than 20 on its scale of 320 in R - G - B, in
+         * linear light, between states whose red is saturated, with no bright-state limit (#784).
+         */
+        const val RED_STEP = 20f / 320f
+
+        /** Red at least this share of R + G + B is saturated red. WCAG 2.2. */
+        const val RED_SHARE = 0.8f
+
+        /** A counter for [redness] traces, with the red rule's own step and no bright-state limit. */
+        fun redFlashes(): AreaFlashes = AreaFlashes(step = RED_STEP, dark = Float.MAX_VALUE)
+
+        /** How saturated a red one sRGB pixel is: R - G - B in linear light when red is saturated, else 0. */
+        fun redness(pixel: Int): Float {
+            val r = LINEAR[pixel shr 16 and 0xFF]
+            val g = LINEAR[pixel shr 8 and 0xFF]
+            val b = LINEAR[pixel and 0xFF]
+            val sum = r + g + b
+            return if (sum > 0f && r / sum >= RED_SHARE) maxOf(0f, r - g - b) else 0f
+        }
 
         /** Turns kept per pixel: sixteen, so up to eight flashes a second read as what they are. */
         const val TURNS_KEPT = 16

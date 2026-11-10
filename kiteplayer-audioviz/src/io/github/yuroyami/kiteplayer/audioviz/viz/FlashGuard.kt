@@ -64,6 +64,11 @@ public class FlashGuard(
      *
      * The same decision as [limit], as a factor, for a caller that scales the light the drawings
      * are told to give rather than dimming a finished frame.
+     *
+     * It passes a red share of zero, so the red rule does not run here: the visualiser surface
+     * calls this, and at run time nothing watches its picture for saturated red flashing. That
+     * part of the policy is held by the drawings themselves and checked by the captured red trace
+     * of every drawing in the tests (#784).
      */
     public fun allowance(wanted: Float, deltaSeconds: Float): Float {
         val asked = wanted.coerceIn(0f, 1f)

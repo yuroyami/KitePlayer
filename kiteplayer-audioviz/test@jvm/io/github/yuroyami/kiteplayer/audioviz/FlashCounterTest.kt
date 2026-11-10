@@ -143,4 +143,35 @@ class FlashCounterTest {
         assertTrue(grey(210) < 0.80f, "grey 210 reads ${grey(210)}")
         assertTrue(count(alternating(5, grey(210), grey(255))) >= 5, "a 5 Hz swap between grey 210 and white")
     }
+
+    /**
+     * A swap between saturated red and black five times a second is a red flash, which the policy
+     * allows none of (#784). The red trace keeps its own step, a change of 20 on WCAG's scale of 320,
+     * and no bright-state limit.
+     */
+    @Test
+    fun aRedAndBlackSwapIsARedFlash() {
+        val red = FlashCaptureTest.redness(0xFF0000)
+        assertEquals(0f, FlashCaptureTest.redness(0x000000))
+        assertEquals(0f, FlashCaptureTest.redness(0xFFFFFF), "white is not saturated red")
+        val counter = FlashCaptureTest.redFlashes()
+        var most = 0
+        for (frame in alternating(5, 0f, red)) {
+            counter.add(frame, step)
+            most = maxOf(most, counter.recent)
+        }
+        assertTrue(most >= 5, "a 5 Hz red and black swap counted $most red flashes")
+    }
+
+    /** A change of red smaller than the red rule's step is no red flash. */
+    @Test
+    fun aSmallChangeOfRedIsNotARedFlash() {
+        val counter = FlashCaptureTest.redFlashes()
+        var most = 0
+        for (frame in alternating(5, 0.50f, 0.55f)) {
+            counter.add(frame, step)
+            most = maxOf(most, counter.recent)
+        }
+        assertEquals(0, most)
+    }
 }

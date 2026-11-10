@@ -33,6 +33,9 @@ internal actual fun platformDecoderSelection(codec: String, policy: HwdecPolicy)
  *   way that cuts.
  *
  * A refusal at open is ordinary and handled: the factory reopens on the native decoder and warns once.
+ *
+ * These decode to packed 16-bit integers, 32-bit for high-depth ALAC, where FFmpeg's own decoders
+ * give float, so a peak above full scale is clipped here and not on other platforms (#833).
  */
 internal actual fun platformAudioDecoder(codec: String): DecoderId? = when (codec.trim().lowercase()) {
     "aac" -> DecoderId("aac_at")

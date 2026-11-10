@@ -668,6 +668,13 @@ public class KiteFFmpegSource internal constructor(
      * copy of the same one. Two conformant AAC decoders agree on the music and disagree in the last
      * bits, so any test that pins exact samples has to pick one and say which; `ReferencePcmTest`
      * turns this off for exactly that reason, since what it measures is the downmix matrix.
+     *
+     * On Apple platforms the platform decoders of AAC, ALAC, AC-3 and E-AC-3 hand out packed
+     * 16-bit integers (32-bit for high-depth ALAC), because FFmpeg's AudioToolbox wrapper asks for
+     * them, where FFmpeg's own decoders give floating point. A lossy decode that rebuilds a peak a
+     * little above full scale is therefore clipped flat there before the volume, the downmix or
+     * the limiter can bring it back, unlike on Android and the desktop. Whether the battery saving
+     * is worth that is still to be measured (#833).
      */
     internal var preferPlatformAudioDecoder: Boolean = true
 

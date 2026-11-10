@@ -3544,15 +3544,19 @@ public final class io/github/yuroyami/kiteplayer/audio/LoudnessMeter {
 
 public final class io/github/yuroyami/kiteplayer/audio/LoudnessResult {
 	public fun <init> (DFI)V
+	public fun <init> (DFIF)V
+	public synthetic fun <init> (DFIFILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()D
 	public final fun component2 ()F
 	public final fun component3 ()I
-	public final fun copy (DFI)Lio/github/yuroyami/kiteplayer/audio/LoudnessResult;
-	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/audio/LoudnessResult;DFIILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/audio/LoudnessResult;
+	public final fun component4 ()F
+	public final fun copy (DFIF)Lio/github/yuroyami/kiteplayer/audio/LoudnessResult;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/audio/LoudnessResult;DFIFILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/audio/LoudnessResult;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getBlocksMeasured ()I
 	public final fun getIntegratedLufs ()D
 	public final fun getSamplePeak ()F
+	public final fun getTruePeak ()F
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }

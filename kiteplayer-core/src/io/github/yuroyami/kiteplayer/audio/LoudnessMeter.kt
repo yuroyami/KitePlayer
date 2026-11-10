@@ -13,7 +13,18 @@ public data class LoudnessResult(
     val samplePeak: Float,
     /** Blocks that survived both gates. Zero means the answer is negative infinity. */
     val blocksMeasured: Int,
-)
+    /**
+     * The true peak of ITU-R BS.1770-4 Annex 2, where 1 is full scale: the largest magnitude of the
+     * signal four times oversampled, so a peak that falls between two samples counts (#828). Never
+     * below [samplePeak]. This is the peak ReplayGain 2.0 and EBU R128 ask for; a gain limited by the
+     * sample peak alone can still clip.
+     */
+    val truePeak: Float = samplePeak,
+) {
+    /** The result as it was before the true peak, which then reads as the sample peak. */
+    public constructor(integratedLufs: Double, samplePeak: Float, blocksMeasured: Int) :
+        this(integratedLufs, samplePeak, blocksMeasured, samplePeak)
+}
 
 /**
  * Integrated loudness, to ITU-R BS.1770-4, which is what EBU R128 and ReplayGain 2.0 both measure.
@@ -81,6 +92,11 @@ public class LoudnessMeter(
 
     private val blockLoudness = ArrayList<Double>()
     private var peak = 0f
+
+    /** The last [TRUE_PEAK_TAPS] raw samples of each channel, newest at [truePeakAt], for the true peak. */
+    private val truePeakHistory = DoubleArray(channels * TRUE_PEAK_TAPS)
+    private var truePeakAt = 0
+    private var truePeak = 0.0
     private var read = false
 
     /** Feeds [frames] sample frames of interleaved [samples]. */
@@ -92,10 +108,12 @@ public class LoudnessMeter(
         }
         var base = 0
         for (frame in 0 until frames) {
+            truePeakAt = (truePeakAt + 1) % TRUE_PEAK_TAPS
             for (channel in 0 until channels) {
                 val raw = samples[base + channel]
                 val magnitude = if (raw < 0f) -raw else raw
                 if (magnitude > peak) peak = magnitude
+                oversample(channel, raw.toDouble())
                 val filtered = rlbFilter.step(preFilter.step(raw.toDouble(), preState, channel), rlbState, channel)
                 blockSums[channel] += filtered * filtered
             }
@@ -105,24 +123,46 @@ public class LoudnessMeter(
         }
     }
 
+    /**
+     * Runs [raw], the newest sample of [channel], through the four phases of the Annex 2
+     * interpolation filter and keeps the largest magnitude they give.
+     */
+    private fun oversample(channel: Int, raw: Double) {
+        val row = channel * TRUE_PEAK_TAPS
+        truePeakHistory[row + truePeakAt] = raw
+        for (phase in 0 until TRUE_PEAK_PHASES) {
+            val taps = TRUE_PEAK_FILTER[phase]
+            var sum = 0.0
+            var at = truePeakAt
+            for (k in 0 until TRUE_PEAK_TAPS) {
+                sum += taps[k] * truePeakHistory[row + at]
+                at = if (at == 0) TRUE_PEAK_TAPS - 1 else at - 1
+            }
+            val magnitude = if (sum < 0) -sum else sum
+            if (magnitude > truePeak) truePeak = magnitude
+        }
+    }
+
     /** The measurement. Reading it ends the meter; feeding it afterwards throws. */
     public fun result(): LoudnessResult {
         read = true
+        val truePeakFound = maxOf(peak, truePeak.toFloat())
+        fun result(lufs: Double, blocks: Int) = LoudnessResult(lufs, peak, blocks, truePeakFound)
         if (blockLoudness.isEmpty()) {
-            return LoudnessResult(Double.NEGATIVE_INFINITY, peak, 0)
+            return result(Double.NEGATIVE_INFINITY, 0)
         }
         // The absolute gate, then the relative one against the mean of what survived it. Both are
         // means of POWER and not of decibels, which is why each stage re-derives its own sum.
         val aboveAbsolute = blockLoudness.filter { it > ABSOLUTE_GATE_LUFS }
         if (aboveAbsolute.isEmpty()) {
-            return LoudnessResult(Double.NEGATIVE_INFINITY, peak, 0)
+            return result(Double.NEGATIVE_INFINITY, 0)
         }
         val relativeThreshold = meanLoudness(aboveAbsolute) + RELATIVE_GATE_LU
         val counted = aboveAbsolute.filter { it > relativeThreshold }
         if (counted.isEmpty()) {
-            return LoudnessResult(meanLoudness(aboveAbsolute), peak, aboveAbsolute.size)
+            return result(meanLoudness(aboveAbsolute), aboveAbsolute.size)
         }
-        return LoudnessResult(meanLoudness(counted), peak, counted.size)
+        return result(meanLoudness(counted), counted.size)
     }
 
     /** The loudness of a set of blocks: the mean of their POWER, expressed in LUFS. */
@@ -176,6 +216,33 @@ public class LoudnessMeter(
 
         /** The standard's -0.691 offset, carried through the power/decibel conversions. */
         const val LOUDNESS_OFFSET = 0.691
+
+        /** The true peak's oversampling, and the taps of each of its phases: BS.1770-4 Annex 2. */
+        const val TRUE_PEAK_PHASES = 4
+        const val TRUE_PEAK_TAPS = 12
+
+        /**
+         * The 48 taps of the Annex 2 interpolation filter, one row of 12 for each phase, applied to
+         * the newest sample first. Each later phase is the reverse of an earlier one.
+         */
+        val TRUE_PEAK_FILTER: Array<DoubleArray> = arrayOf(
+            doubleArrayOf(
+                0.0017089843750, 0.0109863281250, -0.0196533203125, 0.0332031250000, -0.0594482421875, 0.1373291015625,
+                0.9721679687500, -0.1022949218750, 0.0476074218750, -0.0266113281250, 0.0148925781250, -0.0083007812500,
+            ),
+            doubleArrayOf(
+                -0.0291748046875, 0.0292968750000, -0.0517578125000, 0.0891113281250, -0.1665039062500, 0.4650878906250,
+                0.7797851562500, -0.2003173828125, 0.1015625000000, -0.0582275390625, 0.0330810546875, -0.0189208984375,
+            ),
+            doubleArrayOf(
+                -0.0189208984375, 0.0330810546875, -0.0582275390625, 0.1015625000000, -0.2003173828125, 0.7797851562500,
+                0.4650878906250, -0.1665039062500, 0.0891113281250, -0.0517578125000, 0.0292968750000, -0.0291748046875,
+            ),
+            doubleArrayOf(
+                -0.0083007812500, 0.0148925781250, -0.0266113281250, 0.0476074218750, -0.1022949218750, 0.9721679687500,
+                0.1373291015625, -0.0594482421875, 0.0332031250000, -0.0196533203125, 0.0109863281250, 0.0017089843750,
+            ),
+        )
     }
 }
 

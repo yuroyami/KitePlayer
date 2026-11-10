@@ -1833,6 +1833,7 @@ final class io.github.yuroyami.kiteplayer.audio/LoudnessMeter { // io.github.yur
 
 final class io.github.yuroyami.kiteplayer.audio/LoudnessResult { // io.github.yuroyami.kiteplayer.audio/LoudnessResult|null[0]
     constructor <init>(kotlin/Double, kotlin/Float, kotlin/Int) // io.github.yuroyami.kiteplayer.audio/LoudnessResult.<init>|<init>(kotlin.Double;kotlin.Float;kotlin.Int){}[0]
+    constructor <init>(kotlin/Double, kotlin/Float, kotlin/Int, kotlin/Float = ...) // io.github.yuroyami.kiteplayer.audio/LoudnessResult.<init>|<init>(kotlin.Double;kotlin.Float;kotlin.Int;kotlin.Float){}[0]
 
     final val blocksMeasured // io.github.yuroyami.kiteplayer.audio/LoudnessResult.blocksMeasured|{}blocksMeasured[0]
         final fun <get-blocksMeasured>(): kotlin/Int // io.github.yuroyami.kiteplayer.audio/LoudnessResult.blocksMeasured.<get-blocksMeasured>|<get-blocksMeasured>(){}[0]
@@ -1840,11 +1841,14 @@ final class io.github.yuroyami.kiteplayer.audio/LoudnessResult { // io.github.yu
         final fun <get-integratedLufs>(): kotlin/Double // io.github.yuroyami.kiteplayer.audio/LoudnessResult.integratedLufs.<get-integratedLufs>|<get-integratedLufs>(){}[0]
     final val samplePeak // io.github.yuroyami.kiteplayer.audio/LoudnessResult.samplePeak|{}samplePeak[0]
         final fun <get-samplePeak>(): kotlin/Float // io.github.yuroyami.kiteplayer.audio/LoudnessResult.samplePeak.<get-samplePeak>|<get-samplePeak>(){}[0]
+    final val truePeak // io.github.yuroyami.kiteplayer.audio/LoudnessResult.truePeak|{}truePeak[0]
+        final fun <get-truePeak>(): kotlin/Float // io.github.yuroyami.kiteplayer.audio/LoudnessResult.truePeak.<get-truePeak>|<get-truePeak>(){}[0]
 
     final fun component1(): kotlin/Double // io.github.yuroyami.kiteplayer.audio/LoudnessResult.component1|component1(){}[0]
     final fun component2(): kotlin/Float // io.github.yuroyami.kiteplayer.audio/LoudnessResult.component2|component2(){}[0]
     final fun component3(): kotlin/Int // io.github.yuroyami.kiteplayer.audio/LoudnessResult.component3|component3(){}[0]
-    final fun copy(kotlin/Double = ..., kotlin/Float = ..., kotlin/Int = ...): io.github.yuroyami.kiteplayer.audio/LoudnessResult // io.github.yuroyami.kiteplayer.audio/LoudnessResult.copy|copy(kotlin.Double;kotlin.Float;kotlin.Int){}[0]
+    final fun component4(): kotlin/Float // io.github.yuroyami.kiteplayer.audio/LoudnessResult.component4|component4(){}[0]
+    final fun copy(kotlin/Double = ..., kotlin/Float = ..., kotlin/Int = ..., kotlin/Float = ...): io.github.yuroyami.kiteplayer.audio/LoudnessResult // io.github.yuroyami.kiteplayer.audio/LoudnessResult.copy|copy(kotlin.Double;kotlin.Float;kotlin.Int;kotlin.Float){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.audio/LoudnessResult.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.audio/LoudnessResult.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.audio/LoudnessResult.toString|toString(){}[0]

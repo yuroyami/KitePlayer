@@ -234,4 +234,34 @@ class LoudnessMeterTest {
         meter.result()
         assertFailsWith<IllegalStateException> { meter.feed(FloatArray(10), 10) }
     }
+
+    /** The issue's own check (#828): every sample of this sine sits at 0.707 and its peaks fall between them. */
+    @Test
+    fun `a peak between two samples counts as the true peak`() {
+        val rate = 48_000
+        val samples = FloatArray(rate) { n -> sin(PI / 2 * n + PI / 4).toFloat() }
+        val meter = LoudnessMeter(rate, 1)
+        meter.feed(samples, samples.size)
+        val result = meter.result()
+        assertEquals(0.7071, result.samplePeak.toDouble(), 0.001)
+        val decibels = 20 * kotlin.math.log10(result.truePeak.toDouble())
+        assertTrue(abs(decibels) < 0.1, "the true peak read ${result.truePeak}, $decibels dB from full scale")
+    }
+
+    @Test
+    fun `the true peak is never below the sample peak`() {
+        // A lone full-scale click, which the interpolation filter smears below its own height.
+        val samples = FloatArray(48_000).also { it[24_000] = 1f }
+        val meter = LoudnessMeter(48_000, 1)
+        meter.feed(samples, samples.size)
+        val result = meter.result()
+        assertEquals(1f, result.samplePeak)
+        assertTrue(result.truePeak >= result.samplePeak, "${result.truePeak}")
+    }
+
+    @Test
+    fun `a result made the old way reads its sample peak as the true peak`() {
+        val result = io.github.yuroyami.kiteplayer.audio.LoudnessResult(-23.0, 0.5f, 10)
+        assertEquals(0.5f, result.truePeak)
+    }
 }

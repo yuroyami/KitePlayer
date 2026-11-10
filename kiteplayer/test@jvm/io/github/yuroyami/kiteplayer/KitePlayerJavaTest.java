@@ -52,6 +52,24 @@ public class KitePlayerJavaTest {
     }
 
     /**
+     * A Java app catches the typed error of a platform with no default stack, to fall back to
+     * another engine (#913). Without the declaration javac refuses this catch, saying the
+     * exception is never thrown, so this file would not compile.
+     */
+    @Test
+    public void aJavaAppCatchesThePlaybackExceptionOfCreate() {
+        KitePlayerJava player = null;
+        try {
+            player = KitePlayerJava.create();
+            assertNotNull(player.getPlayer());
+        } catch (PlaybackException unavailable) {
+            assertFalse("create threw where the platform says it can build a player", KitePlayerJava.isAvailable());
+        } finally {
+            if (player != null) player.close();
+        }
+    }
+
+    /**
      * The item builder is the one behind Kotlin's mediaItem block, and each call returns it, so
      * Java chains them (#420). A whole number of milliseconds is a long, as Java writes it.
      */

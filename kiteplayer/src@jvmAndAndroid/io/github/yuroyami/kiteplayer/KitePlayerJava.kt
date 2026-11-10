@@ -363,9 +363,15 @@ public class KitePlayerJava(
     }
 
     public companion object {
-        /** A player on this platform's default stack, as `KitePlayer()` builds it. */
+        /**
+         * A player on this platform's default stack, as `KitePlayer()` builds it.
+         *
+         * @throws PlaybackException where the platform has no default stack, as `KitePlayer()`
+         *   does. Declared, so a Java caller can catch it by its type (#913).
+         */
         @JvmStatic
         @JvmOverloads
+        @Throws(PlaybackException::class)
         public fun create(config: PlayerConfig = PlayerConfig()): KitePlayerJava = KitePlayerJava(KitePlayer(config))
 
         /** Whether [create] can build a player here, as `KitePlayer.isAvailable` says. */

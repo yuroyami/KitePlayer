@@ -563,13 +563,14 @@ jobs:
           TESTMEDIA_STRICT_FFMPEG: "1"
 
       # One module per run, as on macos-jvm, so the wall-clock gates do not compete. The job made
-      # the clips, so a test that finds one missing fails rather than skipping.
+      # the clips, so a test that finds one missing fails rather than skipping. kiteplayer-libass
+      # loads the Linux x64 libass adapter its jar carries, which no job loaded before (#639).
       - name: JVM tests, media-backed modules on the Linux library
         env:
           KITEPLAYER_REQUIRE_TESTMEDIA: "1"
         run: |
           . scripts/test-env.sh
-          for module in kiteplayer-ffmpeg kiteplayer; do
+          for module in kiteplayer-ffmpeg kiteplayer kiteplayer-libass; do
             ./kotlin test -m "$module" -p jvm
           done
 

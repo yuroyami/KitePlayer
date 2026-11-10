@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.network.dash
 import io.github.yuroyami.kiteplayer.network.xml.XmlMini
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotSame
 import kotlin.test.assertNull
@@ -22,6 +23,35 @@ class DashManifestParserTest {
      * was never read, and a Representation's list replaced its set's whole, losing the duration and
      * the Initialization it left to the set.
      */
+    /**
+     * A live SegmentList with a timeline pairs each segment still in the window with its own address
+     * (#743). It paired them by their place among the ones left, so at 8 s, with a 4 s window,
+     * the first address in the list took the timing of the first segment still in the window.
+     */
+    @Test
+    fun aLiveSegmentListPairsEachTimedSegmentWithItsOwnAddress() {
+        val manifest = DashManifestParser.parse(
+            """<MPD type="dynamic" availabilityStartTime="1970-01-01T00:00:00Z" timeShiftBufferDepth="PT4S">
+                <Period start="PT0S"><AdaptationSet contentType="video" mimeType="video/mp4">
+                  <Representation id="v" bandwidth="1"><SegmentList timescale="1">
+                    <Initialization sourceURL="init.mp4"/>
+                    <SegmentTimeline><S t="0" d="2" r="3"/></SegmentTimeline>
+                    <SegmentURL media="s0.m4s"/><SegmentURL media="s1.m4s"/>
+                    <SegmentURL media="s2.m4s"/><SegmentURL media="s3.m4s"/>
+                  </SegmentList></Representation>
+                </AdaptationSet></Period>
+              </MPD>""",
+            "https://cdn.test/live/movie.mpd",
+            DashUrlPolicy.Default,
+        )
+        val period = manifest.periods.single()
+        val plan = assertNotNull(
+            DashManifestParser.timedPlan(manifest, period, period.adaptationSets.single().representations.single(), DashUrlPolicy.Default, 8_000_000L),
+        )
+        val each = plan.segments.map { it.url.substringAfterLast('/') to it.startMicros }
+        assertEquals(listOf("s2.m4s" to 4_000_000L, "s3.m4s" to 6_000_000L), each)
+    }
+
     @Test
     fun aSegmentListInheritsFromThePeriodAndTheSetAttributeByAttribute() {
         fun parse(xml: String) = DashManifestParser.parse(xml, "https://cdn.test/vod/movie.mpd", DashUrlPolicy.Default)

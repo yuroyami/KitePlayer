@@ -878,9 +878,19 @@ public object DashManifestParser {
         val count = list.segments.size
         val timeline = expandTimeline(list.timeline, list.timescale, totalMicros, window, count.toLong(), list.presentationTimeOffset)
         val segments = ArrayList<DashTimedSegment>(count)
+        if (timeline.isNotEmpty()) {
+            // The timeline holds only the segments still in the window, each with its place in the
+            // whole list, so each is paired with the address at that place. Paired by its place among
+            // the ones left, the list's first address took the timing of the first segment still in
+            // the window, and the player asked for segments long gone (#743).
+            for (timed in timeline) {
+                val entry = list.segments.getOrNull(timed.index.toInt()) ?: break
+                segments += DashTimedSegment(entry.url, entry.range, list.startNumber + timed.index, timed.startMicros, timed.durationMicros)
+            }
+            return DashTimedPlan(list.initializationUrl, list.initializationRange, segments)
+        }
         for ((index, entry) in list.segments.withIndex()) {
             val (startMicros, durationMicros) = when {
-                timeline.isNotEmpty() -> timeline.getOrNull(index)?.let { it.startMicros to it.durationMicros } ?: break
                 list.duration != null -> {
                     val each = rescale(list.duration, 1_000_000L, list.timescale, "the segment duration")
                     require(each > 0) { "degenerate segment duration" }

@@ -68,4 +68,47 @@ class OneViewPerStateTest {
         )
         assertEquals(0, ShownStates.count(state), "a view that left the composition is still counted")
     }
+
+    /**
+     * When the first view of a state leaves, the one left takes over the state's own drawings
+     * (#950). The role was decided once, as a view was composed, so the view left stayed a copy, and
+     * with directed play the director never advanced again and the settings no longer reached it.
+     */
+    @Test
+    fun theViewLeftTakesOverWhenTheFirstLeaves() {
+        val state = AudioVizState(clock = { VizClockReading(0L) })
+        state.framesPerSecond = 0
+        val shared = Counting("count")
+        state.drawing = shared
+        val showFirst = androidx.compose.runtime.mutableStateOf(true)
+        val scene = ImageComposeScene(320, 360, Density(1f), content = {
+            Column {
+                if (showFirst.value) {
+                    KiteAudioVizOf(state, Modifier.size(160.dp, 90.dp), post = false) { listOf(Counting("count")) }
+                }
+                KiteAudioVizOf(state, Modifier.size(160.dp, 90.dp), post = false) { listOf(Counting("count")) }
+            }
+        })
+        try {
+            var nanos = 0L
+            repeat(20) {
+                scene.render(nanos).close()
+                nanos += 16_666_667L
+            }
+            val beforeLeaving = shared.steps
+            showFirst.value = false
+            repeat(20) {
+                scene.render(nanos).close()
+                nanos += 16_666_667L
+            }
+            assertEquals(1, ShownStates.count(state), "one view is left")
+            assertTrue(
+                shared.steps - beforeLeaving > 10,
+                "the view left kept drawing a copy: the state's own drawing stepped ${shared.steps - beforeLeaving} times after the first view left",
+            )
+        } finally {
+            scene.close()
+        }
+        assertEquals(0, ShownStates.count(state), "a view that left the composition is still counted")
+    }
 }

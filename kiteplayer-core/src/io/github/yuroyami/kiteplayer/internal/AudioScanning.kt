@@ -40,9 +40,15 @@ internal suspend fun scanMediaAudio(
     // the caller's cancellation is linked to the source's interrupt for the whole scan (#411). A
     // child job is cancelled the moment its parent is, even while this thread is blocked, and its
     // handler runs on the thread that cancelled. It is detached before the session closes, because
-    // an interrupt must never run after the close.
+    // an interrupt must never run after the close, and the detach takes the lock the handler holds
+    // while it interrupts: completing the link does not wait for a handler already running on
+    // another thread, so the close could otherwise run under it (#714).
     val link = currentCoroutineContext()[Job]?.let { Job(it) }
-    link?.invokeOnCompletion { cause -> if (cause != null) session.source.interrupt() }
+    val linkLock = kotlinx.atomicfu.locks.SynchronizedObject()
+    var linked = true
+    link?.invokeOnCompletion { cause ->
+        if (cause != null) kotlinx.atomicfu.locks.synchronized(linkLock) { if (linked) session.source.interrupt() }
+    }
     try {
         val source = session.source
         val stream = if (track != null) {
@@ -135,6 +141,7 @@ internal suspend fun scanMediaAudio(
         currentCoroutineContext().ensureActive()
         throw failure
     } finally {
+        kotlinx.atomicfu.locks.synchronized(linkLock) { linked = false }
         link?.complete()
         session.close()
     }

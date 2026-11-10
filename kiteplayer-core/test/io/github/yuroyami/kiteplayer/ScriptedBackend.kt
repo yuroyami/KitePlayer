@@ -1370,7 +1370,11 @@ internal class ScriptedSource(
     private val interruptGate = kotlinx.coroutines.CompletableDeferred<Unit>()
     private val wedgeReleased = kotlinx.coroutines.CompletableDeferred<Unit>()
 
+    /** Runs inside [interrupt] before it does anything: an interrupt a test holds in flight. */
+    var interrupting: (() -> Unit)? = null
+
     override fun interrupt(): Boolean {
+        interrupting?.invoke()
         interruptCalls++
         if (!faults.interruptSupported) return false
         interruptGate.complete(Unit)

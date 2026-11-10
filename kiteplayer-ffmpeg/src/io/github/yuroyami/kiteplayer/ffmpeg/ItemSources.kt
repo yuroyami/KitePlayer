@@ -25,6 +25,11 @@ import kotlin.time.Duration.Companion.seconds
 internal data class OpenedItem(
     val source: MediaSource,
     val bridge: BlockingMediaIo?,
+    /**
+     * The open's cancel request, which stays bound to the source until its close has finished,
+     * so raising it later is safe at any moment, a close in flight included (#714).
+     */
+    val cancel: OpenInterrupt? = null,
     val hls: HlsLedger? = null,
     /** The variants of an HLS master playlist and the index of the one kept, for the track table. */
     val variants: List<io.github.yuroyami.kiteplayer.StreamVariant> = emptyList(),
@@ -166,19 +171,19 @@ internal suspend fun openItem(item: MediaItem, listDepth: Int = 0): OpenedItem {
                 throw refusal
             }
             OpenedItem(
-                source, bridge, hls?.ledger, hls?.variants.orEmpty(), hls?.selectedVariant,
+                source, bridge, cancel, hls?.ledger, hls?.variants.orEmpty(), hls?.selectedVariant,
                 growing = growing, thumbnails = hls?.thumbnails, times = hls?.times, switch = hls?.switch,
                 suggestedStartUs = hls?.suggestedStartUs,
             )
         }
         // No protocol reads the descriptor now, so no protocol is left to consume its key.
         descriptor != null ->
-            OpenedItem(openCancellably(cancel::interrupt) { MediaSource.open(descriptor, options - "fd", cancel) }, null)
+            OpenedItem(openCancellably(cancel::interrupt) { MediaSource.open(descriptor, options - "fd", cancel) }, null, cancel)
         else -> {
             // Refused before anything is opened, so a scheme with no protocol sends nothing anywhere.
             requireFallbackScheme(item.uri)
             val source = openCancellably(cancel::interrupt) { openUrlFallback(item.uri, item.formatHint, options, cancel) }
-            OpenedItem(source, null, realTimeScheme = fallbackScheme(item.uri) in realTimeSchemes || source.formatName == "sdp")
+            OpenedItem(source, null, cancel, realTimeScheme = fallbackScheme(item.uri) in realTimeSchemes || source.formatName == "sdp")
         }
     }
 }

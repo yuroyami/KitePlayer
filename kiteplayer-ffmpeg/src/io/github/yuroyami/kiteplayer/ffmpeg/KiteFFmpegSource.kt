@@ -105,7 +105,7 @@ public class KiteFFmpegSourceFactory : MediaSourceFactory {
  * own and left out the variants, so the player listed no quality to choose or step to (#543).
  */
 internal fun OpenedItem.toSource(): KiteFFmpegSource =
-    KiteFFmpegSource(source, bridge, hls, variants, selectedVariant, realTimeScheme, listedTitle, growing, thumbnails, times, switch, suggestedStartUs)
+    KiteFFmpegSource(source, bridge, hls, variants, selectedVariant, realTimeScheme, listedTitle, growing, thumbnails, times, switch, suggestedStartUs, cancel)
 
 /**
  * Applies [media]'s filter chains to this source. An audio chain on a build without filter graphs,
@@ -148,6 +148,8 @@ public class KiteFFmpegSource internal constructor(
     private val switch: HlsVariantSwitch? = null,
     /** Where a finished HLS playlist asks to start, in microseconds (#627), or null. */
     private val suggestedStartUs: Long? = null,
+    /** The open's cancel request, bound to [source] until its close has finished (#714). */
+    private val cancel: io.github.yuroyami.kiteffmpeg.OpenInterrupt? = null,
 ) : PlayerMediaSource, RecordingCapable {
 
     override val suggestedStart: kotlin.time.Duration?
@@ -466,9 +468,11 @@ public class KiteFFmpegSource internal constructor(
     }
 
     override fun interrupt(): Boolean {
-        // A single volatile write on the format context; KiteFFmpeg documents this as
-        // the one member callable while another thread is blocked in a read or seek.
-        source.interrupt()
+        // Through the open's cancel request when there is one: its targets run under the lock that
+        // the source's close takes to unbind them, so an interrupt that races a close waits for it
+        // or does nothing, and never reaches a freed format context. The source's own interrupt
+        // reads that context unguarded in the KiteFFmpeg this pins (#714).
+        cancel?.interrupt() ?: source.interrupt()
         // KiteFFmpeg reads that flag before it calls the bridge, never while the bridge waits
         // inside the item's reader, so the bridge ends that wait itself.
         bridge?.interrupt()

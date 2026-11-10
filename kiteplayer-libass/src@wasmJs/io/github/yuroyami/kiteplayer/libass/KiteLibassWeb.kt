@@ -39,6 +39,12 @@ public object KiteLibassWeb {
     private var loading: Boolean = false
     private var loadStarted: TimeMark? = null
 
+    /** The [load] calls in flight. A background load that fails beside one leaves the outcome to it (#897). */
+    private var explicitLoads: Int = 0
+
+    /** True while a failed background load waits for an explicit one to decide. */
+    private var waitingOnExplicit: Boolean = false
+
     /** Bumped by [resetForTesting], so a load started before a reset cannot land after it. */
     private var loadGeneration: Int = 0
 
@@ -79,9 +85,27 @@ public object KiteLibassWeb {
     /** Fetches and instantiates the module at [url]. Calling twice is a no-op. */
     public suspend fun load(url: String = DEFAULT_URL) {
         if (module != null) return
-        val loaded = importModule(url).await<JsAny>()
-        if (module != null) return
-        attach(loaded)
+        val generation = loadGeneration
+        explicitLoads++
+        try {
+            val loaded = importModule(url).await<JsAny>()
+            if (module != null) return
+            attach(loaded)
+        } catch (failure: Throwable) {
+            // The background load already failed and left the waiting engines to this one.
+            if (generation == loadGeneration && module == null && waitingOnExplicit && explicitLoads == 1) {
+                loadFailure = IllegalStateException("kiteass.mjs could not be loaded from $url: ${failure.message ?: failure}")
+            }
+            throw failure
+        } finally {
+            if (generation == loadGeneration) {
+                explicitLoads--
+                if (explicitLoads == 0 && waitingOnExplicit) {
+                    waitingOnExplicit = false
+                    loading = false
+                }
+            }
+        }
     }
 
     /** Starts [load] without waiting; the pending engine polls the outcome on its next call. */
@@ -105,9 +129,16 @@ public object KiteLibassWeb {
             },
             { error ->
                 if (generation == loadGeneration) {
-                    loading = false
-                    if (module == null) {
-                        loadFailure = IllegalStateException("kiteass.mjs could not be loaded from $url: ${webErrorMessage(error)}")
+                    if (module == null && explicitLoads > 0) {
+                        // The default address can fail fast while the page's own load is still on
+                        // its way (#897), as a worker served from another folder than the module
+                        // finds. The waiting engines then wait for that load, under the same deadline.
+                        waitingOnExplicit = true
+                    } else {
+                        loading = false
+                        if (module == null) {
+                            loadFailure = IllegalStateException("kiteass.mjs could not be loaded from $url: ${webErrorMessage(error)}")
+                        }
                     }
                 }
                 null
@@ -134,6 +165,8 @@ public object KiteLibassWeb {
         loadFailure = null
         loading = false
         loadStarted = null
+        explicitLoads = 0
+        waitingOnExplicit = false
         loadGeneration++
         loadDeadline = LOAD_DEADLINE_SECONDS.seconds
         importModule = ::webImportModule

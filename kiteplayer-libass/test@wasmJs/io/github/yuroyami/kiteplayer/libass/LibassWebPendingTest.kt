@@ -137,6 +137,54 @@ class LibassWebPendingTest {
         typesetter.close()
     }
 
+    /**
+     * The default address fails first while the page's own load is still on its way (#897), as a
+     * worker served from another folder than the module finds with a fast 404. The failure was
+     * recorded, and the waiting engine fell back to the built-in styling for good.
+     */
+    @Test
+    fun aDefaultLoadThatFailsFirstWaitsForTheExplicitOne() = runTest {
+        val explicit = deferredPromise()
+        val background = deferredPromise()
+        val loads = mutableListOf(explicit, background)
+        KiteLibassWeb.importModule = { promiseOf(loads.removeFirst()) }
+        val loading = async(start = CoroutineStart.UNDISPATCHED) { KiteLibassWeb.load("https://cdn.example.com/kiteass.mjs") }
+        val typesetter = LibassTypesetter(assertNotNull(LibassEngine.open()))
+        typesetter.openTrack(ByteArray(10))
+
+        rejectPromise(background, "404")
+        runCatching { promiseOf(background).await<JsAny>() }
+        assertNull(typesetter.render(0, frame(1280)), "the engine fell back while the page's own load was on its way")
+
+        val real = fakeLibassModule()
+        resolvePromise(explicit, real)
+        loading.await()
+        assertNull(typesetter.render(100, frame(1280)))
+        assertEquals(listOf("open_track:10"), callsOf(real).split(',').filter { it.startsWith("open_track") })
+        typesetter.close()
+    }
+
+    /** The same race when the page's own load fails too: then the engine falls back, as with one load. */
+    @Test
+    fun aDefaultLoadThatFailsFirstFallsBackWhenTheExplicitOneFailsToo() = runTest {
+        val explicit = deferredPromise()
+        val background = deferredPromise()
+        val loads = mutableListOf(explicit, background)
+        KiteLibassWeb.importModule = { promiseOf(loads.removeFirst()) }
+        val loading = async(start = CoroutineStart.UNDISPATCHED) { runCatching { KiteLibassWeb.load("https://cdn.example.com/kiteass.mjs") } }
+        val typesetter = LibassTypesetter(assertNotNull(LibassEngine.open()))
+        typesetter.openTrack(ByteArray(10))
+
+        rejectPromise(background, "404")
+        runCatching { promiseOf(background).await<JsAny>() }
+        rejectPromise(explicit, "offline")
+        assertTrue(loading.await().isFailure)
+        assertFailsWith<IllegalStateException>("both loads failed, so the engine must fall back") {
+            typesetter.render(0, frame(1280))
+        }
+        typesetter.close()
+    }
+
     @Test
     fun aModuleThatNeverLandsFallsBackAtTheDeadline() = runTest {
         KiteLibassWeb.importModule = { neverResolvingPromise() }

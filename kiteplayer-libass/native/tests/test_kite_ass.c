@@ -201,6 +201,57 @@ int main(void) {
         kt_note("a rejected font leaves the system provider in charge and the line still renders");
     }
 
+    kt_case("a long streamed track keeps only the events near the render time (#881)");
+    {
+        kite_ass *live = kite_ass_open();
+        KT_NOT_NULL(live);
+        if (live) {
+            kite_ass_set_frame(live, 640, 360, 640, 360, 0, 0, 0, 0, 1.0, 1.0);
+            KT_EQ_INT(kite_ass_open_track(live, HEADER, (int) strlen(HEADER)), 1);
+            char chunk[96];
+            const unsigned char *packed = NULL;
+            int packed_size = 0;
+            int most = 0;
+            /* An hour of one cue a second, each shown for half a second and rendered as it shows. */
+            for (int i = 0; i < 3600; i++) {
+                snprintf(chunk, sizeof(chunk), "%d,0,Default,,0,0,0,,Line %d", i, i);
+                kite_ass_add_event(live, chunk, (int) strlen(chunk), (long long) i * 1000, 500);
+                kite_ass_render(live, (long long) i * 1000 + 250, &packed, &packed_size);
+                if (live->track->n_events > most) most = live->track->n_events;
+            }
+            KT_CHECKF(most <= 32, "the track held %d events at once, for a 30 s window of one a second", most);
+
+            kt_case("a seek back clears the track and the same events are taken again");
+            kite_ass_clear_events(live);
+            snprintf(chunk, sizeof(chunk), "%d,0,Default,,0,0,0,,Line %d", 5, 5);
+            kite_ass_add_event(live, chunk, (int) strlen(chunk), 5000, 500);
+            KT_EQ_INT(live->track->n_events, 1);
+            KT_EQ_INT(kite_ass_render(live, 5250, &packed, &packed_size), 1);
+            KT_CHECKF(inspect(packed, packed_size).visible > 100, "the refed line drew nothing");
+            kite_ass_close(live);
+        }
+    }
+
+    kt_case("a whole document keeps every event, so a seek back still finds the first (#881)");
+    {
+        char long_script[4096];
+        snprintf(long_script, sizeof(long_script), "%s%s%s", HEADER,
+                 "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Opening\n",
+                 "Dialogue: 0,1:00:00.00,1:00:01.00,Default,,0,0,0,,An hour on\n");
+        kite_ass *whole = kite_ass_open();
+        KT_NOT_NULL(whole);
+        if (whole) {
+            kite_ass_set_frame(whole, 640, 360, 640, 360, 0, 0, 0, 0, 1.0, 1.0);
+            KT_EQ_INT(kite_ass_open_document(whole, long_script, strlen(long_script)), 1);
+            const unsigned char *packed = NULL;
+            int packed_size = 0;
+            KT_EQ_INT(kite_ass_render(whole, 3600500, &packed, &packed_size), 1);
+            KT_EQ_INT(kite_ass_render(whole, 1500, &packed, &packed_size), 1);
+            KT_EQ_INT(whole->track->n_events, 2);
+            kite_ass_close(whole);
+        }
+    }
+
     kite_ass_close(document);
     kite_ass_close(streamed);
     kite_ass_close(NULL);

@@ -131,6 +131,13 @@ static inline void kite_ass_drop_track(kite_ass *self) {
     self->force_next = 1;
 }
 
+/* How long a streamed event stays in libass after it ends, in milliseconds: the engine's own cue
+ * window, CUE_PRUNE_BEHIND_MICROS in PlaybackCore. libass prunes nothing unless asked, and every
+ * render walks every event, so a long or live track grew without bound (#881). A seek clears the
+ * track and the demuxer sends the events again, and a pruned event's ReadOrder is forgotten with
+ * it, so a refed event is taken. */
+#define KITE_ASS_STREAM_PRUNE_MS 30000
+
 /* A fresh track from a container header. An empty header is legal: events then render with
  * libass' default style, which beats rendering nothing. Returns 0 only on allocation failure. */
 static inline int kite_ass_open_track(kite_ass *self, const char *header, int size) {
@@ -139,6 +146,7 @@ static inline int kite_ass_open_track(kite_ass *self, const char *header, int si
     self->track = ass_new_track(self->library);
     if (!self->track) return 0;
     if (header && size > 0) ass_process_codec_private(self->track, header, size);
+    ass_configure_prune(self->track, KITE_ASS_STREAM_PRUNE_MS);
     return 1;
 }
 
@@ -153,6 +161,7 @@ static inline int kite_ass_open_document(kite_ass *self, const char *script, siz
     copy[size] = '\0';
     self->track = ass_read_memory(self->library, copy, size, NULL);
     free(copy);
+    /* No pruning here: a whole script cannot send its events again, and a seek back needs them. */
     return self->track != NULL;
 }
 

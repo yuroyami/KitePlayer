@@ -9,6 +9,7 @@ import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PlaybackError
 import io.github.yuroyami.kiteplayer.PlaybackException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
@@ -129,7 +130,7 @@ internal suspend fun openItem(item: MediaItem, listDepth: Int = 0): OpenedItem {
         // The custom AVIO bridge: the reader carries the media, with no path and no FFmpeg protocol.
         io != null -> {
             // Every bridge of this source lives on it, the bridges of an HLS stream's segments too.
-            val lifetime = Job()
+            val lifetime = sourceLifetime()
             val playlist = playlistText != null ||
                 looksLikeHls(item.formatHint, io.contentType, io.location ?: item.uri) ||
                 (io is SniffedMediaIo && startsLikeHls(io.head))
@@ -330,3 +331,13 @@ internal fun urlFallbackOptions(uri: String, options: Map<String, String>, forma
 
 /** How long one read of the URL fallback waits for bytes over the network. */
 internal val URL_FALLBACK_READ_TIMEOUT: Duration = 10.seconds
+
+/**
+ * The parent of every read, seek and nested open of one source. A supervisor, so one reader that
+ * throws, as a segment's open over a failing network does, fails that call alone and the next
+ * segment still opens (#718). With kotlinx.coroutines 1.11 a plain `Job` behaves the same, since a
+ * `runBlocking` that throws hands the failure to its caller and not to its parent; the supervisor
+ * keeps that true whatever the bridge runs, and `SourceLifetimeTest` holds it. The bridge's
+ * interrupt still cancels it, and with it every call in flight.
+ */
+internal fun sourceLifetime(): Job = SupervisorJob()

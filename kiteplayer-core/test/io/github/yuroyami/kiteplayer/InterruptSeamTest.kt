@@ -103,6 +103,39 @@ class InterruptSeamTest {
         withTimeout(30.seconds) { harness.core.closeAndAwait() }
     }
 
+    /**
+     * A seek that ignores its interrupt past the grace time is joined before its source closes
+     * (#711). The seek ran in a job of its own that the release did not wait for, so the session
+     * failed and closed its source while the seek was still inside it.
+     */
+    @Test
+    fun aSeekThatIgnoresItsInterruptIsJoinedBeforeTheSourceCloses() = runTest(timeout = 60.seconds) {
+        val faults = FaultPlan().apply {
+            seekWedges = true
+            interruptIgnored = true
+        }
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 5_000_000), faults = faults)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(200.milliseconds)
+
+        val seeking = async { harness.core.seek(Pts(2_000_000), SeekMode.Precise) }
+        try {
+            // Past the 10 s deadline and the 2 s grace: the session has given up on the seek.
+            harness.run(13.seconds)
+            assertTrue(harness.source.interruptCalls > 0, "the deadline never reached for the interrupt seam")
+            assertTrue(!harness.source.closedDuringCall, "the source closed while the seek was still inside it")
+        } finally {
+            // A wedge left in place spins for ever and the test would never end.
+            harness.source.releaseWedge()
+        }
+        harness.run(1.seconds)
+        assertIs<SeekResult.Rejected>(seeking.await())
+        assertTrue(harness.source.closed, "the source never closed")
+        assertTrue(!harness.source.closedDuringCall, "the source closed while the seek was still inside it")
+        harness.close()
+    }
+
     @Test
     fun aSourceThatCannotInterruptKeepsTheOldUnboundedWaitAndStillLands() = runTest(timeout = 20.seconds) {
         // The world before interruptible opens: interrupt() answers false. The engine must keep waiting, and

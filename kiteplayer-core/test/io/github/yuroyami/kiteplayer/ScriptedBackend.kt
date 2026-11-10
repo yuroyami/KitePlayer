@@ -649,6 +649,12 @@ internal class FaultPlan(
     /** False models a source whose interrupt() cannot help. */
     var interruptSupported: Boolean = true
 
+    /**
+     * True models a source whose interrupt() answers that it can help and then does not: a wedged
+     * call stays wedged until [ScriptedSource.releaseWedge] (#711).
+     */
+    var interruptIgnored: Boolean = false
+
     /** True makes the sink's drain never finish, which the core must bound rather than wait out. */
     var drainHangs: Boolean = false
 
@@ -1391,9 +1397,16 @@ internal class ScriptedSource(
         interrupting?.invoke()
         interruptCalls++
         if (!faults.interruptSupported) return false
-        interruptGate.complete(Unit)
+        if (!faults.interruptIgnored) interruptGate.complete(Unit)
         return true
     }
+
+    /** Calls inside a wedge now. */
+    private var wedgedCalls = 0
+
+    /** True once [close] ran while a call was still wedged inside this source (#711). */
+    var closedDuringCall: Boolean = false
+        private set
 
     /** Lets a wedged call return NORMALLY, the way a slow-but-honest scan eventually finishes. */
     fun releaseWedge() {
@@ -1407,10 +1420,15 @@ internal class ScriptedSource(
      */
     private suspend fun wedge(what: String) {
         if (wedgedAtNanos == null) wedgedAtNanos = clock?.nanos()
-        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-            while (!interruptGate.isCompleted && !wedgeReleased.isCompleted) {
-                kotlinx.coroutines.delay(10)
+        wedgedCalls++
+        try {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                while (!interruptGate.isCompleted && !wedgeReleased.isCompleted) {
+                    kotlinx.coroutines.delay(10)
+                }
             }
+        } finally {
+            wedgedCalls--
         }
         if (interruptGate.isCompleted) error("the scripted $what was interrupted")
     }
@@ -1652,6 +1670,7 @@ internal class ScriptedSource(
     }
 
     override fun close() {
+        if (wedgedCalls > 0) closedDuringCall = true
         closed = true
     }
 }

@@ -4297,7 +4297,10 @@ internal class PlaybackCore(
         // NonCancellable, so nothing half built survives. Ownership transfers to OpenSession only
         // at the successful return.
         val rollback = mutableListOf<suspend () -> Unit>()
-        rollback += { withContext(dispatchers.demux) { backendSession.close() } }
+        rollback += {
+            joinSourceCalls()
+            withContext(dispatchers.demux) { backendSession.close() }
+        }
         try {
             // Backend degradations (hardware fallback, colour approximation) flow into the same
             // warning stream everything else uses, instead of a backend-private default.
@@ -4900,6 +4903,34 @@ internal class PlaybackCore(
      * @throws PlaybackException with [PlaybackError.SourceUnavailable] when the seek did not finish
      *         in time, or failed.
      */
+    /**
+     * Calls into a source that outlived their grace time, a container seek or a live resume that
+     * ignored its interrupt (#711). They run in jobs of their own, outside the session's, so the
+     * release did not wait for them and a seek still inside the backend could run while its source
+     * closed. Actor only.
+     */
+    private val sourceCalls = mutableListOf<Job>()
+
+    /** Keeps [call] for [joinSourceCalls] when it is still running after the caller gave up on it. */
+    private fun keepIfRunning(call: Job) {
+        sourceCalls.removeAll { !it.isActive }
+        if (call.isActive) sourceCalls += call
+    }
+
+    /**
+     * Waits, up to [SOURCE_CALL_JOIN], for every call [keepIfRunning] kept, before a source closes. A
+     * call that ignores its interrupt for longer is left, and the close goes ahead, rather than a
+     * release that never ends.
+     */
+    private suspend fun joinSourceCalls() {
+        sourceCalls.removeAll { !it.isActive }
+        if (sourceCalls.isEmpty()) return
+        withContext(NonCancellable) {
+            withTimeoutOrNull(SOURCE_CALL_JOIN) { sourceCalls.toList().forEach { it.join() } }
+        }
+        sourceCalls.removeAll { !it.isActive }
+    }
+
     private suspend fun boundedContainerSeek(source: PlayerMediaSource, target: Pts, preemptible: Boolean) {
         val call = scope.async(dispatchers.demux) { runCatching { source.seekToKeyframe(target) } }
         var waited = Duration.ZERO
@@ -4922,6 +4953,7 @@ internal class PlaybackCore(
                 withTimeoutOrNull(SEEK_INTERRUPT_GRACE) { call.await() }
                     ?: Result.failure(IllegalStateException("the interrupted container seek did not return within $SEEK_INTERRUPT_GRACE"))
             }
+            keepIfRunning(call)
             if (preemptedHere) throw OpenPreempted()
             if (outcome.isSuccess) {
                 outcome = Result.failure(IllegalStateException("the container seek did not finish within $SEEK_NATIVE_DEADLINE"))
@@ -7805,6 +7837,7 @@ internal class PlaybackCore(
             else -> withTimeoutOrNull(SEEK_INTERRUPT_GRACE) { resumeCall.await() }
                 ?: Result.failure(IllegalStateException("the interrupted resume did not return within $SEEK_INTERRUPT_GRACE"))
         }
+        keepIfRunning(resumeCall)
         outcome.exceptionOrNull()?.let { failure ->
             rejoinLive(hold, "the sender would not play on after the pause${causeDetail(failure)}")
             return
@@ -12337,6 +12370,7 @@ internal class PlaybackCore(
                         ),
                     )
             }
+            keepIfRunning(seekCall)
             seekOutcome.exceptionOrNull()?.let { failure ->
                 // The source is poisoned mid-seek; nothing on it can be trusted again. Fail the
                 // session typed instead of freezing the player, and answer every waiting caller.
@@ -13309,6 +13343,7 @@ internal class PlaybackCore(
             // Closes the sink too: the audio path owns the device it was given. A gapless handoff
             // gave both to the next item, which closes them.
             if (session.ownsAudio) release("audio playback") { session.audio?.close() }
+            joinSourceCalls()
             release("backend session") { session.backendSession.close() }
             if (releaseFailures.isNotEmpty()) {
                 warn(PlaybackWarning.ResourcesNotReleased(releaseFailures.joinToString("; ")))
@@ -16466,6 +16501,9 @@ internal class PlaybackCore(
 
         /** How long an interrupted seek is given to actually return before the session fails. */
         val SEEK_INTERRUPT_GRACE = 2.seconds
+
+        /** How long a source's close waits for a call into it that outlived its grace time (#711). */
+        val SOURCE_CALL_JOIN = 5.seconds
 
         /**
          * How often a paused player calls a held live sender again (#441). The source sends a

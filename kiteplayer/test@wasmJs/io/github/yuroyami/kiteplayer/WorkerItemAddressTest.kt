@@ -16,8 +16,11 @@ private external fun recordingWorker(): JsAny
 @JsFun("(w) => w.posted")
 private external fun lastPosted(worker: JsAny): JsAny?
 
-/** [relative] read against the page the test runs in, as the browser reads it. */
-@JsFun("(relative) => new URL(relative, document.baseURI).href")
+/**
+ * [relative] read against the page the test runs in, as the browser reads it. Node has no page, and
+ * there the player leaves an address as it is, so this does too.
+ */
+@JsFun("(relative) => typeof document === 'undefined' ? relative : new URL(relative, document.baseURI).href")
 private external fun onThePage(relative: String): String
 
 /**

@@ -499,6 +499,9 @@ public class KitePlayerWorker private constructor(
             uri = pageAddress(media.uri),
             externalSubtitles = media.externalSubtitles.map { it.copy(uri = pageAddress(it.uri)) },
             externalAudio = media.externalAudio.map { it.copy(uri = pageAddress(it.uri)) },
+            // A relative address has no scheme in the worker, so its reader never opens it (#894).
+            thumbnails = media.thumbnails?.let { it.copy(uri = pageAddress(it.uri)) },
+            linkedFiles = media.linkedFiles.map { it.copy(uri = pageAddress(it.uri)) },
         )
     }
 

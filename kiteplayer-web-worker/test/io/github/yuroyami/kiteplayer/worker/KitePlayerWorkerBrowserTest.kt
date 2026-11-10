@@ -951,15 +951,22 @@ class KitePlayerWorkerBrowserTest {
 }
 
 /**
- * The worker, codec and clip addresses that karma.config.d/worker.js hands the page, the clips'
- * path as the config gives it, relative to the page, and the libass module's address. Null outside
- * karma.
+ * The worker, codec and clip addresses that the browser runner hands the page, the clips' path as
+ * the config gives it, relative to the page, and the libass module's address. Null in Node and in
+ * the toolchain's own browser runner, neither of which can host the worker player, so those skip.
+ * In the page scripts/web-tests serves, the config must be there: its absence is a broken mount,
+ * and it throws rather than let every test of this class pass with nothing checked (#727).
  */
 @JsFun(
     """() => {
+        if (typeof document === 'undefined') return null;
         const karma = globalThis.__karma__;
         const worker = karma && karma.config ? karma.config.kiteWorker : undefined;
-        if (!worker || typeof document === 'undefined') return null;
+        if (!worker) {
+            if (globalThis.__kiteWebTests !== true) return null;
+            throw new Error('the browser runner gave this page no kiteWorker config, so the worker player cannot be tested: ' +
+                'check the worker mount in scripts/web-tests/run.py');
+        }
         const absolute = (p) => new URL(p, document.baseURI).href;
         return [absolute(worker.worker), absolute(worker.codec), absolute(worker.media), worker.media, absolute(worker.libass)].join("\n");
     }""",

@@ -96,11 +96,18 @@ private suspend fun fetchBytes(url: String): ByteArray? {
 
 private const val CHUNK_BYTES = 8192
 
-/** The module and clip paths that karma.config.d/format-matrix.js hands the page, or null outside karma. */
+/**
+ * The module and clip paths that the browser runner hands the page, or null in Node and in the
+ * toolchain's own browser runner, which have neither. In the page scripts/web-tests serves they
+ * must be there, so a broken mount fails rather than passing the whole matrix unchecked (#727).
+ */
 @JsFun(
     """() => {
         const karma = globalThis.__karma__;
         const matrix = karma && karma.config ? karma.config.kiteMatrix : undefined;
+        if (!matrix && globalThis.__kiteWebTests === true) {
+            throw new Error('the browser runner gave this page no kiteMatrix config: check the matrix mount in scripts/web-tests/run.py');
+        }
         return matrix ? matrix.module + "\n" + matrix.media : null;
     }""",
 )

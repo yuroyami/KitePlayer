@@ -75,6 +75,11 @@ import kotlin.time.Duration.Companion.seconds
  */
 public class AudioPlayback(
     private val sink: AudioSink,
+    /**
+     * The clock [sink] dates its anchors on. The default is right for the shipped sinks built with
+     * their own default clocks, `DesktopAudioSink`, `AudioTrackSink` and `CoreAudioSink`, which
+     * date on the same time base (#829). A sink built with another clock needs that clock here.
+     */
     private val clock: MonotonicClock = MonotonicClock.System,
     /**
      * How much decoded audio to hold ahead of the device. Sized so the device's own period never

@@ -24,12 +24,27 @@ public interface MonotonicClock {
     public fun nanos(): Long
 
     public companion object {
-        /** The platform's own monotonic clock. This is the production implementation. */
+        /**
+         * The platform's own monotonic clock, on the time base the platform's audio sinks date
+         * their anchors on: `System.nanoTime()` on the JVM and Android, as `DesktopAudioSink` and
+         * `AudioTrackSink` use, and the host time on Apple platforms, as `CoreAudioSink` uses, so
+         * `AudioPlayback` with its default clock and a shipped sink reads one clock (#829). It used
+         * to count from its own first reading, and the position was then off by about the machine's
+         * uptime. Elsewhere it counts from its first reading, which no shipped sink depends on.
+         */
         public val System: MonotonicClock = SystemMonotonicClock
     }
 }
 
 private object SystemMonotonicClock : MonotonicClock {
+    override fun nanos(): Long = systemMonotonicNanos()
+}
+
+/** The platform's monotonic nanoseconds, on its audio sinks' time base where it has one. */
+internal expect fun systemMonotonicNanos(): Long
+
+/** For the platforms with no shipped audio sink: nanoseconds since this clock's first reading. */
+internal object FirstReadingClock {
     private val origin = TimeSource.Monotonic.markNow()
-    override fun nanos(): Long = origin.elapsedNow().inWholeNanoseconds
+    fun nanos(): Long = origin.elapsedNow().inWholeNanoseconds
 }

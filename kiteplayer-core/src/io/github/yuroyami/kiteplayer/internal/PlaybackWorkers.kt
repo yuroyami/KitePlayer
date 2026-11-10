@@ -396,3 +396,24 @@ internal class AttachableRenderer : VideoRenderer {
     /** Closes nothing: the application owns what it attached, and the engine never took it over. */
     override fun close() = Unit
 }
+
+/**
+ * Asks every worker of [workers] to park and waits for all of them against one shared [timeout],
+ * answering the ones that did not park, in order (#712). Waiting for each in turn with a timeout
+ * of its own made a release or a seek with three stuck lanes wait about three times the deadline
+ * before it could cancel anything or say that it was refused.
+ */
+internal suspend fun quiesceAll(workers: List<Worker>, timeout: Duration): List<Worker> {
+    for (worker in workers) worker.requestQuiesce()
+    val waiting = workers.toMutableList()
+    // One timeout around every wait, in the coroutine's own time, so a test's virtual clock sees
+    // the same single deadline the engine does.
+    kotlinx.coroutines.withTimeoutOrNull(timeout) {
+        while (waiting.isNotEmpty()) {
+            waiting.first().awaitQuiesced(Duration.INFINITE)
+            waiting.removeAt(0)
+        }
+    }
+    // A worker that parked or ended just as the deadline passed still counts as parked.
+    return waiting.filterNot { worker -> worker.awaitQuiesced(Duration.ZERO) }
+}

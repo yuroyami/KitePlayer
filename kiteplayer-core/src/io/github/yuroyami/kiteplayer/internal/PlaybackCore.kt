@@ -6780,13 +6780,7 @@ internal class PlaybackCore(
         }
 
         val audioWorkers = listOfNotNull(session.audioDecodeWorker, session.audioFeedWorker)
-        var parked = true
-        for (worker in audioWorkers) {
-            if (!worker.quiesce(QUIESCE_DEADLINE)) {
-                parked = false
-                break
-            }
-        }
+        val parked = quiesceAll(audioWorkers, QUIESCE_DEADLINE).isEmpty()
         if (!parked) {
             audioWorkers.forEach { it.release(requestedEpoch) }
             preparedPath?.playback?.close()
@@ -6941,7 +6935,7 @@ internal class PlaybackCore(
         }
 
         val audioWorkers = listOfNotNull(active.audioDecodeWorker, active.audioFeedWorker)
-        if (!audioWorkers.all { it.quiesce(QUIESCE_DEADLINE) }) {
+        if (quiesceAll(audioWorkers, QUIESCE_DEADLINE).isNotEmpty()) {
             audioWorkers.forEach { it.release(requestedEpoch) }
             prepared.playback.close()
             refused("and the sound did not reach a safe boundary within $QUIESCE_DEADLINE")
@@ -12511,9 +12505,8 @@ internal class PlaybackCore(
     private suspend fun unparkedWorkers(session: OpenSession): List<String> {
         // Every flag first, then every acknowledgement: the workers park in parallel, so the whole
         // pipeline costs one worker's residual nap rather than the sum of all of them.
-        val workers = session.workers
-        for (worker in workers) worker.requestQuiesce()
-        val unparked = workers.filterNot { worker -> worker.awaitQuiesced(QUIESCE_DEADLINE) }.map { it.name }
+        // One deadline for all of them, not one each (#712).
+        val unparked = quiesceAll(session.workers, QUIESCE_DEADLINE).map { it.name }
         seekFlushCycles++
         return unparked
     }
@@ -13267,7 +13260,8 @@ internal class PlaybackCore(
             // it is doing costs nothing. Best effort: a source that cannot interrupt returns
             // false and the old ordering stands.
             runCatching { session.source.interrupt() }
-            session.workers.forEach { worker -> runCatching { worker.quiesce(QUIESCE_DEADLINE) } }
+            // Every lane parks against one deadline, so three stuck lanes cost it once, not three times (#712).
+            runCatching { quiesceAll(session.workers, QUIESCE_DEADLINE) }
             session.jobs.forEach { it.cancel() }
             session.jobs.forEach { runCatching { it.join() } }
             // The demux worker is joined, so no packet of the recording is mid-write, and the file

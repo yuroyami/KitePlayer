@@ -11,8 +11,10 @@ import java.util.zip.ZipInputStream
  *
  * A build finds a chain in three places, in this order:
  * 1. `KITEPLAYER_LIBASS_ROOT`, a KiteFFmpeg `native-libs/deps` folder.
- * 2. `../KiteFFmpeg/native-libs/deps` next to this repository.
- * 3. The pinned release asset `ass-chain-<target>.zip` of KiteFFmpeg, downloaded into [cacheDir].
+ * 2. `../KiteFFmpeg/native-libs/deps` next to this repository, except in a [releaseBuild].
+ * 3. The pinned release asset `ass-chain-<target>.zip` of KiteFFmpeg, downloaded into the cache.
+ *
+ * A local chain is checked against the pin, and a release refuses one that differs (#931).
  */
 object AssChain {
     const val RELEASE_TAG: String = "ass-chain-r2"
@@ -45,28 +47,81 @@ object AssChain {
         val libDir: File get() = root.resolve("lib")
     }
 
+    /** The chain root that `KITEPLAYER_LIBASS_ROOT` names on purpose, or null. */
+    private fun chosenRoot(): File? =
+        System.getenv("KITEPLAYER_LIBASS_ROOT")?.takeIf { it.isNotBlank() }?.let { File(it).absoluteFile.normalize() }
+
+    /**
+     * A release build: one that must link every half. A release links the pinned chain and never
+     * the sibling checkout's, whose recipe can have moved past the pin (#931).
+     */
+    val releaseBuild: Boolean get() = System.getenv("KITEPLAYER_LIBASS_REQUIRE_ALL_HOST_JNI") == "true" ||
+        System.getenv("KITEPLAYER_LIBASS_REQUIRE_ANDROID_JNI") == "true"
+
     /** The local chain roots, in lookup order. [repoRoot] is the KitePlayer checkout. */
     fun localRoots(repoRoot: File): List<File> = listOfNotNull(
-        System.getenv("KITEPLAYER_LIBASS_ROOT")?.takeIf { it.isNotBlank() }?.let { File(it).absoluteFile.normalize() },
-        repoRoot.resolve("../KiteFFmpeg/native-libs/deps").normalize().takeIf { it.isDirectory },
+        chosenRoot(),
+        repoRoot.resolve("../KiteFFmpeg/native-libs/deps").normalize().takeIf { it.isDirectory && !releaseBuild },
     )
 
     /**
      * The chain of [dirName], local or downloaded into [cacheDir]. Returns null when no chain exists
      * locally and [pins] has no line for it.
+     *
+     * A local chain is compared, archive by archive, with the pinned asset, which carries the
+     * archives as the chain build wrote them (#931). A difference fails a [releaseBuild] and is a
+     * loud warning otherwise, since a developer rebuilding the chain is the reason a local one exists.
      */
     fun find(dirName: String, repoRoot: File, pins: Map<String, String>, cacheDir: File, log: (String) -> Unit): Chain? {
-        localRoots(repoRoot).map { it.resolve("$dirName/ass-chain") }
+        val local = localRoots(repoRoot).map { it.resolve("$dirName/ass-chain") }
             .firstOrNull { it.resolve("lib/libass.a").isFile }
-            ?.let { return Chain(dirName, it) }
-        val pin = pins[dirName] ?: return null
-        val fetched = cacheDir.resolve(dirName)
+        val pin = pins[dirName]
+        if (local != null) {
+            if (pin != null) checkAgainstPin(Chain(dirName, local), pin, cacheDir.resolve(dirName), log)
+            return Chain(dirName, local)
+        }
+        if (pin == null) return null
+        return Chain(dirName, fetchPinned(dirName, pin, cacheDir.resolve(dirName), log))
+    }
+
+    private fun fetchPinned(dirName: String, pin: String, fetched: File, log: (String) -> Unit): File {
         val marker = fetched.resolve(".sha256")
         if (!marker.isFile || marker.readText().trim() != pin || !fetched.resolve("lib/libass.a").isFile) {
             fetch(dirName, pin, fetched, log)
             marker.writeText(pin + "\n")
         }
-        return Chain(dirName, fetched)
+        return fetched
+    }
+
+    /** The archives of [local] that differ from the pinned asset's, or that only one side has. */
+    private fun checkAgainstPin(local: Chain, pin: String, fetched: File, log: (String) -> Unit) {
+        val pinned = try {
+            Chain(local.dirName, fetchPinned(local.dirName, pin, fetched, log))
+        } catch (e: BuildFailure) {
+            if (releaseBuild) throw e
+            log("WARNING: the local ${local.dirName} chain at ${local.root} cannot be checked against its pin: ${e.message}")
+            return
+        }
+        val differs = differingArchives(local, pinned)
+        if (differs.isEmpty()) return
+        val message = "The local ${local.dirName} chain at ${local.root} is not the pinned one in " +
+            "kiteplayer-libass/ass-chain.sha256: ${differs.joinToString()} differ. Package and release the chain " +
+            "with KiteFFmpeg's scripts/package-ass-chain.sh and move the pin, or unset KITEPLAYER_LIBASS_ROOT."
+        if (releaseBuild) throw BuildFailure(message)
+        log("WARNING: $message This build links the local chain.")
+    }
+
+    /** The names of the `.a` archives in `lib` whose bytes differ between [a] and [b], or that only one has. */
+    fun differingArchives(a: Chain, b: Chain): List<String> {
+        fun archives(chain: Chain) = chain.libDir.listFiles().orEmpty()
+            .filter { it.isFile && it.name.endsWith(".a") }.associateBy { it.name }
+        val left = archives(a)
+        val right = archives(b)
+        return (left.keys + right.keys).sorted().filter { name ->
+            val x = left[name]
+            val y = right[name]
+            x == null || y == null || x.length() != y.length() || sha256(x) != sha256(y)
+        }
     }
 
     /** Downloads one chain asset, checks its pin and unpacks it into [outputDir]. */

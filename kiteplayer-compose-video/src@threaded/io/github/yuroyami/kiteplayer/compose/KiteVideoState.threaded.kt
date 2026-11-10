@@ -80,6 +80,12 @@ public actual class KiteVideoState internal constructor(
     internal val sphere: MutableState<SphereView?> = mutableStateOf(null)
 
     /**
+     * Whether the flash guard is on, under the same draw-phase law: a frame's factor is used only
+     * while it is, so turning the guard off redraws a held, dimmed picture at full light (#737).
+     */
+    internal val flashGuardOn: MutableState<Boolean> = mutableStateOf(false)
+
+    /**
      * The engine's picture controls, pre-baked into the one [androidx.compose.ui.graphics.ColorFilter]
      * the draw phase applies to the video image (never to subtitles). Null is neutral, and the
      * usual case, so normal playback pays nothing. Baked HERE, on the publishing thread, because
@@ -105,7 +111,9 @@ public actual class KiteVideoState internal constructor(
      */
     internal fun pictureFilterFor(frame: KiteVideoFrame): androidx.compose.ui.graphics.ColorFilter? {
         val plain = videoColorFilter.value
-        return if (frame.dim < 1f) dimmedPictureFilter(frame.dim) else plain
+        // Read every time, so turning the guard off redraws a paused picture that was held dim.
+        val guarded = flashGuardOn.value
+        return if (guarded && frame.dim < 1f) dimmedPictureFilter(frame.dim) else plain
     }
 
     /**
@@ -174,6 +182,7 @@ public actual class KiteVideoState internal constructor(
         publishScaleMode = { mode -> scaleMode.value = mode },
         publishTransform = { newest -> transform.value = newest },
         publishSphere = { newest -> sphere.value = newest },
+        publishFlashGuardOn = { on -> flashGuardOn.value = on },
         publishAdjustments = { adjustments ->
             pictureAdjustments = adjustments
             videoColorFilter.value = if (adjustments.isIdentity) {

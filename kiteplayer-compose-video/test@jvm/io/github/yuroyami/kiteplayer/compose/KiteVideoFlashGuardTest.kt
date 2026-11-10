@@ -179,12 +179,30 @@ class KiteVideoFlashGuardTest {
         try {
             val image = ImageBitmap(4, 4)
             fun frame(dim: Float) = KiteVideoFrame(image, VideoSize(4, 4), 0, dim = dim)
+            state.renderer.setFlashGuard(FlashGuard.On)
             assertEquals(null, state.pictureFilterFor(frame(1f)), "outside a run, neutral controls draw with no filter")
             assertTrue(abs(drawnWhite(state.pictureFilterFor(frame(0.5f))) - 128) <= 1, "a run draws at its factor")
             assertTrue(abs(drawnWhite(state.pictureFilterFor(frame(0.25f))) - 64) <= 1, "and at each new one")
             state.renderer.setAdjustments(VideoAdjustments(contrast = 1.5f))
             assertTrue(abs(drawnWhite(state.pictureFilterFor(frame(0.5f))) - 159) <= 1, "with the controls folded in")
             assertEquals(255, drawnWhite(state.pictureFilterFor(frame(1f))), "and only the controls outside a run")
+        } finally {
+            state.renderer.close()
+        }
+    }
+
+    /** A paused picture held dim during a strobe brightens when the guard is turned off (#737). */
+    @Test
+    fun turningTheGuardOffDrawsAHeldDimPictureAtFullLight() {
+        val state = KiteVideoState()
+        try {
+            val held = KiteVideoFrame(ImageBitmap(4, 4), VideoSize(4, 4), 0, dim = 0.35f)
+            state.renderer.setFlashGuard(FlashGuard.On)
+            assertTrue(abs(drawnWhite(state.pictureFilterFor(held)) - 89) <= 1, "held at its factor while the guard is on")
+            state.renderer.setFlashGuard(FlashGuard.Off)
+            assertEquals(null, state.pictureFilterFor(held), "the same held frame at full light once it is off")
+            state.renderer.setFlashGuard(FlashGuard.FollowSystem)
+            assertEquals(null, state.pictureFilterFor(held), "and while it follows a system setting it cannot read")
         } finally {
             state.renderer.close()
         }

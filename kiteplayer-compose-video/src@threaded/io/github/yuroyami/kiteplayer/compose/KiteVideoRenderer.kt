@@ -135,6 +135,11 @@ internal class KiteVideoRenderer(
     private val publishFilterQuality: (androidx.compose.ui.graphics.FilterQuality) -> Unit = {},
     /** Publishes the 360 degree picture to draw a view into, or null for the flat picture (#460). */
     private val publishSphere: (SphereView?) -> Unit = {},
+    /**
+     * Publishes whether the flash guard is on, which the draw phase reads before it uses a frame's
+     * factor, so a picture held dimmed brightens when the guard is turned off (#737).
+     */
+    private val publishFlashGuardOn: (Boolean) -> Unit = {},
     /** Optional platform GPU tier. Software frames still use this renderer's worker. */
     private val hardwareRenderer: KiteVideoHardwareRenderer? = null,
     /** The flash guard's clock, in nanoseconds: when each converted picture is about to show. */
@@ -157,6 +162,7 @@ internal class KiteVideoRenderer(
     override fun setFlashGuard(mode: io.github.yuroyami.kiteplayer.FlashGuard) {
         // A change of mode starts the history afresh, as taking the picture off does.
         if (flashGuard.getAndSet(mode) != mode) guardForgets.value = true
+        publishFlashGuardOn(mode == io.github.yuroyami.kiteplayer.FlashGuard.On)
         hardwareRenderer?.setFlashGuard(mode)
     }
 

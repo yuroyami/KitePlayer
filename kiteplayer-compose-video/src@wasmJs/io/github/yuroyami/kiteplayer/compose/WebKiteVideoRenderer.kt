@@ -119,7 +119,7 @@ internal class WebKiteVideoRenderer(
     private var sphere: SphereView? = null
 
     /** How the picture is drawn now, for the pass. */
-    val look: WebLook get() = WebLook(scaleMode, transform, adjustments, cubic, sphere)
+    val look: WebLook get() = WebLook(scaleMode, transform, adjustments, cubic, sphere, guarded = flashGuard == FlashGuard.On)
 
     /**
      * Moves on whenever the next draw would differ: a frame accepted, the picture taken off, a cue,
@@ -348,6 +348,8 @@ internal class WebKiteVideoRenderer(
         if (flashGuard == mode) return
         flashGuard = mode
         guard.reset()
+        // The look carries the mode, so a paused picture held dim is drawn again at once (#737).
+        changed()
     }
 
     /**

@@ -128,7 +128,7 @@ internal class WebGlVideoPass(context: JsAny) {
 
     /** The picture controls with the flash guard's dimming, as the colour rows and offsets. */
     private fun putColour(s: JsAny, look: WebLook, picture: WebStagedPicture) {
-        val matrix = glColorMatrix(look.adjustments, picture.dim)
+        val matrix = glColorMatrix(look.adjustments, if (look.guarded) picture.dim else 1f)
         for (row in 0 until 4) {
             glvPut4(s, ROWS_AT + row * 4, matrix[row * 5], matrix[row * 5 + 1], matrix[row * 5 + 2], matrix[row * 5 + 3])
         }
@@ -210,6 +210,11 @@ internal class WebLook(
     val cubic: Int,
     /** The 360 degree picture to draw a view into, or null for the flat picture (#460). */
     val sphere: SphereView? = null,
+    /**
+     * Whether the flash guard is on. A picture's factor is used only while it is, so turning the
+     * guard off redraws a held, dimmed picture at full light (#737).
+     */
+    val guarded: Boolean = true,
 )
 
 /**

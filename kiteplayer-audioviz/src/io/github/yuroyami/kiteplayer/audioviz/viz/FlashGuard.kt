@@ -86,7 +86,6 @@ public class FlashGuard(
      */
     private class Channel(private val most: Int, private val step: Float, private val dark: Float) {
         private var extreme = Float.NaN
-        private var extremeAt = 0.0
         private var rising = true
         private var halfway = false
         private val flashes = ArrayDeque<Double>()
@@ -144,14 +143,12 @@ public class FlashGuard(
             forget(now)
             if (extreme.isNaN()) {
                 extreme = wanted
-                extremeAt = now
                 return wanted
             }
             val swing = wanted - extreme
             val away = if (rising) swing >= 0f else swing <= 0f
             if (away) {
                 extreme = wanted
-                extremeAt = now
                 return wanted
             }
             val back = if (rising) extreme - wanted else wanted - extreme
@@ -166,7 +163,6 @@ public class FlashGuard(
                 halfway = false
                 rising = !rising
                 extreme = wanted
-                extremeAt = now
                 return wanted
             }
             // This swing completes a leg. Two legs are one flash, so only the second one counts.
@@ -185,7 +181,6 @@ public class FlashGuard(
             }
             rising = !rising
             extreme = wanted
-            extremeAt = now
             return wanted
         }
 

@@ -565,8 +565,11 @@ public class AudioTrackSink internal constructor(
     }
 
     private fun extendedHead(d: AudioTrackDriver): Long {
-        val raw = d.playbackHeadPosition().toLong() and 0xFFFF_FFFFL
         synchronized(headLock) {
+            // Read under the lock, as the timestamp path reads: a stale reading from before a wrap,
+            // committed after a newer one from after it, made the next sample a second wrap, and
+            // the played position jumped by 2^32 frames (#816).
+            val raw = d.playbackHeadPosition().toLong() and 0xFFFF_FFFFL
             if (raw < headLastRaw && headLastRaw - raw > 0x8000_0000L) {
                 headWrapBase += 1L shl 32
             }

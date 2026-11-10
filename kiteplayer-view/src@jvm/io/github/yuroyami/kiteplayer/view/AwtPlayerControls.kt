@@ -176,10 +176,14 @@ internal class AwtPlayerControls(
         override fun mouseDragged(event: MouseEvent) = drag(event.x)
         override fun mouseReleased(event: MouseEvent) = release(event.x, event.y)
         override fun mouseMoved(event: MouseEvent) {
-            // A pointer on its way to a button keeps the controls it is aiming at.
-            if (shown.visible) model.poke()
+            // A pointer on its way to a button keeps the controls it is aiming at. At most four
+            // times a second: each poke builds a snapshot and restarts the hide timer, and a mouse
+            // reports a move for every pixel it crosses (#942).
+            if (shown.visible && movePokes.due(System.nanoTime())) model.poke()
         }
     }
+
+    private val movePokes = MovePokes()
 
     private val keys = object : KeyAdapter() {
         override fun keyPressed(event: KeyEvent) {
@@ -586,5 +590,18 @@ internal fun IconPath.toPath2D(): Path2D.Float {
 internal object AwtEventThread : CoroutineDispatcher() {
     override fun dispatch(context: CoroutineContext, block: Runnable) {
         EventQueue.invokeLater(block)
+    }
+}
+
+/** Lets a poke through at most once every [intervalNanos], for the moves of a mouse (#942). */
+internal class MovePokes(private val intervalNanos: Long = 250_000_000L) {
+    private var last: Long? = null
+
+    /** True when a poke made at [nanos] is due, and then counts it as made. */
+    fun due(nanos: Long): Boolean {
+        val before = last
+        if (before != null && nanos - before < intervalNanos) return false
+        last = nanos
+        return true
     }
 }

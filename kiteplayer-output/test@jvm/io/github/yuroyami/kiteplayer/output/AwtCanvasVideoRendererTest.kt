@@ -165,6 +165,50 @@ class AwtCanvasVideoRendererTest {
         assertEquals(1, frame.closes)
     }
 
+    /** A frame of the size before the last is converted into that picture's image, not a new one (#839). */
+    @Test
+    fun `frames of one size take turns in two images`() = runTest {
+        val painted = mutableListOf<IntArray>()
+        val r = renderer(paint = { destination, _, _ -> painted += destination; true })
+        r.setCanvas(java.awt.Canvas())
+        repeat(4) { r.present(CountingFrame(size = VideoSize(64, 32)), 0L) }
+        assertTrue(painted[0] !== painted[1], "the second frame must not write into the picture it replaces")
+        assertTrue(painted[2] === painted[0], "the third frame fills the first one's image")
+        assertTrue(painted[3] === painted[1])
+        assertEquals(2L, r.reusedImages)
+
+        // Another size makes new images, and the old ones are not handed out for it.
+        r.present(CountingFrame(size = VideoSize(32, 16)), 0L)
+        assertTrue(painted[4] !== painted[0] && painted[4] !== painted[1])
+        assertEquals(32 * 16, painted[4].size)
+        r.close()
+    }
+
+    /** A cue drawn on many paints is converted once, and a new overlay is converted again (#839). */
+    @Test
+    fun `an overlay painted again keeps its cue images`() {
+        val cache = CueImageCache()
+        fun overlay(hash: Long, fill: Byte) = io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
+            images = listOf(
+                io.github.yuroyami.kiteplayer.spi.OverlayImage(
+                    x = 0, y = 0,
+                    bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(4, 4, ByteArray(4 * 4 * 4) { fill }),
+                ),
+            ),
+            viewportWidth = 16, viewportHeight = 16, contentHash = hash,
+        )
+        val first = overlay(1L, -1)
+        val images = cache.imagesFor(first)
+        assertTrue(cache.imagesFor(first) === images, "the same overlay painted again")
+        assertTrue(cache.imagesFor(overlay(1L, -1)) === images, "the same content published again")
+        assertEquals(1L, cache.cueImagesBuilt)
+        val next = cache.imagesFor(overlay(2L, 0x40))
+        assertTrue(next !== images)
+        assertEquals(2L, cache.cueImagesBuilt)
+        val raw = (next.single()!!.raster.dataBuffer as java.awt.image.DataBufferInt).data
+        assertEquals(0x40404040, raw[0], "the new cue's own premultiplied pixels")
+    }
+
     @Test
     fun `geometry is reported from the frame rather than from the canvas`() = runTest {
         var reported: Pair<VideoSize, Int>? = null

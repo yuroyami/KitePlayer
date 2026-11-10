@@ -173,6 +173,15 @@ public class AwtCanvasVideoRenderer(
      * the cues alone.
      */
     private var lastImage: BufferedImage? = null
+
+    /** The whole image behind [lastImage], before any crop: the one the next frame must not write into. */
+    private var lastWhole: BufferedImage? = null
+
+    /**
+     * The image shown before [lastWhole], which the next frame of the same size is converted into
+     * rather than a new one (#839). A 1080p image is 8.3 MB, which the JVM also fills with zeros.
+     */
+    private var spare: BufferedImage? = null
     private var lastSize: VideoSize? = null
     private var lastRotation: Int = 0
     private var lastMirrored: Boolean = false
@@ -394,7 +403,7 @@ public class AwtCanvasVideoRenderer(
             failed.incrementAndGet()
             return false
         }
-        val image = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+        val image = takeSpare(width, height) ?: BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
         val raster = (image.raster.dataBuffer as java.awt.image.DataBufferInt).data
         val painted = try {
             painter.paintArgb(frame, raster, width, height)
@@ -428,6 +437,9 @@ public class AwtCanvasVideoRenderer(
                 failed.incrementAndGet()
                 return false
             }
+            // The image this one replaces is the next frame's to fill, once no paint holds it.
+            spare = lastWhole?.takeIf { it !== image }
+            lastWhole = image
             lastImage = shown
             lastRaster = raster
             lastStride = width
@@ -454,6 +466,28 @@ public class AwtCanvasVideoRenderer(
         eventFlow.tryEmit(RendererEvent.FramePresented(pts, atNanos = System.nanoTime(), exact = false))
         return true
     }
+
+    /**
+     * The spare image when it has this size, for the next frame to be converted into. A paint holds
+     * [paintLock] from reading the picture to showing it, and a paint that started before the
+     * spare was replaced may still be drawing it, so the lock is taken once before the image is
+     * handed out: no later paint can read it, because it is no longer the picture. Null when the
+     * size differs, or when a paint holds the lock past the fence's limit, and the caller then
+     * makes a new image.
+     */
+    private fun takeSpare(width: Int, height: Int): BufferedImage? {
+        val candidate = synchronized(lock) {
+            spare?.takeIf { it.width == width && it.height == height }.also { spare = null }
+        } ?: return null
+        if (!paintLock.tryLock(CANVAS_FENCE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)) return null
+        paintLock.unlock()
+        reused.incrementAndGet()
+        return candidate
+    }
+
+    /** Spare images handed out instead of new ones. Tests only. */
+    internal val reusedImages: Long get() = reused.get()
+    private val reused = java.util.concurrent.atomic.AtomicLong()
 
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
         synchronized(lock) {
@@ -490,6 +524,9 @@ public class AwtCanvasVideoRenderer(
             lastImage = null
             lastRaster = null
             lastSize = null
+            // The taken-off picture can be the next frame's to fill, as a replaced one is.
+            spare = lastWhole
+            lastWhole = null
         }
         guardForgets.set(true)
         paintNow()
@@ -620,6 +657,8 @@ public class AwtCanvasVideoRenderer(
             canvas = null
             lastImage = null
             lastRaster = null
+            lastWhole = null
+            spare = null
             viewImage = null
             lastSize = null
             overlay = null

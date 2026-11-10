@@ -40,6 +40,9 @@ internal interface CanvasPresenter {
 
 internal class AwtCanvasPresenter : CanvasPresenter {
 
+    /** This presenter's cue images, kept between paints of one overlay (#839). Paint thread only. */
+    internal val cues = CueImageCache()
+
     /** The canvas size the current BufferStrategy was built for. See [strategyIsStale]. */
     private var builtWidth: Int = 0
     private var builtHeight: Int = 0
@@ -66,7 +69,7 @@ internal class AwtCanvasPresenter : CanvasPresenter {
             do {
                 val g = strategy.drawGraphics as? Graphics2D ?: return false
                 try {
-                    compose(g, canvas.width, canvas.height, image, layout, overlay, dim)
+                    compose(g, canvas.width, canvas.height, image, layout, overlay, dim, cues)
                     decorate(g, canvas.width, canvas.height, decoration)
                 } finally {
                     g.dispose()
@@ -113,13 +116,14 @@ internal class AwtCanvasPresenter : CanvasPresenter {
         layout: FrameLayout?,
         overlay: SubtitleOverlay?,
         dim: Float = 1f,
+        cues: CueImageCache? = null,
     ) {
         // The letterbox is painted every time rather than only when the geometry changes: a
         // narrower frame after a wider one would otherwise leave the old picture's edges on screen.
         g.color = Color.BLACK
         g.fillRect(0, 0, canvasWidth, canvasHeight)
         if (image == null || layout == null) {
-            drawOverlay(g, overlay, canvasWidth, canvasHeight)
+            drawOverlay(g, overlay, canvasWidth, canvasHeight, cues)
             return
         }
         g.setRenderingHint(
@@ -157,7 +161,7 @@ internal class AwtCanvasPresenter : CanvasPresenter {
             g.color = Color(0f, 0f, 0f, (1f - dim).coerceIn(0f, 1f))
             g.fill(area)
         }
-        drawOverlay(g, overlay, canvasWidth, canvasHeight)
+        drawOverlay(g, overlay, canvasWidth, canvasHeight, cues)
     }
 
     /**
@@ -184,21 +188,59 @@ internal class AwtCanvasPresenter : CanvasPresenter {
      * and each overlay pixel lands on one device pixel. An overlay laid out for an older size is
      * stretched until the engine lays it out again.
      */
-    private fun drawOverlay(g: Graphics2D, overlay: SubtitleOverlay?, canvasWidth: Int, canvasHeight: Int) {
+    private fun drawOverlay(g: Graphics2D, overlay: SubtitleOverlay?, canvasWidth: Int, canvasHeight: Int, cues: CueImageCache?) {
         val active = overlay ?: return
         if (active.viewportWidth <= 0 || active.viewportHeight <= 0) return
         val scaleX = canvasWidth.toDouble() / active.viewportWidth
         val scaleY = canvasHeight.toDouble() / active.viewportHeight
-        for (cue in active.images) {
+        // A compose with no cache, as the placement tests make, builds the images for this paint only.
+        val images = (cues ?: CueImageCache()).imagesFor(active)
+        active.images.forEachIndexed { index, cue ->
             val bitmap = cue.bitmap
-            if (bitmap.width <= 0 || bitmap.height <= 0) continue
+            val premultiplied = images[index] ?: return@forEachIndexed
+            val left = (cue.x * scaleX).roundToInt()
+            val top = (cue.y * scaleY).roundToInt()
+            val right = ((cue.x + bitmap.width) * scaleX).roundToInt()
+            val bottom = ((cue.y + bitmap.height) * scaleY).roundToInt()
+            g.drawImage(premultiplied, left, top, right - left, bottom - top, null)
+        }
+    }
+
+    }
+}
+
+/**
+ * The cue images of one presenter, built from an overlay's bitmaps and kept while the overlay
+ * stays the same (#839). One per presenter, used only by the thread that paints for it.
+ */
+internal class CueImageCache {
+    /** The overlay [cueImages] were built for, and its content hash. Paint thread only. */
+    private var cueSource: List<io.github.yuroyami.kiteplayer.spi.OverlayImage>? = null
+    private var cueHash: Long = 0L
+    private var cueImages: List<BufferedImage?> = emptyList()
+
+    /** Cue images built from overlay bitmaps, in all. Tests only. */
+    internal var cueImagesBuilt: Long = 0L
+        private set
+
+    /**
+     * One image for each cue of [overlay], null for an empty one, built again only when the overlay
+     * changes (#839). A paused picture or a long cue paints the same overlay many times, and each
+     * paint converted and allocated every cue again. The same overlay, or one with the same content
+     * hash and number of cues, keeps the images.
+     */
+    fun imagesFor(overlay: SubtitleOverlay): List<BufferedImage?> {
+        val images = overlay.images
+        if (images === cueSource || (overlay.contentHash == cueHash && images.size == cueImages.size && cueSource != null)) {
+            cueSource = images
+            return cueImages
+        }
+        val built = images.map { cue ->
+            val bitmap = cue.bitmap
+            if (bitmap.width <= 0 || bitmap.height <= 0) return@map null
             // The cue contract is PREMULTIPLIED rgba bytes; TYPE_INT_ARGB_PRE is the matching
             // AWT model, so the bytes are reinterpreted rather than converted a second time.
-            val premultiplied = BufferedImage(
-                bitmap.width,
-                bitmap.height,
-                BufferedImage.TYPE_INT_ARGB_PRE,
-            )
+            val premultiplied = BufferedImage(bitmap.width, bitmap.height, BufferedImage.TYPE_INT_ARGB_PRE)
             val target = (premultiplied.raster.dataBuffer as java.awt.image.DataBufferInt).data
             val source = bitmap.pixels
             var i = 0
@@ -210,12 +252,12 @@ internal class AwtCanvasPresenter : CanvasPresenter {
                 target[i] = (a shl 24) or (r shl 16) or (gg shl 8) or b
                 i++
             }
-            val left = (cue.x * scaleX).roundToInt()
-            val top = (cue.y * scaleY).roundToInt()
-            val right = ((cue.x + bitmap.width) * scaleX).roundToInt()
-            val bottom = ((cue.y + bitmap.height) * scaleY).roundToInt()
-            g.drawImage(premultiplied, left, top, right - left, bottom - top, null)
+            cueImagesBuilt++
+            premultiplied
         }
-    }
+        cueSource = images
+        cueHash = overlay.contentHash
+        cueImages = built
+        return built
     }
 }

@@ -189,4 +189,39 @@ class SessionFocusLifecycleTest {
         lifecycle.gained()
         assertFalse(lifecycle.release())
     }
+
+    // A call lends the sound for a while: a play during it asks again rather than sounding over it (#835).
+    @Test
+    fun aPlayDuringAShortLossAsksAgain() {
+        val lifecycle = SessionFocusLifecycle()
+        lifecycle.on(PlaybackStatus.Playing)
+        lifecycle.answered(FocusResult.Granted)
+        lifecycle.suspend()
+        assertNull(lifecycle.on(PlaybackStatus.Paused))
+        assertEquals(true, lifecycle.on(PlaybackStatus.Playing), "a play during a call did not ask again")
+        // Told to wait for the call to end: the waiting path takes it from here.
+        assertEquals(FocusAnswer.Waiting, lifecycle.answered(FocusResult.Delayed))
+        lifecycle.gained()
+        assertNull(lifecycle.on(PlaybackStatus.Playing), "the sound came back and the play asked again")
+    }
+
+    @Test
+    fun theSoundComingBackEndsAShortLoss() {
+        val lifecycle = SessionFocusLifecycle()
+        lifecycle.on(PlaybackStatus.Playing)
+        lifecycle.answered(FocusResult.Granted)
+        lifecycle.suspend()
+        lifecycle.gained()
+        assertNull(lifecycle.on(PlaybackStatus.Playing), "a play after the call asked again for what is held")
+        assertTrue(lifecycle.release(), "the hold was lost to a short loss")
+    }
+
+    @Test
+    fun aShortLossWithNothingHeldChangesNothing() {
+        val lifecycle = SessionFocusLifecycle()
+        lifecycle.suspend()
+        assertEquals(true, lifecycle.on(PlaybackStatus.Playing))
+        lifecycle.answered(FocusResult.Granted)
+        assertNull(lifecycle.on(PlaybackStatus.Playing))
+    }
 }

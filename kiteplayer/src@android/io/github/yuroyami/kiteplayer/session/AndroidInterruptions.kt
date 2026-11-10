@@ -67,8 +67,16 @@ private class AndroidInterruptionHandle(
     private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
         // A permanent loss ends this hold: the next play asks again (#282).
         if (change == AudioManager.AUDIOFOCUS_LOSS) synchronized(lifecycle) { lifecycle.lost() }
-        // The sound a request was told to wait for has arrived (#451).
+        // The sound a request was told to wait for has arrived (#451), or a short loss is over.
         if (change == AudioManager.AUDIOFOCUS_GAIN) synchronized(lifecycle) { lifecycle.gained() }
+        // A short loss, such as a call, lends the sound: a play during it asks again, and is
+        // refused or told to wait, instead of sounding over the call. A duckable one does only
+        // when the policy pauses rather than ducks (#835).
+        if (change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT ||
+            (change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK && !policy.duckOnTransient)
+        ) {
+            synchronized(lifecycle) { lifecycle.suspend() }
+        }
         interruptionEventFor(change)?.let(::handle)
     }
 

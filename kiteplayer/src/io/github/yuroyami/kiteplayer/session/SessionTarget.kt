@@ -133,6 +133,13 @@ internal class SessionFocusLifecycle {
     private var closed = false
 
     /**
+     * Held, but lent to another app for a while, such as a call (#835). A play then asks again,
+     * because the platform answers a request during the call with a refusal or a wait, while the
+     * hold alone would play over it.
+     */
+    private var suspended = false
+
+    /**
      * True to request, false to give back, null when nothing needs to change. Always null once closed.
      *
      * [hasSound] is false for an item with no audio track selected, such as a muted preview in a
@@ -142,7 +149,7 @@ internal class SessionFocusLifecycle {
      */
     fun on(status: PlaybackStatus, hasSound: Boolean = true): Boolean? = if (closed) null else when (status) {
         PlaybackStatus.Playing, PlaybackStatus.Buffering ->
-            if (hasSound) (if (held) null else true) else giveBack()
+            if (hasSound) (if (held && !suspended) null else true) else giveBack()
         PlaybackStatus.Paused -> if (hasSound) null else giveBack()
         PlaybackStatus.Idle, PlaybackStatus.Ended, PlaybackStatus.Failed -> giveBack()
         PlaybackStatus.Opening -> null
@@ -151,6 +158,7 @@ internal class SessionFocusLifecycle {
     private fun giveBack(): Boolean? = if (held || waiting) {
         held = false
         waiting = false
+        suspended = false
         false
     } else {
         null
@@ -159,23 +167,30 @@ internal class SessionFocusLifecycle {
     /** The platform's answer to a request [on] asked for, and what the caller does with it. */
     fun answered(result: FocusResult): FocusAnswer = when {
         closed -> FocusAnswer.AfterClose
-        result == FocusResult.Granted -> FocusAnswer.Held.also { held = true; waiting = false }
-        result == FocusResult.Delayed -> FocusAnswer.Waiting.also { held = false; waiting = true }
-        else -> FocusAnswer.Denied.also { held = false; waiting = false }
+        result == FocusResult.Granted -> FocusAnswer.Held.also { held = true; waiting = false; suspended = false }
+        result == FocusResult.Delayed -> FocusAnswer.Waiting.also { held = false; waiting = true; suspended = false }
+        else -> FocusAnswer.Denied.also { held = false; waiting = false; suspended = false }
     }
 
-    /** The sound arrived: a request that waited is now held (#451). */
+    /** The sound arrived: a request that waited is now held (#451), and a short loss is over (#835). */
     fun gained() {
+        suspended = false
         if (waiting && !closed) {
             waiting = false
             held = true
         }
     }
 
+    /** Another app has the sound for a while; the hold stands, but the next play asks again (#835). */
+    fun suspend() {
+        if (held && !closed) suspended = true
+    }
+
     /** The platform took the sound away for good, so the next play has to ask again. */
     fun lost() {
         held = false
         waiting = false
+        suspended = false
     }
 
     /** Closes the lifecycle, and says whether something was held or waited for, to give back. */

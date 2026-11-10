@@ -4889,21 +4889,6 @@ internal class PlaybackCore(
     private class OpenPreempted : Exception("a stop or a close preempted the backend open")
 
     /**
-     * Moves [source] to the keyframe at or before [target] on the demux lane, as a user's seek does
-     * (#591): under [SEEK_NATIVE_DEADLINE], and, when [preemptible], given up for a stop or a close
-     * waiting in the mailbox. The start seek of an open and the seek of a rebuilt session ran with
-     * neither, so a long scan, such as a Matroska file with no Cues read over the network, held
-     * the actor until it finished and a stop or a close waited behind it.
-     *
-     * Past the deadline or at a preemption the source is interrupted and given
-     * [SEEK_INTERRUPT_GRACE] to return. A source that cannot interrupt is waited for, as a user's
-     * seek waits for it, because the demux lane is the seek's until it returns.
-     *
-     * @throws OpenPreempted when a stop or a close came first.
-     * @throws PlaybackException with [PlaybackError.SourceUnavailable] when the seek did not finish
-     *         in time, or failed.
-     */
-    /**
      * Calls into a source that outlived their grace time, a container seek or a live resume that
      * ignored its interrupt (#711). They run in jobs of their own, outside the session's, so the
      * release did not wait for them and a seek still inside the backend could run while its source
@@ -4931,6 +4916,21 @@ internal class PlaybackCore(
         sourceCalls.removeAll { !it.isActive }
     }
 
+    /**
+     * Moves [source] to the keyframe at or before [target] on the demux lane, as a user's seek does
+     * (#591): under [SEEK_NATIVE_DEADLINE], and, when [preemptible], given up for a stop or a close
+     * waiting in the mailbox. The start seek of an open and the seek of a rebuilt session ran with
+     * neither, so a long scan, such as a Matroska file with no Cues read over the network, held
+     * the actor until it finished and a stop or a close waited behind it.
+     *
+     * Past the deadline or at a preemption the source is interrupted and given
+     * [SEEK_INTERRUPT_GRACE] to return. A source that cannot interrupt is waited for, as a user's
+     * seek waits for it, because the demux lane is the seek's until it returns.
+     *
+     * @throws OpenPreempted when a stop or a close came first.
+     * @throws PlaybackException with [PlaybackError.SourceUnavailable] when the seek did not finish
+     *         in time, or failed.
+     */
     private suspend fun boundedContainerSeek(source: PlayerMediaSource, target: Pts, preemptible: Boolean) {
         val call = scope.async(dispatchers.demux) { runCatching { source.seekToKeyframe(target) } }
         var waited = Duration.ZERO

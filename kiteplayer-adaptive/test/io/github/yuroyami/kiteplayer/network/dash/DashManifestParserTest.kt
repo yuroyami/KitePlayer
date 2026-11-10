@@ -14,21 +14,6 @@ import kotlin.test.assertTrue
 class DashManifestParserTest {
 
     /**
-     * A repeat to the end of the Period counts that end from presentationTimeOffset, as its own t
-     * does (#748). Without the offset a 60 s Period with a 10 s offset listed 25 two-second
-     * segments instead of 30, and one when the offset passed the Period's length.
-     */
-    /**
-     * A SegmentList inherits level by level, Period to Representation (#744): the Period's own list
-     * was never read, and a Representation's list replaced its set's whole, losing the duration and
-     * the Initialization it left to the set.
-     */
-    /**
-     * A live SegmentList with a timeline pairs each segment still in the window with its own address
-     * (#743). It paired them by their place among the ones left, so at 8 s, with a 4 s window,
-     * the first address in the list took the timing of the first segment still in the window.
-     */
-    /**
      * A live window longer than the plan's budgets lists the segments nearest the live edge rather
      * than refusing the stream (#750). A 72 hour time shift of two second segments is 129,600 of
      * them, past the 100,000 a plan may hold, and the channel never opened.
@@ -55,6 +40,11 @@ class DashManifestParserTest {
         assertEquals(now, last.startMicros + last.durationMicros, "the last segment is not the one at the live edge")
     }
 
+    /**
+     * A live SegmentList with a timeline pairs each segment still in the window with its own address
+     * (#743). It paired them by their place among the ones left, so at 8 s, with a 4 s window,
+     * the first address in the list took the timing of the first segment still in the window.
+     */
     @Test
     fun aLiveSegmentListPairsEachTimedSegmentWithItsOwnAddress() {
         val manifest = DashManifestParser.parse(
@@ -79,6 +69,11 @@ class DashManifestParserTest {
         assertEquals(listOf("s2.m4s" to 4_000_000L, "s3.m4s" to 6_000_000L), each)
     }
 
+    /**
+     * A SegmentList inherits level by level, Period to Representation (#744): the Period's own list
+     * was never read, and a Representation's list replaced its set's whole, losing the duration and
+     * the Initialization it left to the set.
+     */
     @Test
     fun aSegmentListInheritsFromThePeriodAndTheSetAttributeByAttribute() {
         fun parse(xml: String) = DashManifestParser.parse(xml, "https://cdn.test/vod/movie.mpd", DashUrlPolicy.Default)
@@ -109,6 +104,11 @@ class DashManifestParserTest {
         assertEquals(1000L, partly.segmentList?.timescale)
     }
 
+    /**
+     * A repeat to the end of the Period counts that end from presentationTimeOffset, as its own t
+     * does (#748). Without the offset a 60 s Period with a 10 s offset listed 25 two-second
+     * segments instead of 30, and one when the offset passed the Period's length.
+     */
     @Test
     fun aRepeatToThePeriodsEndCountsFromThePresentationTimeOffset() {
         fun countFor(offsetSeconds: Int): Int {

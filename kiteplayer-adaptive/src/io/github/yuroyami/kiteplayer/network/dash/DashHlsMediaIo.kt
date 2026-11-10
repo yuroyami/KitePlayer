@@ -815,9 +815,9 @@ internal class DashHlsMediaIo(
 
     /**
      * The bytes of [range] of [file]; fewer only at the end of the file, when [allowShort]. A range
-     * of more than [MAX_INDEX_BYTES] is refused before anything is allocated, whoever asks.
+     * of more than [limit] is refused before anything is allocated, whoever asks; the limit is an
+     * index read's [MAX_INDEX_BYTES] unless the caller says otherwise.
      */
-    /** [range] of [file], at most [limit] bytes: an index read's 16 MiB unless the caller says otherwise. */
     private suspend fun readRange(file: String, range: LongRange, allowShort: Boolean = false, limit: Long = MAX_INDEX_BYTES): ByteArray {
         val length = range.last - range.first + 1
         if (length > limit) {

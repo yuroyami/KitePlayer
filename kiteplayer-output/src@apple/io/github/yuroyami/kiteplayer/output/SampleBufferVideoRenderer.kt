@@ -628,8 +628,9 @@ internal fun copyIntoPixelBuffer(
     }
 }
 
-/** Row by row, because the source and the destination almost never share a stride. */
 /**
+ * Row by row, because the source and the destination almost never share a stride.
+ *
  * Copies [plane] into a destination plane of [destinationRows] rows. A source with more rows is cut
  * to the buffer, and one with fewer is refused, so a custom resolver's inconsistent planes can
  * neither write past the native buffer nor pass a half-filled picture off as whole (#844).

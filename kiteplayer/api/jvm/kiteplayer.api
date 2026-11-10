@@ -99,6 +99,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerJava : java/lang/Auto
 	public final fun setAbLoop (Ljava/lang/Long;Ljava/lang/Long;)V
 	public static synthetic fun setAbLoop$default (Lio/github/yuroyami/kiteplayer/KitePlayerJava;Ljava/lang/Long;Ljava/lang/Long;ILjava/lang/Object;)V
 	public final fun setAudioDelay (J)V
+	public final fun setExternalClockMillis (Lio/github/yuroyami/kiteplayer/KitePlayerJava$ExternalClockMillis;)V
 	public final fun setItemDetailsAsync (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/util/concurrent/CompletableFuture;
 	public final fun setSleepTimer (Lio/github/yuroyami/kiteplayer/SleepTimer;)V
 	public final fun setSleepTimer (Lio/github/yuroyami/kiteplayer/SleepTimer;J)V
@@ -130,6 +131,10 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerJava$Companion {
 	public final fun marker (JLjava/lang/String;)Lio/github/yuroyami/kiteplayer/Marker;
 	public final fun sleepAfter (J)Lio/github/yuroyami/kiteplayer/SleepTimer;
 	public final fun sleepAt (J)Lio/github/yuroyami/kiteplayer/SleepTimer;
+}
+
+public abstract interface class io/github/yuroyami/kiteplayer/KitePlayerJava$ExternalClockMillis {
+	public abstract fun positionMillisAt (J)Ljava/lang/Long;
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/KitePlayerListener {

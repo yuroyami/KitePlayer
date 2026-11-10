@@ -349,6 +349,25 @@ public class KitePlayerJava(
     public fun chapterAt(positionMillis: Long): Chapter? = player.chapterAt(positionMillis.milliseconds)
 
     /**
+     * `KitePlayer.setExternalClock` with a clock that answers in milliseconds, which Java can
+     * implement (#918): `ExternalClock` answers a `kotlin.time.Duration`, which Java cannot make.
+     * Null clears the clock.
+     */
+    public fun setExternalClockMillis(clock: ExternalClockMillis?) {
+        player.setExternalClock(clock?.let { millis -> ExternalClock { atNanos -> millis.positionMillisAt(atNanos)?.milliseconds } })
+    }
+
+    /** `ExternalClock`, in milliseconds, for [setExternalClockMillis]. */
+    public fun interface ExternalClockMillis {
+        /**
+         * The media position, in milliseconds, that should be audible at [atNanos], or null when
+         * this clock has no answer now. As `ExternalClock.positionAt`, it is called on the
+         * player's session thread, so it must return at once and must not call back into the player.
+         */
+        public fun positionMillisAt(atNanos: Long): Long?
+    }
+
+    /**
      * `KitePlayer.close`: asks the player to close and returns at once. [closeAsync] completes when
      * it has. Listeners stay until [removeListener], so they hear the closing state.
      */

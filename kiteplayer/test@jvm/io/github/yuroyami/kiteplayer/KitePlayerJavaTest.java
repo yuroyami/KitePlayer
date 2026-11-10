@@ -118,6 +118,36 @@ public class KitePlayerJavaTest {
         }
     }
 
+    /**
+     * A Java app makes an external clock in milliseconds and the player follows it (#918). The
+     * clock says the media should be five seconds in, running from its first answer, so a player
+     * that reads it leaves the start and plays on from there.
+     */
+    @Test
+    public void aJavaAppSetsAnExternalClockInMillisecondsAndThePlayerFollowsIt() throws Exception {
+        Clip clip = clip();
+        Heard heard = new Heard();
+        KitePlayerJava player = KitePlayerJava.create();
+        AtomicInteger asked = new AtomicInteger();
+        long[] first = {Long.MIN_VALUE};
+        try {
+            player.addListener(heard, main);
+            player.openAsync(new MediaItemBuilder(clip.file.getAbsolutePath()).build()).get(WAIT_SECONDS, TimeUnit.SECONDS);
+            heard.awaitStatus(PlaybackStatus.Paused);
+            player.setExternalClockMillis(atNanos -> {
+                asked.incrementAndGet();
+                if (first[0] == Long.MIN_VALUE) first[0] = atNanos;
+                return 5_000 + (atNanos - first[0]) / 1_000_000;
+            });
+            player.getPlayer().play();
+            heard.awaitProgressPast(4_500);
+            assertTrue("the player never asked the clock", asked.get() > 0);
+            player.setExternalClockMillis(null);
+        } finally {
+            player.closeAsync().get(WAIT_SECONDS, TimeUnit.SECONDS);
+        }
+    }
+
     @Test
     public void aListenerAddedLaterHearsNoEarlierEventAndARemovedOneHearsNothingMore() throws Exception {
         Clip clip = clip();

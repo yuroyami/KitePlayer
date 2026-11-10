@@ -1151,10 +1151,12 @@ public class KiteFFmpegVideoDecoderFactory internal constructor(
                         null -> null
                     },
                     hardwareAccel = (route as? HardwareRoute.Accel)?.accel,
-                    // HardwareWithDownload is the honest status for BOTH shapes: mediacodec
-                    // downloads inside FFmpeg's wrapper, and every current renderer reads a
-                    // VideoToolbox frame through the download twin. This changes when the
-                    // Metal renderer makes zero-copy real.
+                    // HardwareWithDownload is a cautious claim made at open, before any renderer
+                    // takes a frame. It is true for mediacodec, which downloads inside FFmpeg's
+                    // wrapper, and for the JVM renderers. It overstates the Apple paths: the Metal
+                    // and sample buffer renderers draw the VideoToolbox CVPixelBuffer itself, and
+                    // the download twin is never made there. Telling the two apart needs each
+                    // frame to say whether its readable copy was made (#846).
                     hardware = if (route == null) {
                         HwdecStatus.Software
                     } else {

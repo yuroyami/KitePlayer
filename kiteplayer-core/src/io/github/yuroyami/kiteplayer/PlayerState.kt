@@ -608,7 +608,12 @@ public sealed class HwdecStatus {
     /** Hardware decoding, with frames staying in GPU memory all the way to the screen. */
     public data class HardwareZeroCopy(val kind: HwdecKind) : HwdecStatus()
 
-    /** Hardware decoding, but frames are downloaded to main memory before presentation. */
+    /**
+     * Hardware decoding, but frames are downloaded to main memory before presentation. The FFmpeg
+     * backend declares it at open for every hardware route, before a renderer is known, so on
+     * Apple platforms, where the Metal and sample buffer renderers draw the decoder's own pixel
+     * buffer, it overstates the cost (#846).
+     */
     public data class HardwareWithDownload(val kind: HwdecKind) : HwdecStatus()
 }
 

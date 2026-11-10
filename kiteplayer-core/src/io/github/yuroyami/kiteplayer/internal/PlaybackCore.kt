@@ -15069,12 +15069,23 @@ internal class PlaybackCore(
                 }
                 // A select rather than a cancelled send, for the same reason the actor uses one: a send
                 // cancelled at the wrong instant can leave a buffer neither queued nor owned by anyone.
-                val sent = select<Boolean> {
-                    session.decodedAudio.onSend(buffer) { true }
-                    // The quiesce request ends the wait like a timeout does: the caller loops and
-                    // reads its own flags, which is what a bare timeout made it wait to do.
-                    worker.onWake { false }
-                    onTimeout(WORKER_POLL) { false }
+                // Not cancellable: a select cancelled at the wrong instant may have queued the buffer
+                // and still thrown, and the finally below then closed a buffer the feeder would
+                // read (#715). The wait ends within WORKER_POLL anyway, and a cancellation is met at
+                // the next suspension.
+                // The clause takes the ownership away itself, because withContext still throws on
+                // its way out when the lane was cancelled meanwhile, and drops its result.
+                val sent = withContext(NonCancellable) {
+                    select<Boolean> {
+                        session.decodedAudio.onSend(buffer) {
+                            ownsBuffer = false
+                            true
+                        }
+                        // The quiesce request ends the wait like a timeout does: the caller loops and
+                        // reads its own flags, which is what a bare timeout made it wait to do.
+                        worker.onWake { false }
+                        onTimeout(WORKER_POLL) { false }
+                    }
                 }
                 if (sent) {
                     ownsBuffer = false
@@ -15211,10 +15222,27 @@ internal class PlaybackCore(
                     resumeFromUs = end.us
                     waiting
                 } else {
-                    select<AudioBuffer?> {
-                        session.decodedAudio.onReceive { it }
-                        worker.onWake { null }
-                        onTimeout(WORKER_POLL) { null }
+                    // Not cancellable, for the same reason as the decoder's send: a cancelled select
+                    // may have taken the buffer and still thrown, and the buffer then had no owner
+                    // and held audioInFlight up for ever (#715).
+                    // The clause records the buffer, because withContext still throws on its way out
+                    // when the lane was cancelled meanwhile, and drops its result: the buffer is then
+                    // closed and uncounted here.
+                    var received: AudioBuffer? = null
+                    try {
+                        withContext(NonCancellable) {
+                            select<AudioBuffer?> {
+                                session.decodedAudio.onReceive { taken -> taken.also { received = it } }
+                                worker.onWake { null }
+                                onTimeout(WORKER_POLL) { null }
+                            }
+                        }
+                    } catch (cancelled: CancellationException) {
+                        received?.let { lost ->
+                            lost.close()
+                            session.audioInFlight.decrementAndGet()
+                        }
+                        throw cancelled
                     }
                 }
                 if (buffer == null) {

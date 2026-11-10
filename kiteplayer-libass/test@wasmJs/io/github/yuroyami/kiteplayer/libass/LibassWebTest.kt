@@ -20,9 +20,9 @@ import kotlin.test.assertTrue
 /**
  * The web half against the real module: `kiteass.mjs` is imported from beside the compiled test,
  * the corpus is streamed and rendered whole, and the two must match byte for byte, the same
- * comparison the hosts make. Under node a system font is read through `node:fs` so pixels appear;
- * in a browser there is no filesystem and no system font, so the comparison there proves the
- * streaming path and the module plumbing, and the visible-pixel check is skipped with a note.
+ * comparison the hosts make. Under node a system font is read through `node:fs`; in a browser,
+ * where there is no filesystem and no system font, the corpus is drawn with the authored colour
+ * test font, so both runs always have a font and always assert that some picture is visible (#725).
  */
 class LibassWebTest {
 
@@ -93,14 +93,15 @@ class LibassWebTest {
     @Test
     fun everyCorpusScriptStreamsToTheBytesItsWholeDocumentRenders() = runTest {
         loadModule()
-        val font = hostFont()
-        if (font == null) println("LibassWebTest: no host font readable here; comparing pictures without one")
+        // A browser has no host font, and a run with none compared empty pictures (#725).
+        val font = hostFont() ?: libassColorTestFont()
         var visibleSomewhere = false
         TypesetCorpus.scripts.forEach { (name, lines) ->
             val document = LibassTypesetter()
             val streamed = LibassTypesetter()
             try {
-                font?.let { document.addFont("HostSans.ttf", it); streamed.addFont("HostSans.ttf", it) }
+                document.addFont("HostSans.ttf", font)
+                streamed.addFont("HostSans.ttf", font)
                 document.openDocument((TypesetCorpus.header + lines.joinToString("\n") + "\n").encodeToByteArray())
                 streamed.openTrack(TypesetCorpus.header.encodeToByteArray())
                 TypesetCorpus.chunks(lines).forEach { chunk ->
@@ -122,7 +123,7 @@ class LibassWebTest {
                 streamed.close()
             }
         }
-        if (font != null) assertTrue(visibleSomewhere, "a font was loaded and nothing ever drew a visible pixel")
+        assertTrue(visibleSomewhere, "a font was loaded and nothing ever drew a visible pixel")
     }
 
     /**

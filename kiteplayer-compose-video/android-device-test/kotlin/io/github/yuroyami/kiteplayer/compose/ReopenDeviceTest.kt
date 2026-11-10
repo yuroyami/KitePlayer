@@ -82,7 +82,7 @@ internal class ReopenDeviceTest {
                     )
                     // On a phone the stop and the open together are held to the bound. The
                     // emulator's graphics host stalls for 10 to 18 s now and then, SystemUI
-                    // included, and a stop waits it out inside MediaCodec.stop (#301). There the
+                    // included, and a stop waits it out inside MediaCodec.stop (#301, #973). There the
                     // open alone is held to the bound, and the stop only to coming back.
                     val onEmulator = isProbablyEmulator()
                     val boundedMs = if (onEmulator) reopenNanos / 1_000_000 else secondMs
@@ -143,7 +143,7 @@ internal class ReopenDeviceTest {
         const val TAG = "KiteReopen"
         const val WATCHDOG_MILLIS = 3_000L
 
-        /** The longest stall measured in a stop on the emulator was 17.6 s (#301). */
+        /** The longest stall measured in a stop on the emulator was 17.6 s (#301). #973 owns this allowance. */
         const val EMULATOR_STOP_LIMIT_MILLIS = 30_000L
     }
 }

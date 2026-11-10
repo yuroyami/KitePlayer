@@ -658,7 +658,7 @@ jobs:
     timeout-minutes: 90
     # A red device test fails the run, and so stops a release that runs this file (#638). The job
     # was report-only until it had been trusted; it has since been green on twenty runs in a row.
-    # The one allowance left is the second run of ReopenDeviceTest inside its step (#301).
+    # No test runs twice: ReopenDeviceTest carries its own emulator allowance for a stop (#729).
     env:
       AVD_PACKAGE: system-images;android-35;google_apis;x86_64
       NEEDS_PUSHED_MEDIA: io.github.yuroyami.kiteplayer.NeedsPushedMedia
@@ -772,7 +772,6 @@ jobs:
             :libass:connectedAndroidTest :compose-video:connectedAndroidTest
 
       # The clips go into each test APK's own external storage, as root, with the APK's uid.
-      # ReopenDeviceTest runs once more after a failure (#301), and both runs count.
       - name: Device tests that read clips
         id: clips
         if: ${{ !cancelled() && steps.boot.outcome == 'success' }}
@@ -825,15 +824,8 @@ jobs:
               [ -n "$pid" ] && adb shell debuggerd -b "$pid" > "$RUNNER_TEMP/test-logs/reopen-native-stacks.txt" 2>&1
             ) &
             watcher=$!
-            before=$status
             run_tests "$compose_pkg" -e class io.github.yuroyami.kiteplayer.compose.ReopenDeviceTest
             kill "$watcher" 2> /dev/null || true
-            if [ "$status" != "$before" ]; then
-              echo "::warning::ReopenDeviceTest failed, so it runs once more (#301)"
-              echo "rerun=true" >> "$GITHUB_OUTPUT"
-              status=$before
-              run_tests "$compose_pkg" -e class io.github.yuroyami.kiteplayer.compose.ReopenDeviceTest
-            fi
             run_tests "$compose_pkg" -e class io.github.yuroyami.kiteplayer.compose.GaplessVideoQueueDeviceTest
           fi
           adb unroot > /dev/null || true
@@ -879,8 +871,6 @@ jobs:
 
       - name: The test counts
         if: always()
-        env:
-          REOPEN_RERUN: ${{ steps.clips.outputs.rerun }}
         run: |
           python3 - >> "$GITHUB_STEP_SUMMARY" <<'EOF'
           import glob, os, re, xml.etree.ElementTree as ET
@@ -905,8 +895,6 @@ jobs:
               tests = sum(oks) + sum(a for a, _ in bads)
               cells = f"{tests} | {sum(b for _, b in bads)}" if oks or bads else "no results |"
               print(f"| {pkg} | {cells} |")
-          if os.environ.get("REOPEN_RERUN") == "true":
-              print("\nReopenDeviceTest failed once and ran again, and both runs count above (#301).")
           print("\nThe classes marked `@NeedsPushedMedia`:\n")
           for path in sorted(glob.glob("*/android-device-test/**/*.kt", recursive=True)):
               if "\n@NeedsPushedMedia\n" in open(path, errors="replace").read():
@@ -927,7 +915,7 @@ jobs:
           EOF
 
       - name: Collect the emulator log and the device log
-        if: failure() || steps.clips.outputs.rerun == 'true'
+        if: failure()
         run: |
           mkdir -p build/emulator-logs
           cp "$RUNNER_TEMP/emulator.log" build/emulator-logs/ || true
@@ -935,7 +923,7 @@ jobs:
           timeout 60 adb logcat -d > build/emulator-logs/logcat.txt 2>&1 || true
 
       - name: Upload test reports
-        if: failure() || steps.clips.outputs.rerun == 'true'
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: android-emulator-reports

@@ -395,6 +395,36 @@ class HlsSwitchingTest {
         assertEquals("low 20", assertNotNull(switch.open("https://kite-hls.invalid/segment/20.m4s")).text())
     }
 
+    /**
+     * A live reload that takes up a variable, which the switch does not serve, gets the last
+     * playlist it read, and the stream holds its variant until a reload reads whole (#720). The
+     * reload threw, and the stream ended.
+     */
+    @Test
+    fun aLiveReloadTheSwitchCannotServeGetsTheLastPlaylistItRead() = runTest {
+        val stream = Stream(mutableMapOf())
+        stream.files["https://cdn.test/low.m3u8"] = live("low", 10, 5)
+        stream.files["https://cdn.test/high.m3u8"] = live("high", 10, 5)
+        for (n in 10..20) {
+            stream.files["https://cdn.test/low-$n.ts"] = "low $n"
+            stream.files["https://cdn.test/high-$n.ts"] = "high $n"
+        }
+        val switch = switchOver(stream)
+        val first = assertNotNull(switch.open(HlsVariantSwitch.PLAYLIST)).text()
+
+        stream.files["https://cdn.test/low.m3u8"] = "#EXTM3U\n#EXT-X-VERSION:8\n#EXT-X-DEFINE:NAME=\"v\",VALUE=\"low\"\n" +
+            live("low", 11, 5).removePrefix("#EXTM3U\n#EXT-X-VERSION:3\n").replace("low-", "{\$v}-")
+        val reloaded = assertNotNull(switch.open(HlsVariantSwitch.PLAYLIST)).text()
+        assertEquals(first, reloaded, "the reload it cannot serve gets the last playlist it read")
+        assertEquals("low 12", assertNotNull(switch.open("https://kite-hls.invalid/segment/12.ts")).text())
+        assertFalse(switch.request(1), "the stream moved on a playlist it could not read")
+
+        stream.files["https://cdn.test/low.m3u8"] = live("low", 12, 5)
+        val whole = assertNotNull(switch.open(HlsVariantSwitch.PLAYLIST)).text()
+        assertTrue("segment/16.ts" in whole, "the next whole reload was not served: $whole")
+        assertTrue(switch.request(1), "and the stream moves again")
+    }
+
     private fun mp4Box(type: String, payload: ByteArray): ByteArray =
         byteArrayOf(0, 0, ((8 + payload.size) shr 8).toByte(), (8 + payload.size).toByte()) + type.encodeToByteArray() + payload
 

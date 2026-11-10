@@ -321,6 +321,9 @@ internal class HlsVariantSwitch(
     /** True while the playlist FFmpeg reads goes past what the switch serves, so no move is made (#621). */
     private var frozen = false
 
+    /** Whether the log has said once that a reload could not be served (#720). */
+    private var unservedReloadSaid = false
+
     /** The newest playlist read of each variant. */
     private val loaded = arrayOfNulls<Loaded>(addresses.size)
 
@@ -553,8 +556,22 @@ internal class HlsVariantSwitch(
         // second map is served up to it, so the stream plays on rather than fail its reload (#621).
         val playlist = readSwitchablePlaylist(bytes.decodeToString(), location, keepUpToAMap = listed != null)
         if (playlist == null) {
-            // FFmpeg holds addresses of this switch once it read one playlist from it.
-            check(listed == null) { "the playlist at $address changed into one the variant switch cannot serve" }
+            val last = listed
+            if (last != null) {
+                // FFmpeg holds addresses of this switch once it read one playlist from it, so a
+                // reload it cannot serve, one that took up a variable or another key method, gets the
+                // last playlist it understood, as a reload past a second map does, and the stream
+                // holds its variant until a reload reads whole again. It ended the stream before (#720).
+                if (!unservedReloadSaid) {
+                    unservedReloadSaid = true
+                    io.github.yuroyami.kiteplayer.KiteLog.log(
+                        "kiteplayer-hls",
+                        "a reload of $address is one the variant switch cannot serve; the last playlist it read is served until one reads whole",
+                    )
+                }
+                frozen = true
+                return BytesMediaIo(last.playlist.served.encodeToByteArray(), PLAYLIST)
+            }
             passedThrough = true
             return BytesMediaIo(bytes, location)
         }

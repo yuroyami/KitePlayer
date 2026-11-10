@@ -591,6 +591,12 @@ internal class FaultPlan(
      * a quiescent boundary. */
     var stallAudioDecodeReceive: Boolean = false
 
+    /**
+     * Holds the next audio decoder receive for this long once, on the test's clock, then clears:
+     * a decoder that falls behind for a moment while the packet queues stay full.
+     */
+    var audioDecodeHiccup: kotlin.time.Duration? = null
+
     /** True makes the video decoder accept every packet and never produce a frame. */
     var videoDecodeProducesNothing: Boolean = false
 
@@ -1853,6 +1859,10 @@ internal class ScriptedAudioDecoder(
         // A worker that never reaches a quiescent boundary: parked on a cancellable suspension,
         // so quiesce fails while cancellation still works.
         if (faults.stallAudioDecodeReceive) awaitCancellation()
+        faults.audioDecodeHiccup?.let { hold ->
+            faults.audioDecodeHiccup = null
+            kotlinx.coroutines.delay(hold)
+        }
         val buffer = pending.removeFirstOrNull()
         if (buffer == null && ending) drained = true
         return buffer

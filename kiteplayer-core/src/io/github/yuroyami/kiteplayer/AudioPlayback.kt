@@ -5,6 +5,7 @@ import io.github.yuroyami.kiteplayer.internal.CEILING_MAX
 import io.github.yuroyami.kiteplayer.internal.GAIN_MAX
 import io.github.yuroyami.kiteplayer.internal.KotlinAudioRing
 import io.github.yuroyami.kiteplayer.internal.AudioRingHandle
+import io.github.yuroyami.kiteplayer.internal.AudioAnchor
 import io.github.yuroyami.kiteplayer.internal.MediaClock
 import io.github.yuroyami.kiteplayer.internal.ClockSnapshot
 import io.github.yuroyami.kiteplayer.internal.OpenedAudioPath
@@ -754,11 +755,56 @@ public class AudioPlayback(
             if (frozen == null || heardNow < frozen) playoutClock.setAt(Pts(heardNow), generation, now)
         } else {
             playoutClock.setAt(anchor.pts, generation, anchor.audibleAtNanos)
+            holdAtLastSoundLocked(anchor)
         }
         // The clock reads up to the device's latency behind the anchor, so lines are kept for a
         // generous margin before it.
         timeline.prune(anchor.pts.micros - TIMELINE_KEEP_US)
     }
+
+    /**
+     * Keeps a running clock from passing the last frame in the ring, which is the last sound there
+     * is to hear. A render the ring could fill with nothing but silence publishes no anchor, so
+     * the clock ran on through a device that had run dry, and the anchor of the sound that came
+     * back pulled it back by the whole gap: 291 ms after a 300 ms decoder stall, with the picture
+     * paced ahead of the silence and then held (#819). The rule lives here, over both rings, so
+     * the C ring and its Kotlin oracle keep one anchor contract. Not once the sound is marked
+     * ended: the clock then runs on with a picture that outlasts it, by design.
+     *
+     * The hold stands until the device dates new sound and the clock reaches the held time again.
+     * A ring the feeder refilled lifts the cap before the device plays any of it, and the first new
+     * anchor dates sound still a device buffer away, so releasing on either alone stepped the
+     * position forward and then back by 85 ms.
+     */
+    private fun holdAtLastSoundLocked(anchor: AudioAnchor) {
+        if (endMarked) {
+            starvedHoldUs = null
+            return
+        }
+        val ring = ring ?: return
+        val rate = format?.sampleRate ?: return
+        if (rate <= 0) return
+        val running = playoutClock.nowOrNull()?.micros ?: return
+        val now = clock.nanos()
+        starvedHoldUs?.let { held ->
+            if (anchor.audibleAtNanos == starvedAnchorNanos || running < held) {
+                playoutClock.setAt(Pts(held), generation, now)
+                return
+            }
+            starvedHoldUs = null
+        }
+        // The anchor dates its last frame, so the sound left runs one frame past it and then the rest.
+        val lastSoundUs = anchor.pts.micros + framesToMicros(ring.bufferedFrames.toLong() + 1, rate)
+        if (running > lastSoundUs) {
+            starvedHoldUs = lastSoundUs
+            starvedAnchorNanos = anchor.audibleAtNanos
+            playoutClock.setAt(Pts(lastSoundUs), generation, now)
+        }
+    }
+
+    /** Where [holdAtLastSoundLocked] holds the running clock, and the anchor it held it from. */
+    private var starvedHoldUs: Long? = null
+    private var starvedAnchorNanos: Long = 0L
 
     /**
      * Starts a gapless join: the next buffers handed to [submitDecoded] belong to the next queue
@@ -914,6 +960,7 @@ public class AudioPlayback(
             // carry the current item's own timestamps.
             join = Join.None
             endMarked = false
+            starvedHoldUs = null
         }
         // The conversion stages hold audio of the position that was abandoned. After a seek,
         // carrying it into the new position would mix the two.

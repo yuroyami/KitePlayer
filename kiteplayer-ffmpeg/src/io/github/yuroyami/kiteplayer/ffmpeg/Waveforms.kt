@@ -7,6 +7,7 @@ import kotlin.math.abs
 import kotlin.math.sqrt
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.microseconds
+import kotlinx.coroutines.withContext
 
 /**
  * A file drawn as [peaks] and [rms], one entry per bucket of [bucketDuration], both in 0..1 and
@@ -35,7 +36,8 @@ public object Waveforms {
     /**
      * Decodes the primary audio stream, or [stream], into [buckets] equal time slices of peak
      * and RMS, the channels averaged to mono first. Reads the whole stream; seconds on a long
-     * album, so call it off the main thread. Samples are placed by counting them from the start
+     * album, which it runs on the blocking-work dispatcher by itself, as [Thumbnails.at] does, so a
+     * caller on the main thread may call it as it is (#923). Samples are placed by counting them from the start
      * at the stream's rate, so a file with gaps in its timeline draws them closed up.
      *
      * @throws IllegalArgumentException for [buckets] below one, an item with no such audio
@@ -43,7 +45,10 @@ public object Waveforms {
      * @throws io.github.yuroyami.kiteffmpeg.FFmpegException when the open or the decode fails
      */
     @Throws(Exception::class)
-    public suspend fun of(item: MediaItem, buckets: Int = 1000, stream: TrackId? = null): Waveform {
+    public suspend fun of(item: MediaItem, buckets: Int = 1000, stream: TrackId? = null): Waveform =
+        withContext(blockingWork) { waveformOf(item, buckets, stream) }
+
+    private suspend fun waveformOf(item: MediaItem, buckets: Int, stream: TrackId?): Waveform {
         require(buckets > 0) { "buckets must be positive, was $buckets" }
         openSource(item).use { source ->
             val chosen = if (stream == null) {

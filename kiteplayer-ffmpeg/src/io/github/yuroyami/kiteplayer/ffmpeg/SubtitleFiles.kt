@@ -13,7 +13,6 @@ import io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 import io.github.yuroyami.kiteplayer.uri.FileUri
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
@@ -28,8 +27,13 @@ import kotlinx.coroutines.withContext
  */
 internal object SubtitleFiles {
 
+    /**
+     * Runs on the blocking-work dispatcher, as every analysis call does (#923): FFmpeg blocks
+     * here, and on Dispatchers.Default a long read held a thread of the pool that converts frames
+     * and schedules desktop video.
+     */
     suspend fun read(bytes: ByteArray, text: String, uri: String): SubtitleFileReading? =
-        withContext(Dispatchers.Default) {
+        withContext(blockingWork) {
             try {
                 readNow(bytes, text, uri)
             } catch (cancellation: CancellationException) {

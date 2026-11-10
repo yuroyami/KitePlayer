@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.audio.LoudnessMeter
 import io.github.yuroyami.kiteplayer.audio.LoudnessResult
+import kotlinx.coroutines.withContext
 
 /** Measurements over a whole file, decoded here rather than played. */
 public object AudioAnalysis {
@@ -10,14 +11,17 @@ public object AudioAnalysis {
     /**
      * Decodes the primary audio stream and measures its integrated loudness to ITU-R BS.1770-4
      * with [LoudnessMeter], which is what ReplayGain and EBU R128 both want. Reads the whole
-     * file: seconds on a long album, so call it off the main thread. A file with no audio that
+     * file, seconds on a long album, which it runs on the blocking-work dispatcher by itself, as
+     * [Thumbnails.at] does, so a caller on the main thread may call it as it is (#923). A file with no audio that
      * passes the gates answers negative infinity, the way the meter does.
      *
      * @throws IllegalArgumentException for an item with no audio stream
      * @throws io.github.yuroyami.kiteffmpeg.FFmpegException when the open or the decode fails
      */
     @Throws(Exception::class)
-    public suspend fun measureLoudness(item: MediaItem): LoudnessResult {
+    public suspend fun measureLoudness(item: MediaItem): LoudnessResult = withContext(blockingWork) { loudnessOf(item) }
+
+    private suspend fun loudnessOf(item: MediaItem): LoudnessResult {
         openSource(item).use { source ->
             val stream = source.primaryAudio
                 ?: throw IllegalArgumentException("${item.label} has no audio stream to measure")

@@ -65,6 +65,7 @@ public interface SegmentStoreEntry : AutoCloseable {
     /**
      * Reads at most [length] bytes of the resource at [position] into [into] at [offset], from
      * one published span. Returns how many it read, or 0 when no published span holds [position].
+     * Throws [IndexOutOfBoundsException] when the slice does not lie inside [into].
      */
     public fun read(position: Long, into: ByteArray, offset: Int, length: Int): Int
 
@@ -77,7 +78,10 @@ public interface SegmentStoreEntry : AutoCloseable {
 
 /** One span of a [SegmentStoreEntry] while it is written. */
 public interface SegmentStoreWriter : AutoCloseable {
-    /** Adds [length] bytes of [from], starting at [offset], to the end of the span. */
+    /**
+     * Adds [length] bytes of [from], starting at [offset], to the end of the span. Throws
+     * [IndexOutOfBoundsException] when the slice does not lie inside [from].
+     */
     public fun write(from: ByteArray, offset: Int, length: Int)
 
     /** Makes the span readable, whole and at once. The writer takes no more bytes after it. */

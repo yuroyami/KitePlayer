@@ -57,6 +57,30 @@ class DirectorySegmentStoreTest {
         assertEquals(0, files.readersOpen, "the close lets the last one go")
     }
 
+    /**
+     * A slice that does not lie inside its array is refused before the store's files see it (#849).
+     * The Apple files hand a slice to fread and fwrite as a pointer and a count, so a read of a 4096
+     * byte span into one byte wrote 4095 bytes past the array.
+     */
+    @Test
+    fun aSliceOutsideItsArrayIsRefusedBeforeTheFilesSeeIt() {
+        val store = store(maxBytes = 10_000)
+        store.put("a", 0, bytes(4_096))
+        store.open("a").use { entry ->
+            assertFailsWith<IndexOutOfBoundsException> { entry.read(0, ByteArray(1), 0, 4_096) }
+            assertFailsWith<IndexOutOfBoundsException> { entry.read(0, ByteArray(8), -1, 4) }
+            assertFailsWith<IndexOutOfBoundsException> { entry.read(0, ByteArray(8), 6, 4) }
+            assertEquals(0, files.readersOpened, "the files were asked to read a slice past the array")
+            entry.write(8_000).use { writer ->
+                val before = files.files.values.sumOf { it.size }
+                assertFailsWith<IndexOutOfBoundsException> { writer.write(ByteArray(1), 0, 4_096) }
+                assertFailsWith<IndexOutOfBoundsException> { writer.write(ByteArray(8), 4, -1) }
+                assertEquals(before, files.files.values.sumOf { it.size }, "the files were handed a slice past the array")
+            }
+            assertEquals(4, entry.read(0, ByteArray(8), 4, 4), "a slice inside its array still reads")
+        }
+    }
+
     @Test
     fun aSpanIsReadOnlyAfterItIsPublished() {
         val store = store()

@@ -88,6 +88,8 @@ private object PosixStoreFiles : StoreFiles {
     }
 
     override fun read(path: String, position: Long, into: ByteArray, offset: Int, length: Int): Int {
+        // fread takes a pointer and a count, so a slice past the array would write after it (#849).
+        requireSlice(into, offset, length)
         if (length <= 0) return 0
         val file = fopen(path, "rb") ?: throw failure("open", path)
         try {
@@ -99,12 +101,41 @@ private object PosixStoreFiles : StoreFiles {
         }
     }
 
+    /**
+     * One FILE held open until the reader closes, so the reads of one span cost one open rather
+     * than one each, about 64 for a 4 MiB segment in FFmpeg's 64 KiB blocks (#968). POSIX lets the
+     * store delete the file while this holds it, so the store's rules do not change.
+     */
+    override fun openReader(path: String): StoreFileReader {
+        val file = fopen(path, "rb") ?: throw failure("open", path)
+        return object : StoreFileReader {
+            private var closed = false
+
+            override fun read(position: Long, into: ByteArray, offset: Int, length: Int): Int {
+                check(!closed) { "the stored file's reader is closed" }
+                requireSlice(into, offset, length)
+                if (length <= 0) return 0
+                if (fseeko(file, position, SEEK_SET) != 0) throw failure("seek", path)
+                val read = into.usePinned { pinned -> fread(pinned.addressOf(offset), 1u, length.toULong(), file) }
+                return if (read == 0uL) -1 else read.toInt()
+            }
+
+            override fun close() {
+                if (closed) return
+                closed = true
+                fclose(file)
+            }
+        }
+    }
+
     override fun create(path: String): StoreFileSink {
         val file = fopen(path, "wb") ?: throw failure("create", path)
         return object : StoreFileSink {
             private var failed = false
 
             override fun write(from: ByteArray, offset: Int, length: Int) {
+                // fwrite takes a pointer and a count, so a slice past the array would read after it (#849).
+                requireSlice(from, offset, length)
                 if (length <= 0) return
                 val written = from.usePinned { pinned -> fwrite(pinned.addressOf(offset), 1u, length.toULong(), file) }
                 if (written.toInt() != length) {

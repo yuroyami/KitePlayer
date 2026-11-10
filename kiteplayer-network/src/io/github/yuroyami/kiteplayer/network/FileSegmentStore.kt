@@ -117,6 +117,18 @@ internal interface StoreFileReader {
     fun close()
 }
 
+/**
+ * Refuses a slice of [array] that does not lie wholly inside it (#849). The Apple files hand the
+ * slice to fread and fwrite as a pointer and a count, so a slice past the array's end read or wrote
+ * native memory after it; the JVM's files refuse one by their own checks, and now every store does
+ * before its files see it.
+ */
+internal fun requireSlice(array: ByteArray, offset: Int, length: Int) {
+    if (offset < 0 || length < 0 || offset > array.size - length) {
+        throw IndexOutOfBoundsException("the slice at $offset of $length bytes does not lie inside an array of ${array.size}")
+    }
+}
+
 /** A file being written. [close] reports a write that did not reach the disk. */
 internal interface StoreFileSink {
     fun write(from: ByteArray, offset: Int, length: Int)
@@ -376,6 +388,7 @@ internal class DirectorySegmentStore(
         override fun spans(): List<LongRange> = lock.withLock { resource.spans.map { it.start until it.end } }
 
         override fun read(position: Long, into: ByteArray, offset: Int, length: Int): Int {
+            requireSlice(into, offset, length)
             if (length <= 0) return 0
             val span = lock.withLock {
                 check(!closed) { "the segment store is closed" }
@@ -444,6 +457,7 @@ internal class DirectorySegmentStore(
         private var held = 0L
 
         override fun write(from: ByteArray, offset: Int, length: Int) {
+            requireSlice(from, offset, length)
             check(!done) { "the span is already published or dropped" }
             if (length <= 0 || dropped) return
             // The bytes of spans still being written count against maxBytes too, all writers

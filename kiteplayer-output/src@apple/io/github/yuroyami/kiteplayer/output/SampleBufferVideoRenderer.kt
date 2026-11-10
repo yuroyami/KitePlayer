@@ -215,6 +215,9 @@ public class SampleBufferVideoRenderer internal constructor(
 
     override fun vsyncIntervalNanos(): Long? = null
 
+    /** The layer has no shader of this renderer's own, so the engine warns when a render quality is set (#769). */
+    override val appliesRenderQuality: Boolean get() = false
+
     /** The layer shows the decoded picture as it is, so the engine warns when picture controls are set (#610). */
     override val appliesAdjustments: Boolean get() = false
 

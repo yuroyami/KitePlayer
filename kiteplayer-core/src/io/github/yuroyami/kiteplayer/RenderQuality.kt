@@ -13,8 +13,9 @@ package io.github.yuroyami.kiteplayer
  * DISABLED IS BIT-EXACT. A build that turns nothing on writes the same pixels it always did, which
  * is what makes each pass measurable on its own and what keeps the colour instruments honest.
  *
- * Not every renderer can honour these. A renderer applies what it can and ignores the rest; the
- * engine neither asks nor promises. On Android the shipping interop path decodes straight to a
+ * Not every renderer can honour these. A renderer applies what it can and ignores the rest. One
+ * that applies none of it answers false to `VideoRenderer.appliesRenderQuality`, and the engine
+ * then warns [PlaybackWarning.RenderQualityUnavailable] once for it (#769). On Android the shipping interop path decodes straight to a
  * Surface with no shader of its own, so nothing here reaches it.
  */
 public data class RenderQuality(

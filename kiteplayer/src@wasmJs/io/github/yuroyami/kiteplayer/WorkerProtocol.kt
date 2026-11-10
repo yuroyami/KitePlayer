@@ -215,7 +215,7 @@ internal sealed interface Failure {
  * of them cannot read went unanswered for ever. Raise it with every change to a message, a
  * command, a control or a field that the other half must read.
  */
-internal const val WORKER_PROTOCOL: Int = 2
+internal const val WORKER_PROTOCOL: Int = 3
 
 /** What the worker sends the page. */
 internal sealed interface WorkerMessage {
@@ -1196,6 +1196,10 @@ private fun encodeWarning(warning: PlaybackWarning): JsAny = record {
             kind("PictureControlsUnavailable")
             put("renderer", warning.renderer)
         }
+        is PlaybackWarning.RenderQualityUnavailable -> {
+            kind("RenderQualityUnavailable")
+            put("renderer", warning.renderer)
+        }
         is PlaybackWarning.ProjectionUnavailable -> {
             kind("ProjectionUnavailable")
             put("kind", encodeProjectionKind(warning.kind))
@@ -1953,6 +1957,7 @@ private fun decodeWarning(o: JsAny): PlaybackWarning? {
         "AudioSourceUnreadable" -> PlaybackWarning.AudioSourceUnreadable(o.str("uri").orEmpty(), o.str("reason").orEmpty())
         "EditionPartLeftOut" -> PlaybackWarning.EditionPartLeftOut(o.str("segmentUid").orEmpty(), o.str("chapter"), o.str("detail").orEmpty())
         "PictureControlsUnavailable" -> PlaybackWarning.PictureControlsUnavailable(o.str("renderer") ?: missing("renderer"))
+        "RenderQualityUnavailable" -> PlaybackWarning.RenderQualityUnavailable(o.str("renderer") ?: missing("renderer"))
         "ProjectionUnavailable" -> PlaybackWarning.ProjectionUnavailable(
             o.child("kind")?.let(::decodeProjectionKind) ?: missing("kind"),
             detail,

@@ -1923,6 +1923,17 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$RecordingStoppe
 	public fun hashCode ()I
 }
 
+public final class io/github/yuroyami/kiteplayer/PlaybackWarning$RenderQualityUnavailable : io/github/yuroyami/kiteplayer/PlaybackWarning {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$RenderQualityUnavailable;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PlaybackWarning$RenderQualityUnavailable;Ljava/lang/String;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$RenderQualityUnavailable;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getMessage ()Ljava/lang/String;
+	public final fun getRenderer ()Ljava/lang/String;
+	public fun hashCode ()I
+}
+
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$RendererFailed : io/github/yuroyami/kiteplayer/PlaybackWarning {
 	public fun <init> (Ljava/lang/String;)V
 	public final fun component1 ()Ljava/lang/String;
@@ -4740,6 +4751,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/VideoRenderer 
 	public fun accepts (Lio/github/yuroyami/kiteplayer/spi/FrameShape;)Z
 	public fun clearPicture ()V
 	public fun getAppliesAdjustments ()Z
+	public fun getAppliesRenderQuality ()Z
 	public abstract fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public fun getOutputSize ()Lio/github/yuroyami/kiteplayer/VideoSize;
 	public fun getRedrawsHeldPicture ()Z
@@ -4765,6 +4777,7 @@ public final class io/github/yuroyami/kiteplayer/spi/VideoRenderer$DefaultImpls 
 	public static fun accepts (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;Lio/github/yuroyami/kiteplayer/spi/FrameShape;)Z
 	public static fun clearPicture (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)V
 	public static fun getAppliesAdjustments (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)Z
+	public static fun getAppliesRenderQuality (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)Z
 	public static fun getOutputSize (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)Lio/github/yuroyami/kiteplayer/VideoSize;
 	public static fun getRedrawsHeldPicture (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)Z
 	public static fun getShowsHdr (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)Z

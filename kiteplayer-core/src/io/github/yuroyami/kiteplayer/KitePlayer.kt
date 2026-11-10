@@ -735,7 +735,9 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * Delivered exactly like [setVideoAdjustments]: the value belongs to the player, every renderer
      * is told it on attach, and a change lands on the next drawn frame with no pipeline work. A
-     * renderer honours what it can and ignores the rest, so this never fails and never blocks.
+     * renderer honours what it can and ignores the rest, so this never fails and never blocks. A
+     * renderer with no shader of its own applies none of it, and the player then warns
+     * [PlaybackWarning.RenderQualityUnavailable] once, rather than drop the value with nothing said.
      * [RenderQuality.Off] reproduces the plain decoded picture byte for byte.
      *
      * @throws IllegalArgumentException on a non-finite or negative debanding parameter.

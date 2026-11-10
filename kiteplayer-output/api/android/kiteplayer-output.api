@@ -12,6 +12,7 @@ public final class io/github/yuroyami/kiteplayer/output/AndroidGpuImageVideoRend
 	public fun clearPicture ()V
 	public fun close ()V
 	public fun getAppliesAdjustments ()Z
+	public fun getAppliesRenderQuality ()Z
 	public fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public final fun getFailedFrames ()J
 	public fun getOutputSize ()Lio/github/yuroyami/kiteplayer/VideoSize;
@@ -58,6 +59,7 @@ public final class io/github/yuroyami/kiteplayer/output/AndroidSurfaceVideoRende
 	public fun clearPicture ()V
 	public fun close ()V
 	public fun getAppliesAdjustments ()Z
+	public fun getAppliesRenderQuality ()Z
 	public fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public final fun getFailedFrames ()J
 	public fun getOutputSize ()Lio/github/yuroyami/kiteplayer/VideoSize;

@@ -231,6 +231,7 @@ class WorkerProtocolTest {
         PlaybackWarning.ProjectionUnavailable(ProjectionKind.Cubemap(16), "the renderer draws a view into an equirectangular picture"),
         PlaybackWarning.ProjectionUnavailable(ProjectionKind.Equirectangular, "the renderer draws only flat pictures"),
         PlaybackWarning.PictureControlsUnavailable("WebCanvasVideoRenderer"),
+        PlaybackWarning.RenderQualityUnavailable("WebCanvasVideoRenderer"),
         PlaybackWarning.SubtitleCharsetGuessed("https://example.com/a.srt", "windows-1252", "Shift_JIS"),
         PlaybackWarning.SubtitleCharsetGuessed("https://example.com/b.srt", "windows-1252"),
         PlaybackWarning.TypesetterUnavailable("libass", "no module"),
@@ -454,7 +455,7 @@ class WorkerProtocolTest {
             val message = WorkerMessage.Event(PlayerEvent.Warning(warning))
             assertEquals(message, message.roundTrip(), "the warning $warning changed on the way")
         }
-        assertEquals(47, warnings.map { it::class }.distinct().size, "every kind of warning is here")
+        assertEquals(48, warnings.map { it::class }.distinct().size, "every kind of warning is here")
     }
 
     @Test

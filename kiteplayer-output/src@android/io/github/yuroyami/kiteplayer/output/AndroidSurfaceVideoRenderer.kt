@@ -414,6 +414,12 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         get() = hdrPolicy.value == HdrPolicy.Auto && codecTarget != null && displayShowsHdr(displayHdr.value?.types)
 
     /**
+     * Neither target has a shader: the canvas paints, and MediaCodec releases straight to the
+     * Surface. So the engine warns when a render quality is set (#769).
+     */
+    override val appliesRenderQuality: Boolean get() = false
+
+    /**
      * Only the canvas target draws the picture controls, through its paint. A view with a
      * MediaCodec target releases most of its frames straight to the Surface, with no paint, so it
      * answers false and the engine warns `PictureControlsUnavailable` instead of a slider that

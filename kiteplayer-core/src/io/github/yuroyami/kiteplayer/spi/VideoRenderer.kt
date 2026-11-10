@@ -117,6 +117,14 @@ public interface VideoRenderer : AutoCloseable {
     public fun setRenderQuality(quality: io.github.yuroyami.kiteplayer.RenderQuality) {}
 
     /**
+     * True when this renderer applies some of [setRenderQuality]'s passes (#769). The engine warns
+     * `PlaybackWarning.RenderQualityUnavailable` when a quality other than the neutral one is set
+     * while a renderer that answers false is attached, so an application learns why the picture
+     * did not change. Defaulted to true, for a renderer that overrides [setRenderQuality].
+     */
+    public val appliesRenderQuality: Boolean get() = true
+
+    /**
      * How HDR video reaches the screen. A renderer that can show HDR as HDR does so under
      * [io.github.yuroyami.kiteplayer.HdrPolicy.Auto] and reports [RendererEvent.HdrShown]. The
      * default ignores it, for a renderer that always tone maps.

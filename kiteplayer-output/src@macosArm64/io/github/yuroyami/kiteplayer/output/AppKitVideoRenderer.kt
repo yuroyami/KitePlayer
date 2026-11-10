@@ -641,6 +641,12 @@ public class AppKitVideoRenderer internal constructor(
         enqueueOnMain { applyScale(mode) }
     }
 
+    /**
+     * Core Graphics draws the decoded picture with no shader, so the engine warns when a render
+     * quality is set (#769).
+     */
+    override val appliesRenderQuality: Boolean get() = false
+
     /** A paused picture shows the change too: the retained pixels re-draw. */
     override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
         adjustSlot.value = adjustments

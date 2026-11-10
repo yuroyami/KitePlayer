@@ -153,6 +153,10 @@ class WarningAuditTest {
             "PlaybackCore.warnIfAdjustmentsIgnored, when picture controls other than the neutral ones are " +
                 "set while the attached renderer's appliesAdjustments answers false, once for each renderer",
         )
+        is PlaybackWarning.RenderQualityUnavailable -> listOf(
+            "PlaybackCore.warnIfRenderQualityIgnored, when a render quality other than the neutral one is " +
+                "set while the attached renderer's appliesRenderQuality answers false, once for each renderer",
+        )
         is PlaybackWarning.ThumbnailsUnreadable -> listOf(
             "PlaybackCore.readItemThumbnails, after an open, when the item's thumbnail file could not " +
                 "be reached, read or parsed, or held no picture, so the seek bar has none of its pictures",

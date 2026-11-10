@@ -1306,6 +1306,22 @@ internal class PlaybackCore(
         warn(PlaybackWarning.PictureControlsUnavailable(name))
     }
 
+    /** The renderers already warned that they apply no render quality pass (#769). */
+    private val renderQualityWarned = mutableListOf<VideoRenderer>()
+
+    /**
+     * Warns once for [renderer] when a render quality is set and it applies none of it (#769).
+     * The quality was stored, published and told to the renderer, and dropped with nothing said.
+     */
+    private fun warnIfRenderQualityIgnored(renderer: VideoRenderer?) {
+        renderer ?: return
+        if (renderQuality.isNeutral || renderer.appliesRenderQuality) return
+        if (renderQualityWarned.any { it === renderer }) return
+        renderQualityWarned += renderer
+        val name = ((renderer as? AttachableRenderer)?.delegate ?: renderer)::class.simpleName ?: "renderer"
+        warn(PlaybackWarning.RenderQualityUnavailable(name))
+    }
+
     /** Runtime subtitle timing shift, seeded from config. Positive shows cues later. */
     private var subtitleDelay: Duration = config.subtitles.delay
 
@@ -3375,6 +3391,7 @@ internal class PlaybackCore(
                 renderQuality = command.value
                 session?.renderer?.setRenderQuality(command.value)
                 if (session == null) pendingRenderer?.setRenderQuality(command.value)
+                warnIfRenderQualityIgnored(pendingRenderer)
                 // A held picture shows the change now, not with a frame that is not coming (#463).
                 requestRedraw(forced = false)
                 command.reply.complete(Unit)
@@ -3537,6 +3554,7 @@ internal class PlaybackCore(
         renderer?.setAdjustments(videoAdjustments)
         warnIfAdjustmentsIgnored(renderer)
         renderer?.setRenderQuality(renderQuality)
+        warnIfRenderQualityIgnored(renderer)
         renderer?.setHdrPolicy(hdrPolicy)
         renderer?.setFlashGuard(flashGuard)
         renderer?.setTransform(videoTransform)

@@ -40,7 +40,10 @@ A suspending call that the player cannot carry out fails with a typed error, ins
 the call and ignoring it. A setter that returns at once reports a refusal later, as
 `PlaybackWarning.CommandRefused` on `events`, because there is nobody to throw to by then.
 `requestSeek` drops a request that a newer one replaced, on purpose, and ignores one on a source
-that cannot seek, and `setRenderQuality` asks the renderer for what it can do and never fails. Two
+that cannot seek, and `setRenderQuality` asks the renderer for what it can do and never fails.
+A renderer with no shader of its own applies none of it, and the player then warns
+`PlaybackWarning.RenderQualityUnavailable` once, as it warns `PictureControlsUnavailable` for picture
+controls a renderer does not draw. Two
 players in one process work.
 
 ## Seeking

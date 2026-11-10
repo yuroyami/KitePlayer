@@ -173,6 +173,11 @@ internal class RecordingRenderer(
 
     override val appliesAdjustments: Boolean get() = appliesAdjustmentsOverride
 
+    /** Whether this renderer says it applies any render quality pass (#769). */
+    var appliesRenderQualityOverride: Boolean = true
+
+    override val appliesRenderQuality: Boolean get() = appliesRenderQualityOverride
+
     override val outputSize: io.github.yuroyami.kiteplayer.VideoSize?
         get() = outputSizeOverride
 

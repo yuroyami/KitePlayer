@@ -291,6 +291,9 @@ public class AwtCanvasVideoRenderer(
             return VideoSize((width * scaleX).roundToInt(), (height * scaleY).roundToInt())
         }
 
+    /** The canvas has no shader, so the engine warns when a render quality is set (#769). */
+    override val appliesRenderQuality: Boolean get() = false
+
     /** The canvas paints the decoded picture as it is, so the engine warns when picture controls are set (#610). */
     override val appliesAdjustments: Boolean get() = false
 

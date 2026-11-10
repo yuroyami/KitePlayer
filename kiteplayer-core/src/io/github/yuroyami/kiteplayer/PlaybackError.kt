@@ -569,6 +569,17 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * A render quality other than the neutral one is set with [KitePlayer.setRenderQuality], and
+     * the attached [renderer] has no shader to apply any of it, so the picture shows as decoded
+     * (#769). Told once for each renderer while the quality is other than the neutral one. The
+     * snapshot still reports what was set.
+     */
+    public data class RenderQualityUnavailable(val renderer: String) : PlaybackWarning() {
+        override val message: String
+            get() = "a render quality is set, and the renderer $renderer applies none of it"
+    }
+
+    /**
      * The video that plays is a 360 degree video, and the attached renderer shows its whole
      * picture flat, because it cannot draw a view into a sphere or into this [kind] of projection
      * (#460). [detail] says which. Told once for each item and renderer. See

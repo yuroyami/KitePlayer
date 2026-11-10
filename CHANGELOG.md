@@ -12,6 +12,13 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Added
 
+- `PlaybackWarning.RenderQualityUnavailable` and `VideoRenderer.appliesRenderQuality` (#769). A
+  render quality set with `setRenderQuality` was stored, published and silently dropped by every
+  renderer with no shader: the default Android view, the desktop canvas view, the web canvas, the
+  macOS and iOS Core Graphics renderers and Apple's sample buffer layer. The player now warns once
+  for such a renderer while a quality other than the neutral one is set. A renderer answers true by
+  default, and the six named answer false. The web worker's protocol is now 3, so a page and a
+  worker file of different releases refuse each other at the start.
 - The desktop's native video view draws a view into a 360 degree video (#587), so a desktop app no
   longer has to switch `KitePlayerVideo` to `KiteRenderPath.ComposeCanvas` to look around in one.
   `AwtCanvasVideoRenderer` has no shader, so it remaps each picture on the processor through a map

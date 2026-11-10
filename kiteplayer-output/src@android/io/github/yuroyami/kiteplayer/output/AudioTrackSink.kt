@@ -113,6 +113,9 @@ public class AudioTrackSink internal constructor(
     /** Whether the 16-bit fallback was reported. Written by the writer thread only. */
     @Volatile private var reportedPcm16 = false
 
+    /** The device's underrun count when the writer last looked, reset with each new track (#825). */
+    @Volatile private var seenUnderruns = 0
+
     override val deviceBufferFrames: Int
         get() = driver?.bufferSizeInFrames ?: 0
 
@@ -200,6 +203,7 @@ public class AudioTrackSink internal constructor(
             }
             opened.setVolume(deviceGain)
             driver = opened
+            seenUnderruns = 0
             accepted = format
             this.render = render
             /* The callback block is exactly min(deviceBufferFrames, 512) frames, and both the
@@ -255,6 +259,7 @@ public class AudioTrackSink internal constructor(
                 throw failure
             }
             driver = fresh
+            seenUnderruns = 0
             submittedFrames = 0L
             resetTimestampState()
             writerFailed = false
@@ -494,6 +499,18 @@ public class AudioTrackSink internal constructor(
                 heldBlockShort = false
             }
             if (failed) break
+            // The ring sees only a ring that runs dry; a writer that stalled longer than the
+            // track's buffer is heard as a gap the ring never saw. The track counts those (#825).
+            val underruns = d.underrunCount()
+            if (underruns > seenUnderruns) {
+                eventFlow.tryEmit(
+                    AudioSinkEvent.Underrun(
+                        "the AudioTrack ran out of written audio ${underruns - seenUnderruns} time(s); " +
+                            "its buffer holds ${d.bufferSizeInFrames} frames",
+                    ),
+                )
+            }
+            seenUnderruns = underruns
             if (draining && short) {
                 /* The drain contract: keep pulling until the callback's first short return,
                  * silence and submit that final tail, then exit (step 7). */

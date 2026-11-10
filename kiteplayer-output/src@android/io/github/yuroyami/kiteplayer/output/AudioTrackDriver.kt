@@ -70,6 +70,12 @@ internal interface AudioTrackDriver {
 
     /** The RAW 32-bit `playbackHeadPosition`; the sink extends it across wraps (step 6). */
     fun playbackHeadPosition(): Int
+
+    /**
+     * How many times the device ran out of written audio since the track was made, from
+     * `getUnderrunCount`, or 0 for a device that cannot tell (#825).
+     */
+    fun underrunCount(): Int = 0
 }
 
 /**
@@ -203,6 +209,8 @@ internal class PlatformAudioTrackDriver(
     override val bufferSizeInFrames: Int get() = track.bufferSizeInFrames
 
     override val sessionId: Int get() = track.audioSessionId
+
+    override fun underrunCount(): Int = track.underrunCount
 
     override fun onWriterThreadStart() {
         Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)

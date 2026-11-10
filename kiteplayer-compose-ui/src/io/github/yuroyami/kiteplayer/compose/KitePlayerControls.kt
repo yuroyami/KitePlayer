@@ -17,6 +17,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -109,6 +113,10 @@ import kotlin.time.DurationUnit
  * `KitePlayerVideo(player) { KitePlayerControls(player) }`, or place it over a video yourself; it
  * fills what it is given.
  *
+ * [contentPadding] keeps the controls clear of the system bars, a display cutout and the home
+ * indicator, by default the safe drawing insets, which are zero on the desktop. The scrim still
+ * covers the whole area. Pass `PaddingValues(0.dp)` when the controls sit inside padded content.
+ *
  * It is made only from the state holders, [rememberTransportState], [rememberSeekBarState],
  * [rememberVolumeState], [rememberTrackMenuState], [rememberQualityMenuState],
  * [rememberSpeedMenuState] and [rememberControlsVisibility], so an application that wants its own
@@ -139,9 +147,10 @@ public fun KitePlayerControls(
     labels: KitePlayerControlsLabels = DefaultControlsLabels,
     onFullScreen: (() -> Unit)? = null,
     onPictureInPicture: (() -> Unit)? = null,
+    contentPadding: PaddingValues = WindowInsets.safeDrawing.asPaddingValues(),
 ) {
     if (player == null) return
-    Controls(rememberControlsSource(player), modifier, visibility, style, labels, onFullScreen, onPictureInPicture)
+    Controls(rememberControlsSource(player), modifier, visibility, style, labels, onFullScreen, onPictureInPicture, contentPadding)
 }
 
 internal enum class ControlsMenu { Audio, Subtitles, Quality, Speed }
@@ -172,6 +181,7 @@ internal fun Controls(
     labels: KitePlayerControlsLabels,
     onFullScreen: (() -> Unit)?,
     onPictureInPicture: (() -> Unit)?,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
     val transport = rememberTransportState(source)
     val seekBar = rememberSeekBarState(source)
@@ -235,8 +245,10 @@ internal fun Controls(
 
     val lift = remember(source) { SubtitleLift() }
     // How much of the output the bar covers, which the engine keeps subtitles above (#648).
+    // The padding under the bar is covered too, so subtitles stay above the whole of it (#935).
+    val bottomPadding = with(LocalDensity.current) { contentPadding.calculateBottomPadding().roundToPx() }
     val wantedLift = if (visibility.visible && height > 0 && barHeight > 0) {
-        (barHeight.toFloat() / height).coerceIn(0f, 1f)
+        ((barHeight + bottomPadding).toFloat() / height).coerceIn(0f, 1f)
     } else {
         null
     }
@@ -286,6 +298,9 @@ internal fun Controls(
                 Modifier
                     .matchParentSize()
                     .background(style.scrimColor)
+                    // The scrim covers everything; the controls keep clear of the system bars,
+                    // cutouts and the home indicator of an edge-to-edge screen (#935).
+                    .padding(contentPadding)
                     .onFocusChanged { if (visibility.visible) focusInside = it.hasFocus },
             ) {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
@@ -365,7 +380,10 @@ internal fun Controls(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(end = 8.dp, bottom = barDp + 4.dp)
-                            .heightIn(max = (tallest - barDp - 16.dp).coerceAtLeast(96.dp)),
+                            .heightIn(
+                                max = (tallest - barDp - 16.dp - contentPadding.calculateTopPadding() - contentPadding.calculateBottomPadding())
+                                    .coerceAtLeast(96.dp),
+                            ),
                     )
                 }
                 LaunchedEffect(focusPlay) {

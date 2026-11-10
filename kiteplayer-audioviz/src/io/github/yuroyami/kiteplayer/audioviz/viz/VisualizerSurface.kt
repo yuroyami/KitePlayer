@@ -815,6 +815,9 @@ private class Stage {
                 val finished = steady
                 steady = arriving
                 arriving = finished
+                // Nothing reads the outgoing renderer until the next change, which discards it
+                // before its first use, so its two echo bitmaps go now rather than then (#953).
+                finished.discard()
                 showingFor = director.current
             }
             arrivingFor = null

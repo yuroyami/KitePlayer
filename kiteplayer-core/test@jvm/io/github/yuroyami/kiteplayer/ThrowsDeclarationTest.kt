@@ -4,12 +4,29 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * Kotlin/Native turns an exception into a Swift error only where the function declares it with
- * `@Throws`, and ends the process for any other (#916). The JVM writes the same declaration into
- * the class file, so this reads it back there for every constructor and builder that checks its
- * values, and fails when one loses it.
+ * Calls that fail by their own contract declare it, because Kotlin/Native ends a Swift app on any
+ * exception a function does not declare (#652, #916). `@Throws` is the same annotation on the JVM,
+ * where it becomes the method's or constructor's throws clause, which this reads.
  */
 class ThrowsDeclarationTest {
+
+    private fun declared(type: Class<*>, name: String): List<Class<*>> {
+        val method = type.methods.firstOrNull { it.name == name || it.name.startsWith("$name-") }
+            ?: error("${type.simpleName} has no method $name")
+        return method.exceptionTypes.toList()
+    }
+
+    @Test
+    fun aMementoThatCannotBeReadDeclaresItsRefusal() {
+        val thrown = declared(PlayerMemento.Companion::class.java, "fromProperties")
+        assertTrue(IllegalArgumentException::class.java in thrown, "fromProperties declares $thrown")
+    }
+
+    @Test
+    fun aThumbnailAskedOfAClosedPlayerDeclaresItsRefusal() {
+        val thrown = declared(KitePlayer::class.java, "thumbnailAt")
+        assertTrue(thrown.any { it.isAssignableFrom(IllegalStateException::class.java) }, "thumbnailAt declares $thrown")
+    }
     private val validating = listOf(
         PlayerConfig::class.java, NetworkRecovery::class.java, IoCachePolicy::class.java,
         BufferPolicy::class.java, QueueConfig::class.java, AudioConfig::class.java,

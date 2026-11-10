@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.network.dash
 
 import io.github.yuroyami.kiteplayer.MediaIo
+import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.github.yuroyami.kiteplayer.mp4.Fmp4
 import io.github.yuroyami.kiteplayer.network.dash.Mp4Bytes.Sample
 import kotlin.test.Test
@@ -178,6 +179,33 @@ class DashPeriodsTest {
         assertEquals(listOf(true, false), moved.map { it.isSync })
         assertContentEquals(byteArrayOf(0, 0, 0, 2, 0x67, 2, 0, 0, 0, 2, 0x68, 2, 7), moved[0].data, "its own parameter sets lead its sync sample")
         assertEquals(1, asked.count { it == "b-init.mp4" }, "an initialization is read once: $asked")
+    }
+
+    /**
+     * A Period in another codec than the stream began with is skipped, as FFmpeg's MP4 reader
+     * cannot read it against the first initialization, and the app hears so once, with both codecs
+     * named (#706). It was skipped with only a log line.
+     */
+    @Test
+    fun aPeriodInAnotherCodecIsSkippedWithOneWarning() = runTest {
+        val hevc = files + ("b-init.mp4" to Mp4Bytes.init(2, 90_000, "vide", "hvc1"))
+        val presentation = DashHls.presentation(joined.periods.first())
+        val io = DashHlsMediaIo(presentation, joined, "https://cdn.test/vod/movie.mpd", DashUrlPolicy.Default, { url ->
+            BytesMediaIo(checkNotNull(hevc[url.substringAfterLast('/')]) { "no $url" })
+        }, null, { 0L })
+        val warnings = mutableListOf<PlaybackWarning>()
+        io.setWarningSink { warnings += it }
+        val video = presentation.tracks.single { it.role == DashHlsRole.Video }
+        io.openRelated(video.address)!!.readAll()
+        val root = "https://${DashHls.HOST}/0-0"
+        io.openRelated("$root/init")!!.readAll()
+        io.openRelated("$root/p0/1")!!.readAll()
+        assertTrue(warnings.isEmpty(), "the first Period warned: $warnings")
+        repeat(2) { assertFailsWith<DashUnsupportedException> { io.openRelated("$root/p5000000/45") } }
+        val skipped = warnings.filterIsInstance<PlaybackWarning.SegmentSkipped>()
+        assertEquals(1, skipped.size, "one warning for the Period: $warnings")
+        assertTrue("cannot play in a stream that began" in skipped.single().detail, skipped.single().detail)
+        assertTrue(skipped.single().uri.endsWith("b-45.m4s"), skipped.single().uri)
     }
 
     @Test

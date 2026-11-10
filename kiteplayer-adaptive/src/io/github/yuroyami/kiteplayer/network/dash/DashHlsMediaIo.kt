@@ -117,6 +117,9 @@ internal class DashHlsMediaIo(
     /** The tracks whose set or representation a live refresh dropped, each reported once (#406). */
     private val goneReported = HashSet<String>()
 
+    /** The Periods of each track whose segments were refused, each reported once (#706). */
+    private val skippedPeriods = HashSet<String>()
+
     /**
      * The initialization each MP4 or WebM track of joined Periods is written against, by the HLS
      * track's address: that of the first Period listed for it. It is kept for the reader's life,
@@ -197,6 +200,7 @@ internal class DashHlsMediaIo(
             } catch (refused: DashUnsupportedException) {
                 // FFmpeg skips a segment it cannot open, so a Period it cannot read plays as a gap.
                 KiteLog.log("KiteDash", "a segment of a joined Period is skipped: ${refused.message}")
+                reportSkippedPeriod(uri, piece, refused)
                 throw refused
             }
             return MemoryMediaIo(bytes, uri, null)
@@ -645,6 +649,21 @@ internal class DashHlsMediaIo(
     private fun gone(track: DashHlsTrack): DashTrackGoneException {
         reportGone(track)
         return DashTrackGoneException(goneDetail(track))
+    }
+
+    /**
+     * Says once for each Period of each track, through the warning sink, that the Period's
+     * segments are skipped and why, such as a Period in another codec than the stream began with
+     * (#706). Its segments' addresses here share the Period's path, so the first refusal speaks
+     * for the rest.
+     */
+    private suspend fun reportSkippedPeriod(address: String, piece: Piece, refused: DashUnsupportedException) {
+        if (!lock.withLock { skippedPeriods.add(address.substringBeforeLast('/')) }) return
+        val url = when (piece) {
+            is Piece.Init -> piece.url
+            is Piece.Media -> piece.url
+        }
+        warningSink(PlaybackWarning.SegmentSkipped(url, "the segments of its Period are skipped: ${refused.message}"))
     }
 
     /** Says once, through the warning sink, that [track] is gone from the live manifest. */

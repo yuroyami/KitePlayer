@@ -171,7 +171,8 @@ the server sends it as text, XML or bytes, by its root element.
   boundary although each Period's media time starts again. An fMP4 Period of another picture size
   decodes at its own size, because its H.264 or HEVC parameter sets travel with its keyframes, and
   a live manifest that a refresh gives a new Period plays on into it. The player skips an fMP4
-  Period in another codec than the first.
+  Period in another codec than the first, and says so once for each track with
+  `PlaybackWarning.SegmentSkipped`, which names both codecs (#706).
 - The player does not resolve `xlink:href`, so a remote Period, as an ad slot often is, arrives
   with no adaptation sets. Such a Period, and any other with no picture and no sound, is left out:
   the Periods around it keep their place in time, and the presentation shows nothing for its length.

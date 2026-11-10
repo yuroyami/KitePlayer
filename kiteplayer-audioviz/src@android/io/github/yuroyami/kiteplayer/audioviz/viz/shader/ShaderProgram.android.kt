@@ -66,6 +66,10 @@ public actual class ShaderProgram actual constructor(source: String) {
      */
     private val absent = HashSet<String>()
 
+    /** The shader bound to each child, with the bitmap and tiling it was made for (#951). */
+    private class BoundChild(val source: android.graphics.Bitmap, val tiled: Boolean, val shader: BitmapShader)
+    private val children = HashMap<String, BoundChild>()
+
     private inline fun set(name: String, apply: (RuntimeShader) -> Unit) {
         val target = shader ?: return
         if (name in absent) return
@@ -102,10 +106,20 @@ public actual class ShaderProgram actual constructor(source: String) {
         // Clamped at the edges and sampled smoothly, so reading between two bars of a spectrum
         // blends rather than steps.
         val mode = if (tiled) android.graphics.Shader.TileMode.REPEAT else android.graphics.Shader.TileMode.CLAMP
-        val bitmap = BitmapShader(image.asAndroidBitmap(), mode, mode)
-        // Fed to a RuntimeShader, a BitmapShader samples the nearest pixel unless it is told to
-        // blend. The desktop and iOS programs sample smoothly, so this matches them.
-        bitmap.filterMode = BitmapShader.FILTER_MODE_LINEAR
+        val source = image.asAndroidBitmap()
+        // One shader per child, kept while its bitmap and tiling stay: the bitmaps live long and
+        // change in place, so a new native shader every frame for each child was garbage (#951).
+        val kept = children[name]
+        val bitmap = if (kept != null && kept.source === source && kept.tiled == tiled) {
+            kept.shader
+        } else {
+            BitmapShader(source, mode, mode).also { made ->
+                // Fed to a RuntimeShader, a BitmapShader samples the nearest pixel unless it is told
+                // to blend. The desktop and iOS programs sample smoothly, so this matches them.
+                made.filterMode = BitmapShader.FILTER_MODE_LINEAR
+                children[name] = BoundChild(source, tiled, made)
+            }
+        }
         try {
             target.setInputShader(name, bitmap)
         } catch (ignored: Throwable) {

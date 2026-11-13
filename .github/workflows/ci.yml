@@ -554,7 +554,8 @@ jobs:
       - name: Install the ffmpeg CLI the clips are recorded against
         run: |
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          brew install --quiet ffmpeg
+          # brew exits 1 when one bottle download failed, even after its own retry got it.
+          brew install --quiet ffmpeg || brew install --quiet ffmpeg
           echo "$(brew --prefix ffmpeg)/bin" >> "$GITHUB_PATH"
 
       - name: Generate the test clips
@@ -742,7 +743,8 @@ jobs:
       - name: Install the ffmpeg CLI the clips are recorded against
         run: |
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          brew install --quiet ffmpeg
+          # brew exits 1 when one bottle download failed, even after its own retry got it.
+          brew install --quiet ffmpeg || brew install --quiet ffmpeg
           echo "$(brew --prefix ffmpeg)/bin" >> "$GITHUB_PATH"
 
       - name: Generate the test clips
@@ -980,7 +982,8 @@ jobs:
       - name: Install the ffmpeg CLI the clips are recorded against
         run: |
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          brew install --quiet ffmpeg
+          # brew exits 1 when one bottle download failed, even after its own retry got it.
+          brew install --quiet ffmpeg || brew install --quiet ffmpeg
           echo "$(brew --prefix ffmpeg)/bin" >> "$GITHUB_PATH"
 
       - name: Generate the test clips
@@ -1192,7 +1195,8 @@ jobs:
       - name: Install the ffmpeg CLI the clips are recorded against
         run: |
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          brew install --quiet ffmpeg
+          # brew exits 1 when one bottle download failed, even after its own retry got it.
+          brew install --quiet ffmpeg || brew install --quiet ffmpeg
           echo "$(brew --prefix ffmpeg)/bin" >> "$GITHUB_PATH"
 
       - name: Generate the test clips

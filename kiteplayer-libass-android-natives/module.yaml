@@ -18,7 +18,7 @@ settings:
   publishing:
     enabled: true
     group: io.github.yuroyami
-    version: 0.3.0
+    version: 0.4.0
     pom:
       name: kiteplayer-libass-android-natives
       description: The Android JNI library of kiteplayer-libass. It comes with kiteplayer-libass on Android; never add it yourself.

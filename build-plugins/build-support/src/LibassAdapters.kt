@@ -98,6 +98,8 @@ object LibassAdapters {
                     "-Wl,-Bstatic", "-liconv", "-Wl,-Bdynamic",
                     "-lgdi32", "-ldwrite", "-lole32", "-luuid", "-luser32",
                     STRIP_DEBUG_INFO,
+                    // No link time in the PE header, so two builds give the same DLL for the attested upload.
+                    "-Wl,--no-insert-timestamp",
                 )
             }
             else -> throw BuildFailure("No desktop JNI build is known for host '$hostTriple'.")

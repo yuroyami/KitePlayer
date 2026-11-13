@@ -1,8 +1,5 @@
 # Matroska editions and linked files
 
-> [!NOTE]
-> Not released yet: this is on `main` after 0.3.0 and comes with the next release.
-
 This document is the design for issue #501, and the player now does what it says. It states the
 public API, what the player does with an ordered edition, and how the engine plays one. Where
 building it changed a detail, the detail here is the one that was built. The user's account is in
@@ -26,7 +23,7 @@ skipped play, and an edition cannot be chosen.
 ## What KiteFFmpeg already gives
 
 The issue was written before this existed, and its open question is answered by it. KiteFFmpeg
-0.5.1, which this repository pins, reads the segment and its editions through a patch of FFmpeg's
+0.6.0, which this repository pins, reads the segment and its editions through a patch of FFmpeg's
 Matroska reader that lives in KiteFFmpeg (KiteFFmpeg #173), on every platform including the web.
 `MediaSource.matroska` answers a `MatroskaSegment`: the file's own segment UID, its editions with
 their default, hidden and ordered flags, and each chapter's start, end, hidden and enabled flags,

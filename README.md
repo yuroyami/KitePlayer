@@ -68,27 +68,21 @@ where your app supplies the missing parts ([Platforms](#platforms) lists them).
 ```kotlin
 commonMain.dependencies {
     // Native views, no Compose
-    implementation("io.github.yuroyami:kiteplayer:0.3.0")
+    implementation("io.github.yuroyami:kiteplayer:0.4.0")
 
     // Or Compose, with everything that the line above has
-    implementation("io.github.yuroyami:kiteplayer-compose:0.3.0")
+    implementation("io.github.yuroyami:kiteplayer-compose:0.4.0")
 
     // Optional: a visualizer for media with no picture
-    implementation("io.github.yuroyami:kiteplayer-audioviz:0.3.0")
+    implementation("io.github.yuroyami:kiteplayer-audioviz:0.4.0")
 }
 ```
 
-This page describes `main`, which is ahead of 0.3.0. What 0.3.0 lacks is marked *not released
-yet*: among them Matroska editions with linked files, 360 degree video, `kiteplayer-compose` on the
-web, the CEA-708 caption services, the refusal of DRM media and `TrackInfo.isLanguage`. They come
-with the next release, and code that uses them does not compile against 0.3.0. The samples on this
-page use only what 0.3.0 has. The [CHANGELOG](CHANGELOG.md)'s Unreleased section lists all of it.
-
 You don't install FFmpeg (it comes inside the artifacts), and there is no Gradle plugin to apply.
-On Android, every artifact needs `minSdk` 26, and your app must compile against SDK 37.2 or later
-(`compileSdk` 37 with minor API level 2), or the Android Gradle plugin refuses the build when it
-checks the AAR metadata. The Compose, OkHttp and KiteFFmpeg artifacts that KitePlayer brings in
-ask for 37 on their own. To build a smaller stack of your own, the
+On Android, every artifact needs `minSdk` 26. KitePlayer's own artifacts set no `compileSdk` floor.
+The Compose modules bring in Compose 1.13, whose Android artifacts need `compileSdk` 37 with minor
+API level 1. The Android Gradle plugin refuses the build when an app compiles against less. To
+build a smaller stack of your own, the
 [module contract](docs/module-contract.md) explains what each module brings in.
 
 ### What else you need
@@ -152,11 +146,12 @@ inside the app container, and `3B52.1` is files that the user picked.
 <br>
 
 A browser cannot link FFmpeg or libass into the Kotlin binary, so the page serves them as separate
-WebAssembly modules. Each one is a `web` zip. KiteFFmpeg publishes its zip next to its artifact on
-Maven Central. KitePlayer's two zips are assets of the KitePlayer release on GitHub:
+WebAssembly modules. KiteFFmpeg publishes its module as the `kiteffmpeg-web` jar on Maven
+Central. KitePlayer's web zips are assets of the KitePlayer release on GitHub:
 
-1. Unpack `kiteffmpeg-wasm-js-<version>-web.zip` next to `index.html`. Use the KiteFFmpeg version
-   that KitePlayer depends on (0.5.1 for KitePlayer 0.3.0).
+1. Download `kiteffmpeg-web-<version>.jar` (`io.github.yuroyami:kiteffmpeg-web`) from Maven Central
+   and unpack it next to `index.html`. A jar is a zip file. Use the KiteFFmpeg version that
+   KitePlayer depends on (0.6.0 for KitePlayer 0.4.0).
 2. Unpack `kiteplayer-libass-wasm-js-<version>-web.zip` next to it. Without this module, KitePlayer
    draws ASS subtitles with its built-in styling.
 3. Call `KiteFFmpegWeb.load()` before you create a player. Under a bundler, instantiate the module
@@ -295,8 +290,8 @@ player.setVolume(0.8f)
 
 // Every audio, video and subtitle track of the open item
 val tracks = player.state.value.tracks
-// The next release's isLanguage("fr") also matches the fra and fre spellings a container may use
-val french = tracks.audio.firstOrNull { it.language == "fr" || it.language == "fra" || it.language == "fre" }
+// isLanguage("fr") also matches the fra and fre spellings a container may use
+val french = tracks.audio.firstOrNull { it.isLanguage("fr") }
 if (french != null) player.selectTrack(TrackKind.Audio, french.id)
 ```
 
@@ -315,10 +310,9 @@ The player can also:
 - step frame by frame and take screenshots
 - record what plays into a Matroska file, without re-encoding
 - play Matroska editions, including ordered chapters that take a season's opening and ending from
-  other files ([Editions and linked files](docs/media-sources.md#editions-and-linked-files)),
-  *not released yet*
+  other files ([Editions and linked files](docs/media-sources.md#editions-and-linked-files))
 - show a 360 degree video as a view that your app turns with a drag or with the phone's motion
-  ([360 degree video](docs/spherical-video.md)), *not released yet*
+  ([360 degree video](docs/spherical-video.md))
 
 [Controlling the player](docs/player-api.md) lists every call by area.
 
@@ -350,7 +344,7 @@ KitePlayer reads these subtitle formats:
 - ASS and SSA, drawn by libass exactly as authored, including signs and karaoke
 - SubRip, WebVTT and TTML
 - image subtitles from Blu-ray, DVD and DVB, and DVB teletext
-- closed captions inside broadcast video, CEA-608, and each CEA-708 service (*not released yet*)
+- closed captions inside broadcast video, CEA-608, and each CEA-708 service
 - synced lyrics
 
 Each subtitle is a track of the item. A subtitle file that you add during playback becomes a track
@@ -488,7 +482,7 @@ capabilities, built from the code, are in [docs/capabilities.md](docs/capabiliti
 | **iOS** | ✓ | ✓ | ✓ |
 | **Desktop JVM** | ✓ | ✓ | ✓ |
 | **macOS** (native) | ✓ | | |
-| **Web** (`wasmJs`) | ✓ | ✓ (not released yet) | |
+| **Web** (`wasmJs`) | ✓ | ✓ | |
 | **Linux and Windows** (native) | No audio output | | |
 
 - On iOS, the artifacts target `iosArm64` and `iosSimulatorArm64`, with no `iosX64`.
@@ -497,7 +491,7 @@ capabilities, built from the code, are in [docs/capabilities.md](docs/capabiliti
 - On Linux and Windows native, KitePlayer has no audio output and no HTTPS. `KitePlayer()` throws
   there, and `KitePlayer.isAvailable` is false. Pass `KiteFFmpegMediaBackend()` and your own
   `OutputBackend` to `KitePlayer.create`.
-- *Not released yet:* on the web, `kiteplayer-compose` draws the video inside Compose's own WebGL
+- On the web, `kiteplayer-compose` draws the video inside Compose's own WebGL
   context, so it needs a browser with WebGL2. Clipping, alpha and other Compose content apply to it
   as on the other platforms. It runs the player on the page's main thread. The worker player draws
   on a canvas of its own.
@@ -539,7 +533,7 @@ case in detail.
   DASH adaptation sets. When every audio and video set of a DASH manifest is encrypted, or an HLS
   stream names a Widevine, PlayReady or FairPlay key or uses `SAMPLE-AES-CTR`, the open fails with
   `PlaybackError.DrmUnsupported`, which names the system, so an app can say so or hand the item to
-  a platform player. *Not released yet:* 0.3.0 has no `DrmUnsupported`.
+  a platform player.
 - The web build plays a much smaller set of formats than the other platforms, because its codec
   module is a much smaller FFmpeg. It opens MP4 and MOV, Matroska and WebM, MPEG-TS, MP3, raw AAC,
   FLAC, HLS and WebVTT, and decodes H.264, HEVC, VP9, AAC, MP3, FLAC, Opus, Vorbis and PCM. So an
@@ -553,7 +547,7 @@ case in detail.
 - KitePlayer converts Dolby Vision profile 5 and 10.0 to HDR10 on the CPU. That keeps up at 1080p,
   but not at 4K.
 - Nobody has played sound with the desktop JVM build on a real Linux or Windows computer yet.
-- *Not released yet:* you can only look around in a 360 degree video where `KiteVideo` draws it. The
+- You can only look around in a 360 degree video where `KiteVideo` draws it. The
   native views that `KitePlayerVideo` uses by default on Android, iOS and the desktop JVM show the
   whole frame flat, so pass `path = KiteRenderPath.ComposeCanvas` there. On Android, the 360 degree
   view needs Android 13 or later.

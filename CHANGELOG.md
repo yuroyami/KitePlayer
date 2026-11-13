@@ -10,6 +10,8 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-13
+
 ### Added
 
 - `PlaybackWarning.RenderQualityUnavailable` and `VideoRenderer.appliesRenderQuality` (#769). A
@@ -339,9 +341,12 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
   ring now limits at the lower of what the device's volume brings back within full scale and what
   the device takes above it, about 3 dB for Android's float track and nothing for its 16-bit
   fallback, which clips on the way in. Both rings carry the same rule.
-- The README now says that an Android app must compile against SDK 37.2 or later (#613). Every
-  Android artifact of 0.3.0 carries that floor in its AAR metadata, and the install section named
-  only `minSdk` 26, so an app on `compileSdk` 36 failed its first build with no warning.
+- An Android app no longer has to compile against SDK 37.2 to use KitePlayer (#613). Every
+  Android artifact of 0.3.0 carried that floor in its AAR metadata, so an app on `compileSdk` 36
+  failed its first build with no warning. The artifacts that the Kotlin Toolchain builds carry no
+  AAR metadata, and an app on `compileSdk` 36 with AGP 9.5.0 compiles against them. The Compose
+  modules still bring in Compose 1.13, which needs `compileSdk` 37 with minor API level 1, and the
+  README's install section says so.
 - The libass adapter libraries leave the chain's debug info out (#615). It was about a third of
   each published library, 1.1 MB for each Android ABI, and an app built without the NDK shipped
   it as it was. The symbol tables stay, so a native crash still names its functions.

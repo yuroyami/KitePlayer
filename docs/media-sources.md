@@ -79,9 +79,6 @@ this, while an item with its own `io` needs nothing more.
 
 ## Editions and linked files
 
-> [!NOTE]
-> Not released yet: this is on `main` after 0.3.0 and comes with the next release.
-
 A Matroska file can carry several editions of its chapters, such as a theatrical and an extended
 cut of a film. The player lists them in `state.value.editions`, and `state.value.edition` names the
 one that plays: the one the file marks as the default, unless the item asks for another with

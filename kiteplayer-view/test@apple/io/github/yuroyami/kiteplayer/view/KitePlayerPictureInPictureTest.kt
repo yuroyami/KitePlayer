@@ -140,13 +140,16 @@ class KitePlayerPictureInPictureTest {
     }
 
     @Test
-    fun theWindowSeesPausedUnlessThePlayerPlays() {
-        val player = FakePlayer(PlayerSnapshot(status = PlaybackStatus.Playing))
+    fun theWindowSeesPausedUnlessPlayWasAskedFor() {
+        val player = FakePlayer(PlayerSnapshot(status = PlaybackStatus.Playing, playRequested = true))
         val playback = PlaybackDelegate(player, scope, 15.seconds)
         assertFalse(playback.paused())
-        player.state.value = PlayerSnapshot(status = PlaybackStatus.Paused)
+        // A player that buffers after a play keeps its pause button (#943).
+        player.state.value = PlayerSnapshot(status = PlaybackStatus.Buffering, playRequested = true)
+        assertFalse(playback.paused())
+        player.state.value = PlayerSnapshot(status = PlaybackStatus.Paused, playRequested = false)
         assertTrue(playback.paused())
-        player.state.value = PlayerSnapshot(status = PlaybackStatus.Buffering)
+        player.state.value = PlayerSnapshot(status = PlaybackStatus.Buffering, playRequested = false)
         assertTrue(playback.paused())
     }
 

@@ -80,6 +80,10 @@
 # measured the worker at 901,851 bytes, 76 over the budget of 901,775. The codec module kept its
 # 1,538,723 bytes.
 #
+# The worker budget is now 0.88 MiB. The 159 commits after that raise, the redirect rule that keeps
+# an item's headers on its own server among them, grew the worker from 901,851 bytes to 918,439,
+# 16,588 more and 6,178 over the budget of 912,261. The codec module kept its 1,538,723 bytes.
+#
 # Both budgets are ratchets: a new KiteFFmpeg pin, or player code, that grows a module past its
 # budget fails here, and raising a budget is a decision made in the same commit, with both numbers
 # in its message. Each file's SHA-256 is printed beside its size, so a failure names the exact bytes
@@ -94,8 +98,8 @@ cd "$ROOT"
 
 # 1.47 MiB.
 BUDGET_BYTES=1541407
-# 0.87 MiB.
-WORKER_BUDGET_BYTES=912261
+# 0.88 MiB.
+WORKER_BUDGET_BYTES=922746
 
 # Measures the files after the label gzipped, prints a table, and fails when the sum is over the budget.
 measure() { # <label> <budget bytes> <file>...

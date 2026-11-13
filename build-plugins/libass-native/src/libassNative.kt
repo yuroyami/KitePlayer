@@ -68,7 +68,8 @@ fun mergeAssChain(
  * Links the desktop JNI library of every host this machine can link for, into
  * `<resourcesDir>/kiteplayer-libass-native/<host>/`, which the JVM jar carries.
  * With `KITEPLAYER_LIBASS_REQUIRE_ALL_HOST_JNI=true` a host that cannot be linked fails the build,
- * and the konan sysroots are downloaded first. A release build sets it.
+ * and the konan sysroots are downloaded first. A release build sets it. The sysroot of the machine's
+ * own host is always downloaded.
  */
 @TaskAction(ExecutionAvoidance.Disabled)
 fun buildHostJni(
@@ -93,7 +94,10 @@ fun buildHostJni(
             continue
         }
         val konanTarget = LibassAdapters.KONAN_TARGET_FOR_HOST.getValue(host)
-        if (requireAll && konanTarget != null) CompileKiteRt.ensureToolchain(konanTarget, kotlinVersion, dataDir, log)
+        // This host's own adapter is the one its JVM tests load, so its sysroot is always fetched.
+        if ((requireAll || host == thisDesktopHost()) && konanTarget != null) {
+            CompileKiteRt.ensureToolchain(konanTarget, kotlinVersion, dataDir, log)
+        }
         if (!LibassAdapters.hostToolchainReady(host, dataDir)) {
             if (requireAll) throw BuildFailure("Cannot link the $host adapter: its konan sysroot is missing.")
             log("jvm jar skips the $host adapter: no konan sysroot for $konanTarget yet. Building that platform once provisions it.")
@@ -123,4 +127,20 @@ fun buildHostJni(
     }
     if (hostIsWindows) log("Windows hosts link only the adapters of other hosts that their konan sysroots allow.")
     syncDirectory(staging, resourcesDir.toFile())
+}
+
+/** The `CHAIN_DIR_FOR_HOST` key of the machine this build runs on, or null for another machine. */
+private fun thisDesktopHost(): String? {
+    val os = System.getProperty("os.name").lowercase()
+    val arch = when (System.getProperty("os.arch")) {
+        "aarch64", "arm64" -> "arm64"
+        "amd64", "x86_64" -> "x64"
+        else -> return null
+    }
+    return when {
+        os.startsWith("mac") -> "macos-$arch"
+        os.startsWith("linux") -> "linux-$arch"
+        os.startsWith("windows") -> "windows-$arch"
+        else -> null
+    }
 }

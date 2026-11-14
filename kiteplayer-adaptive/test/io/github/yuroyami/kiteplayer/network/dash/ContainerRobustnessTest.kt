@@ -93,8 +93,9 @@ class ContainerRobustnessTest {
             if (!refusal.isInstance(t)) fail("$where threw $t, not ${refusal.simpleName}\n--- input ---\n${bytes.hex()}", t)
         }
         val elapsed = mark.elapsedNow()
-        // A hang or a slow path takes far longer. A debug build on a busy CI simulator once took 1.17 s.
-        assertTrue(elapsed < 3.seconds, "$where took $elapsed\n--- input ---\n${bytes.hex()}")
+        // A hang never ends, so the cap only needs to beat a slow runner: a debug build on a busy CI
+        // simulator took 1.17 s once and 3.01 s in the 0.4.0 publish run.
+        assertTrue(elapsed < 10.seconds, "$where took $elapsed\n--- input ---\n${bytes.hex()}")
     }
 
     private enum class Op { FlipBit, SetByte, Truncate, DuplicateRun, DeleteRun, MaxLength }

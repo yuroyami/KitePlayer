@@ -103,23 +103,19 @@ jobs:
         run: ./scripts/run-c-tests.sh plain && ./scripts/run-c-tests.sh asan
 
   # ---------------------------------------------------------------------------------------------
-  # The macOS host: the only runner that gets the real media, plus every ratchet.
+  # The macOS host: the only runner that gets the real media. The ratchets run in the publish job,
+  # which compiles every platform anyway (#975).
   # ---------------------------------------------------------------------------------------------
   macos-host:
-    name: macOS arm64 (real media, native, the ratchets)
+    name: macOS arm64 (real media, native)
     runs-on: macos-latest
-    # The ratchets compile every published module for every platform from a cold cache, and the
-    # native suites follow; two hours ran out inside the ratchets. The JVM suites are macos-jvm's.
-    # A cold cache has since made the ratchets alone take from 12 minutes to 2 h 18, and three hours
-    # ran out in the published-format consumer after them.
-    timeout-minutes: 240
+    # This job compiles the macOS platform only. The JVM suites are macos-jvm's.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
-      # Restored here and saved after the ratchets, not by actions/cache at the end of the job: that
-      # saves only when every step passed, so a job that kept failing later never saved one, and each
-      # run compiled every target's caches from nothing, two to three hours of the four.
+      # Only restored: the publish job saves this cache, and it compiles every platform, so the
+      # cache holds what this job needs.
       - uses: actions/cache/restore@v4
-        id: toolchain
         with:
           path: |
             ~/Library/Caches/JetBrains/Kotlin
@@ -158,48 +154,8 @@ jobs:
       - name: The clips, and what made them
         run: cat testmedia/MANIFEST.txt
 
-      # The ratchets first, because a surface change should fail before a long test suite does.
-      # The klib and Android dumps read the compiled libraries, so every published module's main
-      # code is compiled for every platform first. Only the main code: `./kotlin build` compiles
-      # every test source set of every platform too, and on this runner that alone outlasted the
-      # job's two hours. Each platform's tests compile in the job that runs them. kitertCoupling
-      # holds the kitert boundary against a committed baseline.
-      - name: The ratchets
-        run: |
-          tasks=$(./kotlin show tasks)
-          compiles=$(for module in $(scripts/published-modules.sh); do
-            # A build plugin's own tasks, named like compileIosArm64@kitert-c, run as dependencies.
-            echo "$tasks" | grep -oE ":$module:compile[A-Za-z0-9]+(@[A-Za-z0-9-]+)?" | grep -vE '@|Test|Metadata|Release$'
-          done | sort -u)
-          # shellcheck disable=SC2086 # one word per task
-          ./kotlin task $compiles
-          # Only a publish compiles the shared folders such as src@native. Compile them here, so an
-          # error in one fails this job and not the release.
-          metadata=$(echo "$tasks" | grep -oE ':kiteplayer[a-z-]*:compileMetadata[A-Za-z0-9]+' |
-            grep -v ':kiteplayer-sample' | sort -u)
-          # shellcheck disable=SC2086 # one word per task
-          ./kotlin task $metadata
-          ./kotlin check abi klibAbi klibOnlyAbi androidAbi kitertCoupling duplicateClasses
-          ./scripts/check-dependency-hygiene.sh
-
-      # The device callback may reach no allocator, lock, log or framework call. Only the compiled
-      # objects can prove that, so this runs after the build above wrote the macOS, iOS device and
-      # iOS simulator archives the cinterop klibs embed, and its negative controls prove it rejects
-      # each forbidden call (#640). The build logic's own tests ride here too.
-      - name: Keep the toolchain the ratchets filled
-        if: always() && steps.toolchain.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ~/Library/Caches/JetBrains/Kotlin
-            ~/.konan
-          key: ${{ steps.toolchain.outputs.cache-primary-key }}
-
-      - name: The render audit of the audio callback, and the build logic tests
-        run: |
-          kiteplayer-rt/native/scripts/render-audit.sh
-          kiteplayer-rt/native/scripts/render-audit.sh --prove-it-can-fail
-          ./kotlin test -m build-support
+      - name: The build logic tests
+        run: ./kotlin test -m build-support
 
       # The Kotlin/Native host target. kiteplayer-ffmpeg here is the format conformance matrix
       # against real clips, and kiteplayer plays one clip through KitePlayerPlatform.createOrNull().
@@ -217,33 +173,6 @@ jobs:
             -m kiteplayer-rt -m kiteplayer-libass -m kiteplayer-adaptive -m kiteplayer-network \
             -m kiteplayer-ffmpeg -m kiteplayer -m kiteplayer-view --exclude-classes='*SoakTest'
           ./scripts/run-native-tests.sh -m kiteplayer-output -p macosArm64 --exclude-set no-audio-hardware
-
-      # An isolated external Gradle consumer must retain optional registration after Native
-      # release optimization. A hosted runner also verifies public HTTPS independently of host
-      # firewalls. Staging writes Maven Local and build/verification-maven; it never uploads.
-      - name: Published-format Native consumer and HTTPS
-        run: |
-          ./scripts/verify-network-distribution.sh --stage
-          ./scripts/verify-network-distribution.sh --run --target macos --url https://example.com
-
-      # Every published artifact against artifact-size-baseline.txt: the JVM jar, the Android
-      # archive and the macOS and iOS klibs. After the tests, so a size failure never hides a test
-      # failure. Its publish links every desktop and Android libass adapter or fails, as a release
-      # does, so the jars it leaves carry every half (#776). Only this step: the switch also makes
-      # every test task link the libass web module, and this job has no emcc.
-      - name: Artifact sizes
-        env:
-          KITEPLAYER_LIBASS_REQUIRE_ALL_HOST_JNI: "true"
-          KITEPLAYER_LIBASS_REQUIRE_ANDROID_JNI: "true"
-        run: ./scripts/check-artifact-size.sh
-
-      # The publication check reads the POMs that the size step left in Maven Local, and the libass
-      # check opens its jars for their native libraries (#776).
-      - name: Publication readiness
-        run: |
-          ./kotlin check publication
-          ./scripts/check-libass-jars.sh
-          ./scripts/check-libass-jars.sh --falsify
 
       # Dokka fails on an unresolved KDoc link, which would otherwise render as plain text.
       - name: API reference
@@ -632,31 +561,59 @@ jobs:
           if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------------------------
-  # The artifacts for the device tests. A KitePlayer library publishes Apple klibs too, so only a
-  # macOS runner can publish it, and the emulator job runs on Linux.
+  # The one publish of a run: every published module to Maven Local. A KitePlayer library publishes
+  # Apple klibs too, so only a macOS runner can publish it. The emulator job reads the device test
+  # modules from it. Every check that reads compiled or published files runs here, so no other job
+  # compiles every platform again (#975).
   # ---------------------------------------------------------------------------------------------
   device-test-artifacts:
-    name: Stage the artifacts for the device tests (macOS)
+    name: Publish to Maven Local, the ratchets and what ships (macOS)
     runs-on: macos-latest
-    # A publish compiles every platform of these modules and their dependencies; on a cold cache
-    # that took an hour on one run and outlasted ninety minutes on the next.
+    # A cold cache compiles every platform of every published module.
     timeout-minutes: 150
+    outputs:
+      staged: ${{ steps.stage.outputs.staged }}
+    # Every publish here links every desktop and Android libass adapter or fails, as a release does,
+    # so the jars carry every half (#776). The switch also makes every test task link the libass web
+    # module, and this job has no emcc, so no toolchain test runs here.
+    env:
+      KITEPLAYER_LIBASS_REQUIRE_ALL_HOST_JNI: "true"
+      KITEPLAYER_LIBASS_REQUIRE_ANDROID_JNI: "true"
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      # Saved right after the publish, not by actions/cache at the end of the job: that saves only
+      # when every step passed, so a job that kept failing later never saved one. The other macOS
+      # jobs restore it, because it holds every platform.
+      - uses: actions/cache/restore@v4
+        id: toolchain
         with:
           path: |
             ~/Library/Caches/JetBrains/Kotlin
             ~/.konan
-          key: kotlin-device-test-artifacts-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
+          key: kotlin-macos-host-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
           restore-keys: |
-            kotlin-device-test-artifacts-
             kotlin-macos-host-
-      - name: Publish the device test modules and their dependencies to build/verification-maven
+
+      # The device test modules and their dependencies are every published module. The swap line
+      # shows whether the runner ran short of memory.
+      - name: Publish every published module, and stage the device test modules
+        id: stage
         run: |
           ./scripts/stage-verification-maven.sh --with-dependencies \
             kiteplayer-io kiteplayer-output kiteplayer-ffmpeg kiteplayer-libass kiteplayer-compose-video \
             kiteplayer-compose kiteplayer-compose-interop kiteplayer-audioviz
+          sysctl vm.swapusage
+          echo "staged=true" >> "$GITHUB_OUTPUT"
+
+      - name: Keep the toolchain this job filled
+        if: always() && steps.toolchain.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/Library/Caches/JetBrains/Kotlin
+            ~/.konan
+          key: ${{ steps.toolchain.outputs.cache-primary-key }}
+
       - uses: actions/upload-artifact@v4
         with:
           name: verification-maven
@@ -664,12 +621,54 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+      # The klib and Android dumps read the libraries that the publish compiled. The publish also
+      # compiled the shared folders such as src@native, so an error in one fails here and not in the
+      # release. kitertCoupling holds the kitert boundary against a committed baseline.
+      - name: The ratchets
+        run: |
+          ./kotlin check abi klibAbi klibOnlyAbi androidAbi kitertCoupling duplicateClasses
+          ./scripts/check-dependency-hygiene.sh
+
+      # The device callback may reach no allocator, lock, log or framework call. Only the compiled
+      # objects can prove that, so this runs after the publish wrote the macOS, iOS device and iOS
+      # simulator archives the cinterop klibs embed, and its negative controls prove it rejects each
+      # forbidden call (#640).
+      - name: The render audit of the audio callback
+        run: |
+          kiteplayer-rt/native/scripts/render-audit.sh
+          kiteplayer-rt/native/scripts/render-audit.sh --prove-it-can-fail
+
+      # An isolated external Gradle consumer must retain optional registration after Native
+      # release optimization. A hosted runner also verifies public HTTPS independently of host
+      # firewalls. Staging writes Maven Local and build/verification-maven; it never uploads. It
+      # stages again, so it runs after the upload of build/verification-maven above.
+      - name: Published-format Native consumer and HTTPS
+        run: |
+          ./scripts/verify-network-distribution.sh --stage
+          ./scripts/verify-network-distribution.sh --run --target macos --url https://example.com
+
+      # Every published artifact against artifact-size-baseline.txt: the JVM jar, the Android
+      # archive and the macOS and iOS klibs. Its publish finds every compile up to date.
+      - name: Artifact sizes
+        run: ./scripts/check-artifact-size.sh
+
+      # The publication check reads the POMs that the size step left in Maven Local, and the libass
+      # check opens its jars for their native libraries (#776).
+      - name: Publication readiness
+        run: |
+          ./kotlin check publication
+          ./scripts/check-libass-jars.sh
+          ./scripts/check-libass-jars.sh --falsify
+
   # ---------------------------------------------------------------------------------------------
   # Android on an x86_64 emulator: the device tests and the Android native test binaries.
   # ---------------------------------------------------------------------------------------------
   android-emulator:
     name: Android emulator x86_64 (device tests + Android native tests)
     needs: device-test-artifacts
+    # A red ratchet or size check fails the publish job after it staged the device test modules.
+    # The device tests still run on what it staged.
+    if: ${{ !cancelled() && needs.device-test-artifacts.outputs.staged == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     # A red device test fails the run, and so stops a release that runs this file (#638). The job

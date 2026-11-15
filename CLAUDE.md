@@ -51,10 +51,14 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - A Kotlin/Native test report gives every test a time near zero, so a test that returned early
   because it found no fixture reads exactly like one that ran. To prove a native test reads its
   media, hide the fixture once and watch it fail.
-- `ci.yml` cancels the run in progress on every push, and a run takes about 45 minutes. Pushing
+- `ci.yml` cancels the run in progress on every push, and a run takes hours. Pushing
   each commit of a long session means no run ever finishes. Hold a push until the last run is read.
   Running an older run's failed jobs again counts as a push here: it cancels the run of a newer
   commit that is in progress. Run them again only when nothing newer is running.
+- A publish of many modules that takes hours instead of minutes is out of memory, not hung. The
+  toolchain runs each Kotlin/Native compile in a JVM of its own, with no limit on how many run at
+  once, and a 7 GB macOS runner swaps. Publish through `scripts/publish-local.sh`, which compiles
+  one platform at a time first, and compile every platform in one CI job only: the publish job (#975).
 - A CI job that fails with "Could not find" for an artifact that Maven Central serves may have a
   broken toolchain cache, not a network problem. GitHub evicts cache entries once a repository
   holds more than 10 GB. Delete that job's `kotlin-<job>-` entry with `gh cache delete`.

@@ -74,10 +74,9 @@ measure() {
     # shellcheck source=test-signing-key.sh
     . scripts/test-signing-key.sh
     : > "$out"
-    local flags=()
-    for module in $modules; do flags+=(-m "$module"); done
     echo "== Publishing the published modules to Maven Local"
-    KOTLIN_CLI_NO_WELCOME_BANNER=1 ./kotlin publish mavenLocal --non-transitive "${flags[@]}"
+    # shellcheck disable=SC2086 # one module name per word
+    scripts/publish-local.sh $modules
     for module in $modules; do
         for target_pair in $TARGETS; do
             suffix="${target_pair%%:*}"

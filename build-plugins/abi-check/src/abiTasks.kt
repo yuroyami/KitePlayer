@@ -15,6 +15,7 @@ import kotlin.io.path.copyTo
 import kotlin.io.path.createParentDirectories
 import kotlin.io.path.exists
 import kotlin.io.path.extension
+import kotlin.io.path.getLastModifiedTime
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.Path
 import kotlin.io.path.readText
@@ -140,10 +141,12 @@ fun dumpKlibAbi(
     val merged: KlibDump = tools.createKlibDump()
     for (platform in platforms) {
         val task = platform.replaceFirstChar { it.uppercase() }
-        // Native platforms compile a debug and a release klib. Web platforms compile one.
-        val klib = listOf("_${moduleName}_compile${task}Debug", "_${moduleName}_compile$task")
-            .map { Path(buildDir, "tasks", it, "$moduleName.klib") }
-            .firstOrNull { it.exists() }
+        // Native platforms compile a debug and a release klib with the same ABI, and web platforms
+        // compile one. The newest is read, so a build (debug) and a publish (release) both serve.
+        val klib = listOf("Debug", "Release", "")
+            .map { Path(buildDir, "tasks", "_${moduleName}_compile$task$it", "$moduleName.klib") }
+            .filter { it.exists() }
+            .maxByOrNull { it.getLastModifiedTime() }
             ?: error("No $platform klib of $moduleName. Run `./kotlin build -p $platform` first.")
         val dump = tools.extractKlibAbi(klib.toFile())
         println("$platform: ${dump.targets}")

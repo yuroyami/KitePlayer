@@ -92,11 +92,8 @@ base() {
 build_logic() { kotlin test -m build-support; }
 publication() {
     # The POM check reads a local publish of every published module.
-    local module
     . ./scripts/test-signing-key.sh
-    local flags=()
-    for module in $(./scripts/published-modules.sh); do flags+=(-m "$module"); done
-    kotlin publish mavenLocal --non-transitive "${flags[@]}"
+    run ./scripts/publish-local.sh
     kotlin check publication
     run ./scripts/check-dependency-hygiene.sh
 }

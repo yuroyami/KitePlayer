@@ -45,10 +45,8 @@ repository="$ROOT/build/verification-maven"
 
 # shellcheck source=test-signing-key.sh
 . "$ROOT/scripts/test-signing-key.sh"
-# One publish for every named module. --non-transitive skips the local dependencies that are not named.
-module_flags=()
-for module in "$@"; do module_flags+=(-m "$module"); done
-(cd "$ROOT" && KOTLIN_CLI_NO_WELCOME_BANNER=1 ./kotlin publish mavenLocal --non-transitive "${module_flags[@]}")
+# One publish for every named module, and none of the local dependencies that are not named.
+"$ROOT/scripts/publish-local.sh" "$@"
 
 # A folder belongs to the module with the longest matching name: kiteplayer-core-jvm to kiteplayer-core.
 rm -rf "$repository"

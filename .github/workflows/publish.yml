@@ -152,9 +152,7 @@ jobs:
         run: |
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           . scripts/test-signing-key.sh
-          flags=()
-          for module in $(scripts/published-modules.sh); do flags+=(-m "$module"); done
-          ./kotlin publish mavenLocal --non-transitive "${flags[@]}"
+          ./scripts/publish-local.sh
           ./kotlin check publication
           ./scripts/check-libass-jars.sh
 
@@ -276,9 +274,7 @@ jobs:
         run: |
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           . scripts/test-signing-key.sh
-          flags=()
-          for module in $(scripts/published-modules.sh); do flags+=(-m "$module"); done
-          ./kotlin publish mavenLocal --non-transitive "${flags[@]}"
+          ./scripts/publish-local.sh
           ./scripts/attestation-subjects.sh maven > "$RUNNER_TEMP/maven-here.sha256"
           if ! diff -u "$RUNNER_TEMP/attested/maven.sha256" "$RUNNER_TEMP/maven-here.sha256"; then
             echo "::error::this runner built other bytes than the attested ones; nothing was uploaded" >&2
@@ -307,9 +303,7 @@ jobs:
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           . scripts/test-signing-key.sh
           mv "$HOME/.m2/repository/io/github/yuroyami" "$RUNNER_TEMP/before-upload"
-          flags=()
-          for module in $(scripts/published-modules.sh); do flags+=(-m "$module"); done
-          ./kotlin publish mavenLocal --non-transitive "${flags[@]}"
+          ./scripts/publish-local.sh
           ./scripts/attestation-subjects.sh maven > "$RUNNER_TEMP/maven-again.sha256"
           if ! diff -u "$RUNNER_TEMP/attested/maven.sha256" "$RUNNER_TEMP/maven-again.sha256"; then
             echo "::error::the build gave other bytes after the upload than the attested ones" >&2

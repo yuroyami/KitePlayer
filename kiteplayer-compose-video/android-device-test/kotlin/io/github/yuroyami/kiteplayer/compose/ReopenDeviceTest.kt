@@ -7,6 +7,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.NeedsPushedMedia
+import io.github.yuroyami.kiteplayer.PlaybackError
+import io.github.yuroyami.kiteplayer.PlaybackException
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.PlayerConfig
 import io.github.yuroyami.kiteplayer.mobile.mobileBackends
@@ -53,6 +55,7 @@ internal class ReopenDeviceTest {
             }
 
             val player = KitePlayer.create(PlayerConfig(backends = mobileBackends()))
+            var bodyFailure: Throwable? = null
             try {
                 runBlocking {
                     player.attachRenderer(state.renderer)
@@ -102,12 +105,39 @@ internal class ReopenDeviceTest {
                         )
                     }
                 }
+            } catch (failure: Throwable) {
+                bodyFailure = failure
+                throw failure
             } finally {
-                runBlocking { withTimeout(15_000) { player.closeAndAwait() } }
-                state.renderer.close()
+                try {
+                    closeAfterTheTest(player, bodyFailure)
+                } finally {
+                    state.renderer.close()
+                }
             }
         } finally {
             scenario.close()
+        }
+    }
+
+    /**
+     * Closes [player], and a failed close never hides the result of the test body.
+     *
+     * After a failed body, a failed close is added to [bodyFailure] as suppressed. On the emulator, a
+     * close that runs past its deadline is logged and not thrown. The stall is in the emulator's codec
+     * service and graphics host, not in the player (#973). On a phone it still fails the test.
+     */
+    private fun closeAfterTheTest(player: KitePlayer, bodyFailure: Throwable?) {
+        try {
+            runBlocking { withTimeout(15_000) { player.closeAndAwait() } }
+        } catch (failure: Exception) {
+            when {
+                bodyFailure != null -> bodyFailure.addSuppressed(failure)
+                failure is PlaybackException && failure.error is PlaybackError.RuntimeCompromised &&
+                    isProbablyEmulator() ->
+                    Log.w(TAG, "the close after the test ran past its deadline on the emulator (#973)", failure)
+                else -> throw failure
+            }
         }
     }
 
@@ -143,7 +173,11 @@ internal class ReopenDeviceTest {
         const val TAG = "KiteReopen"
         const val WATCHDOG_MILLIS = 3_000L
 
-        /** The longest stall measured in a stop on the emulator was 17.6 s (#301). #973 owns this allowance. */
+        /**
+         * The longest stall measured in a stop on the emulator was 17.6 s (#301). CI run 43731722921
+         * saved the native stacks of a 14.3 s stop: the codec service waited in `setOutputSurface`,
+         * the compositor waited on the emulator's graphics pipe, and no lock of the player was held (#973).
+         */
         const val EMULATOR_STOP_LIMIT_MILLIS = 30_000L
     }
 }

@@ -2,7 +2,7 @@
 # The Kotlin and Compose versions are module settings (`settings.kotlin.version` and
 # `settings.compose.version` in kiteplayer.module-template.yaml), not catalog entries.
 kiteffmpeg = "0.6.0"
-ktor = "3.6.0"
+ktor = "3.6.1"
 # 3D maths for the audio visualiser's perspective camera. A sibling Kite library.
 kite3d = "0.2.0"
 

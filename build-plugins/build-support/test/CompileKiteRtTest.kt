@@ -309,6 +309,9 @@ class CompileKiteRtTest {
             } else {
                 File(fromEnv)
             }
+            // A CI job with a cold cache runs these tests before any native compile, so fetch the
+            // LLVM package here. The stdlib on the test classpath has the module's Kotlin version.
+            CompileKiteRt.ensureToolchain("macos_arm64", KotlinVersion.CURRENT.toString(), dir) { println(it) }
             assertTrue(
                 dir.resolve("dependencies").isDirectory,
                 "No konan dependencies under ${dir.absolutePath}; they arrive with the " +

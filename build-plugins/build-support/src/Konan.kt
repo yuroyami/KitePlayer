@@ -48,16 +48,40 @@ fun findJniJavaHome(): File? {
 /**
  * The `konanc` launcher of Kotlin/Native [kotlinVersion]: the copy that the toolchain unpacked,
  * or else one in the konan data directory.
+ *
+ * The toolchain unpacks into a folder of `extract.cache` and writes `<folder>.flag` when the unpack
+ * is done. A C task can start while that unpack still runs, and a half-written folder has no
+ * compiler jar, so only a flagged folder counts. When an unflagged one is all there is, this waits
+ * for its flag.
  */
 fun findKonanc(kotlinVersion: String): File? {
     val launcher = if (hostIsWindows) "bin/konanc.bat" else "bin/konanc"
-    val unpacked = toolchainCacheDir().resolve("extract.cache").listFiles().orEmpty()
+    fun unpackedFolders() = toolchainCacheDir().resolve("extract.cache").listFiles().orEmpty()
         .filter { it.isDirectory && "kotlin-native-prebuilt-$kotlinVersion-" in it.name }
+    fun launchers(folders: List<File>) = folders
         .flatMap { dir -> listOf(dir) + dir.listFiles().orEmpty().filter(File::isDirectory) }
-    val konanHomes = konanDataDir().listFiles().orEmpty()
+        .map { it.resolve(launcher) }
+        .firstOrNull { it.isFile }
+    fun unpacked() = launchers(unpackedFolders().filter(::isUnpackDone))
+    val konanHome = konanDataDir().listFiles().orEmpty()
         .filter { it.isDirectory && it.name.startsWith("kotlin-native-prebuilt-") && it.name.endsWith("-$kotlinVersion") }
-    return (unpacked + konanHomes).map { it.resolve(launcher) }.firstOrNull { it.isFile }
+        .map { it.resolve(launcher) }
+        .firstOrNull { it.isFile }
+    unpacked()?.let { return it }
+    if (konanHome != null || unpackedFolders().isEmpty()) return konanHome
+    // An unpack is under way. It takes about 20 seconds; a folder that stays unflagged is a dead one.
+    val deadline = System.nanoTime() + UNPACK_WAIT_NANOS
+    while (System.nanoTime() < deadline) {
+        Thread.sleep(500)
+        unpacked()?.let { return it }
+    }
+    return null
 }
+
+/** True when the toolchain finished unpacking [folder]: it writes `<folder>.flag` as its last step. */
+private fun isUnpackDone(folder: File): Boolean = File(folder.path + ".flag").isFile
+
+private const val UNPACK_WAIT_NANOS = 5L * 60 * 1_000_000_000
 
 /**
  * Makes konan download the LLVM package and the sysroot of [konanTarget] when they are missing.

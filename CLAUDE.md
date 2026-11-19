@@ -12,8 +12,9 @@ what reading the code or running the gate would not teach you.
 
 - Plans for audio visualiser patterns live in GitHub issues, like all other work. Keep
   documentation of implemented public contracts in `docs/`.
-- Work on `main`. Never create a branch without asking. Commit locally, never push. The owner
-  pushes, publishes and cuts every release.
+- Always work on `main`. Never create a branch, local or remote. A cloud session makes a
+  `claude/...` branch by default, so commit to `main` there too. Commit locally, never push. The
+  owner pushes, publishes and cuts every release.
 - Commit subject is one imperative sentence about the outcome. Short prose body. No trailers.
 - Every commit is authored and committed as `yuroyami <youcefsidena@gmail.com>`, whatever git
   identity the machine came with. A cloud container can arrive with Claude as its git user, so

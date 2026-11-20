@@ -1,9 +1,11 @@
-@file:OptIn(ExperimentalForeignApi::class)
+@file:OptIn(ExperimentalForeignApi::class, UnsafeNumber::class)
 
 package io.github.yuroyami.kiteplayer.network
 
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.UnsafeNumber
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.convert
 import kotlinx.cinterop.pointed
 import kotlinx.cinterop.toKString
 import kotlinx.cinterop.usePinned
@@ -79,7 +81,7 @@ private object PosixStoreFiles : StoreFiles {
             if (fseeko(file, 0, SEEK_SET) != 0) throw failure("seek", path)
             val bytes = ByteArray(size.toInt())
             if (bytes.isEmpty()) return bytes
-            val read = bytes.usePinned { pinned -> fread(pinned.addressOf(0), 1u, bytes.size.toULong(), file) }
+            val read = bytes.usePinned { pinned -> fread(pinned.addressOf(0), 1u, bytes.size.convert(), file) }
             if (read.toInt() != bytes.size) throw failure("read", path)
             return bytes
         } finally {
@@ -94,8 +96,8 @@ private object PosixStoreFiles : StoreFiles {
         val file = fopen(path, "rb") ?: throw failure("open", path)
         try {
             if (fseeko(file, position, SEEK_SET) != 0) throw failure("seek", path)
-            val read = into.usePinned { pinned -> fread(pinned.addressOf(offset), 1u, length.toULong(), file) }
-            return if (read == 0uL) -1 else read.toInt()
+            val read = into.usePinned { pinned -> fread(pinned.addressOf(offset), 1u, length.convert(), file) }
+            return if (read.toInt() == 0) -1 else read.toInt()
         } finally {
             fclose(file)
         }
@@ -116,8 +118,8 @@ private object PosixStoreFiles : StoreFiles {
                 requireSlice(into, offset, length)
                 if (length <= 0) return 0
                 if (fseeko(file, position, SEEK_SET) != 0) throw failure("seek", path)
-                val read = into.usePinned { pinned -> fread(pinned.addressOf(offset), 1u, length.toULong(), file) }
-                return if (read == 0uL) -1 else read.toInt()
+                val read = into.usePinned { pinned -> fread(pinned.addressOf(offset), 1u, length.convert(), file) }
+                return if (read.toInt() == 0) -1 else read.toInt()
             }
 
             override fun close() {
@@ -137,7 +139,7 @@ private object PosixStoreFiles : StoreFiles {
                 // fwrite takes a pointer and a count, so a slice past the array would read after it (#849).
                 requireSlice(from, offset, length)
                 if (length <= 0) return
-                val written = from.usePinned { pinned -> fwrite(pinned.addressOf(offset), 1u, length.toULong(), file) }
+                val written = from.usePinned { pinned -> fwrite(pinned.addressOf(offset), 1u, length.convert(), file) }
                 if (written.toInt() != length) {
                     failed = true
                     throw failure("write", path)

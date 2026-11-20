@@ -2,11 +2,11 @@
 # libass and, where the platform has one, the HTTP and HTTPS transport.
 product:
   type: kmp/lib
-  platforms: [ jvm, android, iosArm64, iosSimulatorArm64, macosArm64, linuxX64, linuxArm64, mingwX64, js, wasmJs ]
+  platforms: [ jvm, android, js, wasmJs, macosArm64, iosArm64, iosSimulatorArm64, linuxX64, linuxArm64, mingwX64, androidNativeArm32, androidNativeArm64, androidNativeX64 ]
 
 aliases:
   - jvmAndAndroid: [ jvm, android ]
-  # Every platform with a network transport. Linux and Windows have none yet.
+  # Every platform with a network transport. Linux, Windows and Android native have none yet.
   - network: [ android, iosArm64, iosSimulatorArm64, macosArm64, jvm, js, wasmJs ]
 
 apply:
@@ -136,6 +136,18 @@ settings@wasmJs:
   kotlin:
     freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer ]
 
+settings@androidNativeArm32:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer, -Xshort-module-name=kiteplayer ]
+
+settings@androidNativeArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer, -Xshort-module-name=kiteplayer ]
+
+settings@androidNativeX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer, -Xshort-module-name=kiteplayer ]
+
 # Tests compile into their own klib, which needs a different name. The test blocks name the
 # same platforms as the blocks above, so the toolchain applies them last.
 test-settings@iosArm64:
@@ -169,3 +181,15 @@ test-settings@js:
 test-settings@wasmJs:
   kotlin:
     freeCompilerArgs: [ -Xir-module-name=kiteplayer_test ]
+
+test-settings@androidNativeArm32:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer_test, -Xshort-module-name=kiteplayer_test ]
+
+test-settings@androidNativeArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer_test, -Xshort-module-name=kiteplayer_test ]
+
+test-settings@androidNativeX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer_test, -Xshort-module-name=kiteplayer_test ]

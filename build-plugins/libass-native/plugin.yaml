@@ -66,6 +66,39 @@ tasks:
       workDir: ${taskOutputDir}/work
       defFile: ${taskOutputDir}/libass.def
 
+  mergeAndroidNativeArm32:
+    action: !io.github.yuroyami.kiteplayer.build.libass.mergeAssChain
+      konanTarget: android_arm32
+      kotlinVersion: ${module.settings.kotlin.version}
+      repoRoot: ${project.rootDir}
+      pinFile: ${module.rootDir}/ass-chain.sha256
+      defTemplate: ${module.rootDir}/native/libass.def
+      driverDir: ${module.rootDir}/native/src
+      workDir: ${taskOutputDir}/work
+      defFile: ${taskOutputDir}/libass.def
+
+  mergeAndroidNativeArm64:
+    action: !io.github.yuroyami.kiteplayer.build.libass.mergeAssChain
+      konanTarget: android_arm64
+      kotlinVersion: ${module.settings.kotlin.version}
+      repoRoot: ${project.rootDir}
+      pinFile: ${module.rootDir}/ass-chain.sha256
+      defTemplate: ${module.rootDir}/native/libass.def
+      driverDir: ${module.rootDir}/native/src
+      workDir: ${taskOutputDir}/work
+      defFile: ${taskOutputDir}/libass.def
+
+  mergeAndroidNativeX64:
+    action: !io.github.yuroyami.kiteplayer.build.libass.mergeAssChain
+      konanTarget: android_x64
+      kotlinVersion: ${module.settings.kotlin.version}
+      repoRoot: ${project.rootDir}
+      pinFile: ${module.rootDir}/ass-chain.sha256
+      defTemplate: ${module.rootDir}/native/libass.def
+      driverDir: ${module.rootDir}/native/src
+      workDir: ${taskOutputDir}/work
+      defFile: ${taskOutputDir}/libass.def
+
   hostJni:
     action: !io.github.yuroyami.kiteplayer.build.libass.buildHostJni
       kotlinVersion: ${module.settings.kotlin.version}
@@ -89,6 +122,12 @@ generated:
       fragment: "@linuxArm64"
     - defFile: ${tasks.mergeMingwX64.action.defFile}
       fragment: "@mingwX64"
+    - defFile: ${tasks.mergeAndroidNativeArm32.action.defFile}
+      fragment: "@androidNativeArm32"
+    - defFile: ${tasks.mergeAndroidNativeArm64.action.defFile}
+      fragment: "@androidNativeArm64"
+    - defFile: ${tasks.mergeAndroidNativeX64.action.defFile}
+      fragment: "@androidNativeX64"
   # The desktop JNI libraries go into the JVM jar only.
   resources:
     - directory: ${tasks.hostJni.action.resourcesDir}

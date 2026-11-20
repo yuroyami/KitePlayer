@@ -30,6 +30,9 @@ object AssChain {
         "linux_x64" to "linux-x64",
         "linux_arm64" to "linux-arm64",
         "mingw_x64" to "mingw-x64",
+        "android_arm32" to "android-arm32",
+        "android_arm64" to "android-arm64",
+        "android_x64" to "android-x64",
     )
 
     /** The pins of `ass-chain.sha256`: chain folder name to the SHA-256 of its release asset. */
@@ -162,8 +165,17 @@ object AssChain {
      * Merges the four chain archives into one `libkiteass.a` for one Kotlin/Native target.
      * One archive, because a consumer's final link sees cinterop's static libraries in any order. Each
      * object gets its library's prefix, so two libraries with a `utils.o` cannot shadow each other.
+     * An Android native target also gets the C shims of [androidShimDir], which supply what the
+     * Kotlin/Native link for Android lacks.
      */
-    fun merge(chain: Chain, konanTargetName: String, konanDataDir: File, outputDir: File, log: (String) -> Unit): File {
+    fun merge(
+        chain: Chain,
+        konanTargetName: String,
+        konanDataDir: File,
+        outputDir: File,
+        log: (String) -> Unit,
+        androidShimDir: File? = null,
+    ): File {
         outputDir.deleteRecursively()
         outputDir.mkdirs()
         val llvmBin = CompileKiteRt.resolveLlvmBinDir(konanDataDir.resolve("dependencies"), CompileKiteRt.DEFAULT_LLVM_PACKAGE, log)
@@ -182,6 +194,10 @@ object AssChain {
             }
         }
         if (objects.isEmpty()) throw BuildFailure("The ass chain at ${chain.libDir} produced no objects.")
+        if (konanTargetName.startsWith("android_")) {
+            val shimDir = androidShimDir ?: throw BuildFailure("Merging the ass chain for $konanTargetName needs the Android shim folder.")
+            objects += androidShims(konanTargetName, shimDir, konanDataDir, llvmBin, outputDir.resolve("objects/android"))
+        }
         val merged = outputDir.resolve(ARCHIVE_NAME)
         val format = if (konanTargetName.startsWith("macos") || konanTargetName.startsWith("ios")) "darwin" else "gnu"
         runProcess(listOf(archiver.absolutePath, "crs", "--format=$format", merged.absolutePath) + objects.map { it.absolutePath })
@@ -189,6 +205,32 @@ object AssChain {
         outputDir.resolve("objects").deleteRecursively()
         log("$konanTargetName: ${merged.name} from ${objects.size} objects (${merged.length()} bytes)")
         return merged
+    }
+
+    /**
+     * Compiles each C file of [shimDir] into one object for an Android native target. The chain is
+     * built for API 24, and Kotlin/Native links Android binaries against the libc of API 21 with no
+     * outline atomics helpers, so the shims define `stdout`, `stderr` and the helpers the chain calls.
+     */
+    private fun androidShims(konanTargetName: String, shimDir: File, konanDataDir: File, llvmBin: File, objectDir: File): List<File> {
+        val spec = CompileKiteRt.specFor(konanTargetName)
+        val clang = CompileKiteRt.resolveTool(llvmBin, "clang")
+            ?: throw BuildFailure("No clang in the konan LLVM package; a Kotlin/Native compile provisions it.")
+        val sysroot = konanDataDir.resolve("dependencies").resolve(
+            spec.konanSysroot ?: throw BuildFailure("No konan sysroot is known for $konanTargetName."),
+        )
+        if (!sysroot.isDirectory) throw BuildFailure("No sysroot at $sysroot. A Kotlin/Native compile for $konanTargetName provisions it.")
+        val sources = shimDir.listFiles().orEmpty().filter { it.isFile && it.extension == "c" }.sortedBy { it.name }
+        if (sources.isEmpty()) throw BuildFailure("No Android shims under $shimDir.")
+        objectDir.mkdirs()
+        return sources.map { source ->
+            val objectFile = objectDir.resolve("android__${source.nameWithoutExtension}.o")
+            runProcess(
+                listOf(clang.absolutePath, "-target", spec.triple, "--sysroot=${sysroot.absolutePath}") +
+                    CompileKiteRt.COMPILER_FLAGS + spec.extraFlags + listOf("-c", source.absolutePath, "-o", objectFile.absolutePath),
+            )
+            objectFile
+        }
     }
 }
 

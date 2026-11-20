@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalForeignApi::class)
+@file:OptIn(ExperimentalForeignApi::class, UnsafeNumber::class)
 
 package io.github.yuroyami.kiteplayer.libass
 
@@ -6,6 +6,7 @@ import io.github.yuroyami.kiteplayer.spi.TypesetFrame
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.CPointerVar
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.UnsafeNumber
 import kotlinx.cinterop.IntVar
 import kotlinx.cinterop.UByteVar
 import kotlinx.cinterop.addressOf
@@ -43,7 +44,7 @@ internal actual class LibassEngine private constructor(
     actual fun openDocument(script: ByteArray): Boolean {
         if (script.isEmpty()) return false
         return script.usePinned { pinned ->
-            kite_ass_open_document(self, pinned.addressOf(0), script.size.toULong()) != 0
+            kite_ass_open_document(self, pinned.addressOf(0), script.size.convert()) != 0
         }
     }
 

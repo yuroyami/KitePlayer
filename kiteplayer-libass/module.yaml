@@ -7,7 +7,7 @@
 # build-plugins/build-support for the three places a build finds it.
 product:
   type: kmp/lib
-  platforms: [ jvm, android, macosArm64, iosArm64, iosSimulatorArm64, linuxX64, linuxArm64, mingwX64, js, wasmJs ]
+  platforms: [ jvm, android, js, wasmJs, macosArm64, iosArm64, iosSimulatorArm64, linuxX64, linuxArm64, mingwX64, androidNativeArm32, androidNativeArm64, androidNativeX64 ]
 
 aliases:
   - jvmAndAndroid: [ jvm, android ]
@@ -117,6 +117,18 @@ settings@wasmJs:
   kotlin:
     freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-libass ]
 
+settings@androidNativeArm32:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-libass, -Xshort-module-name=kiteplayer-libass ]
+
+settings@androidNativeArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-libass, -Xshort-module-name=kiteplayer-libass ]
+
+settings@androidNativeX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-libass, -Xshort-module-name=kiteplayer-libass ]
+
 # Tests compile into their own klib, which needs a different name. The test blocks name the
 # same platforms as the blocks above, so the toolchain applies them last.
 test-settings@macosArm64:
@@ -150,3 +162,15 @@ test-settings@js:
 test-settings@wasmJs:
   kotlin:
     freeCompilerArgs: [ -Xir-module-name=kiteplayer-libass_test ]
+
+test-settings@androidNativeArm32:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-libass_test, -Xshort-module-name=kiteplayer-libass_test ]
+
+test-settings@androidNativeArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-libass_test, -Xshort-module-name=kiteplayer-libass_test ]
+
+test-settings@androidNativeX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-libass_test, -Xshort-module-name=kiteplayer-libass_test ]

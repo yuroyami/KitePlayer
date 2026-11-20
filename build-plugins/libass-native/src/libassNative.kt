@@ -49,7 +49,11 @@ fun mergeAssChain(
             "No ass chain for $dirName. Set KITEPLAYER_LIBASS_ROOT to a KiteFFmpeg native-libs/deps folder, keep the " +
                 "KiteFFmpeg checkout next to this one, or pin the release asset in kiteplayer-libass/ass-chain.sha256.",
         )
-    val archive = AssChain.merge(chain, konanTarget, dataDir, workDir.toFile().resolve("merged"), log)
+    // The Android shims sit in native/android, next to the driver folder.
+    val archive = AssChain.merge(
+        chain, konanTarget, dataDir, workDir.toFile().resolve("merged"), log,
+        androidShimDir = driverDir.toFile().resolveSibling("android"),
+    )
     writeIfChanged(
         defFile.toFile(),
         defWithProperties(

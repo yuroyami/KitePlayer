@@ -21,6 +21,11 @@ linkerOpts.osx = -lz -liconv -lc++ -framework CoreText -framework CoreFoundation
 linkerOpts.ios = -lz -liconv -lc++ -framework CoreText -framework CoreFoundation -framework CoreGraphics
 linkerOpts.linux_x64 = -lz -lstdc++ -lm
 linkerOpts.linux_arm64 = -lz -lstdc++ -lm
+# Android native links the NDK's static C++ runtime, which the Kotlin/Native Android toolchain
+# carries, so the binary needs no libc++_shared.so beside it.
+linkerOpts.android_arm32 = -lz -lc++_static -lc++abi -lm
+linkerOpts.android_arm64 = -lz -lc++_static -lc++abi -lm
+linkerOpts.android_x64 = -lz -lc++_static -lc++abi -lm
 # Windows is the one platform where libass HAS a system font provider: GDI enumerates and
 # DirectWrite shapes, and those are OS libraries. libass recodes legacy scripts through GNU
 # libiconv there; FreeType took its own bundled zlib, so no -lz. The C++ runtime and iconv are

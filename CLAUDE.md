@@ -239,6 +239,12 @@ Each line is something that bit someone. Delete a line when it stops being true.
 
 ### Language and toolchain
 
+- A C task that runs konan's LLVM tools goes through `CompileKiteRt.ensureToolchain` first. On a
+  cold runner a Kotlin/Native compile beside it can still be unpacking the LLVM package, and a C
+  task once found `clang` there and no `llvm-ar` (#993). `ensureToolchain` waits for konan's
+  `.extracted` list.
+- CI test runs on a simulator link every test binary first, one at a time. A link beside a running
+  simulator starved it on the small CI Mac, and a test ran out of its one-minute limit (#991).
 - A property named `field` is unreachable by that name inside any accessor of the same class,
   because `field` is the backing-field keyword there. The compiler then reports "Property must be
   initialized" on a completely different property.

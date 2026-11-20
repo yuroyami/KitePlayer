@@ -328,11 +328,15 @@ jobs:
     name: iOS simulator arm64 (device-free suites)
     runs-on: macos-latest
     # Eleven modules' simulator suites, the output suite, the device compile and the sample smoke:
-    # an hour ran out inside the audio visualiser's suite, which runs Compose graphics.
-    timeout-minutes: 120
+    # an hour ran out inside the audio visualiser's suite, which runs Compose graphics. A run with
+    # no cache compiles everything first, and 120 minutes ran out in its sample smoke (#989).
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      # Saved by the last step, not by actions/cache at the end of the job: that saves only when
+      # every step passed, so a cold run that failed left the next run cold too (#989).
+      - uses: actions/cache/restore@v4
+        id: toolchain
         with:
           path: |
             ~/Library/Caches/JetBrains/Kotlin
@@ -377,6 +381,15 @@ jobs:
           path: build/logs/**
           retention-days: 14
           if-no-files-found: ignore
+
+      - name: Keep the toolchain this job filled
+        if: always() && steps.toolchain.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/Library/Caches/JetBrains/Kotlin
+            ~/.konan
+          key: ${{ steps.toolchain.outputs.cache-primary-key }}
 
   # ---------------------------------------------------------------------------------------------
   # tvOS and watchOS, on their simulators. `./kotlin test` runs only iOS simulator tests through

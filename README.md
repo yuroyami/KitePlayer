@@ -56,8 +56,8 @@ for a standard screen. HDR shows as HDR only through the native view path, the M
 Apple platforms and the surface renderer on Android. `KiteRenderPath.ComposeCanvas` and the 360
 degree view tone map on every platform, so a 360 degree HDR video shows tone mapped. On Android, VP9 and AV1 decode in hardware through the view's direct
 MediaCodec path, and H.264 and HEVC through FFmpeg as well. The Direct3D 11 route on Windows is on
-by default but has not yet run on a real Windows GPU, which #101 tracks. The engine alone also builds for Linux and Windows native, tvOS and watchOS,
-where your app supplies the missing parts ([Platforms](#platforms) lists them).
+by default but has not yet run on a real Windows GPU, which #101 tracks. The engine alone also builds for Linux and Windows native, tvOS, watchOS and
+Android Native, where your app supplies the missing parts ([Platforms](#platforms) lists them).
 
 > [!NOTE]
 > KitePlayer has not reached 1.0. It already runs inside a shipping app, but the API can still
@@ -481,24 +481,33 @@ capabilities, built from the code, are in [docs/capabilities.md](docs/capabiliti
 | **Android** | ✓ | ✓ | ✓ |
 | **iOS** | ✓ | ✓ | ✓ |
 | **Desktop JVM** | ✓ | ✓ | ✓ |
-| **macOS** (native) | ✓ | | |
-| **Web** (`wasmJs`) | ✓ | ✓ | |
-| **Linux and Windows** (native) | No audio output | | |
+| **macOS** (native) | ✓ | ✓ | ✓ |
+| **Web** (`wasmJs`) | ✓ | ✓ | ✓ |
+| **Linux, Windows and Android Native** | No audio output | | |
 
-- On iOS, the artifacts target `iosArm64` and `iosSimulatorArm64`, with no `iosX64`.
+- On iOS, these three modules target `iosArm64` and `iosSimulatorArm64`. They have no `iosX64`,
+  because Compose Multiplatform publishes none and the libass chain has no `iosX64` build yet. The
+  modules without Compose also build for `iosX64`, except `kiteplayer-libass`.
 - The desktop JVM build carries FFmpeg and libass for macOS on Apple silicon, Linux (x64 and
   arm64) and Windows (x64). It runs on Java 11 or later.
-- On Linux and Windows native, KitePlayer has no audio output and no HTTPS. `KitePlayer()` throws
-  there, and `KitePlayer.isAvailable` is false. Pass `KiteFFmpegMediaBackend()` and your own
-  `OutputBackend` to `KitePlayer.create`.
+- On Linux, Windows and Android Native, KitePlayer has no audio output and no HTTPS. `KitePlayer()`
+  throws there, and `KitePlayer.isAvailable` is false. Pass `KiteFFmpegMediaBackend()` and your own
+  `OutputBackend` to `KitePlayer.create`. Android Native means `androidNativeArm32`,
+  `androidNativeArm64` and `androidNativeX64`, because KiteFFmpeg has no `androidNativeX86` build.
+- On native macOS, `kiteplayer-compose` draws the video through the Compose canvas
+  (`KiteRenderPath.ComposeCanvas`). Native macOS Compose cannot host the AppKit view.
 - On the web, `kiteplayer-compose` draws the video inside Compose's own WebGL
   context, so it needs a browser with WebGL2. Clipping, alpha and other Compose content apply to it
   as on the other platforms. It runs the player on the page's main thread. The worker player draws
   on a canvas of its own.
-- `kiteplayer` also compiles for `js`, where `KitePlayer()` reports that the target is not
-  available.
+- On the web, `kiteplayer-audioviz` keeps no song maps between visits, because a page has no file
+  system. Implement `SongMapStore` over the browser's own storage to keep them.
+- `kiteplayer`, `kiteplayer-compose` and `kiteplayer-audioviz` also compile for `js`. There,
+  `KitePlayer()` reports that the target is not available, and the Compose modules draw no video.
 - The engine modules (`kiteplayer-core`, `kiteplayer-io` and `kiteplayer-subtitles`) also build
-  for tvOS, watchOS and Android Native.
+  for tvOS, watchOS and Android Native. So do `kiteplayer-output`, `kiteplayer-view`,
+  `kiteplayer-adaptive` and `kiteplayer-network`. Where a platform has no audio output, video view or
+  HTTP engine yet, these modules hold the common types only, so your app can supply its own.
 
 ## App size and licensing
 

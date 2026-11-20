@@ -22,7 +22,7 @@ DOC = ROOT / "docs/capabilities.md"
 COLUMNS = [
     ("Android", ["android"]),
     ("Desktop JVM", ["jvm"]),
-    ("iOS", ["iosArm64", "iosSimulatorArm64"]),
+    ("iOS", ["iosArm64", "iosSimulatorArm64", "iosX64"]),
     ("macOS", ["macosArm64"]),
     ("tvOS", ["tvosArm64", "tvosSimulatorArm64"]),
     ("watchOS", ["watchosArm32", "watchosArm64", "watchosDeviceArm64", "watchosSimulatorArm64"]),

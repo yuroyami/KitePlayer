@@ -10,23 +10,23 @@ A tick is every target of the platform; otherwise the cell names the targets the
 
 | Module | Android | Desktop JVM | iOS | macOS | tvOS | watchOS | Linux | Windows | Android Native | Web (wasmJs) | JS |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| `kiteplayer` | ✓ | ✓ | ✓ | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |
-| `kiteplayer-adaptive` | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  | ✓ | ✓ |
-| `kiteplayer-audioviz` | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |  |
-| `kiteplayer-compose` | ✓ | ✓ | ✓ |  |  |  |  |  |  | ✓ |  |
-| `kiteplayer-compose-interop` | ✓ | ✓ | ✓ |  |  |  |  |  |  | ✓ | ✓ |
-| `kiteplayer-compose-ui` | ✓ | ✓ | ✓ |  |  |  |  |  |  | ✓ |  |
-| `kiteplayer-compose-video` | ✓ | ✓ | ✓ |  |  |  |  |  |  | ✓ |  |
+| `kiteplayer` | ✓ | ✓ | iosArm64, iosSimulatorArm64 | ✓ |  |  | ✓ | ✓ | androidNativeArm32, androidNativeArm64, androidNativeX64 | ✓ | ✓ |
+| `kiteplayer-adaptive` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `kiteplayer-audioviz` | ✓ | ✓ | iosArm64, iosSimulatorArm64 | ✓ |  |  |  |  |  | ✓ | ✓ |
+| `kiteplayer-compose` | ✓ | ✓ | iosArm64, iosSimulatorArm64 | ✓ |  |  |  |  |  | ✓ | ✓ |
+| `kiteplayer-compose-interop` | ✓ | ✓ | iosArm64, iosSimulatorArm64 | ✓ |  |  |  |  |  | ✓ | ✓ |
+| `kiteplayer-compose-ui` | ✓ | ✓ | iosArm64, iosSimulatorArm64 | ✓ |  |  |  |  |  | ✓ | ✓ |
+| `kiteplayer-compose-video` | ✓ | ✓ | iosArm64, iosSimulatorArm64 | ✓ |  |  |  |  |  | ✓ | ✓ |
 | `kiteplayer-core` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `kiteplayer-ffmpeg` | ✓ | ✓ | ✓ | ✓ |  |  | ✓ | ✓ |  | ✓ |  |
+| `kiteplayer-ffmpeg` | ✓ | ✓ | ✓ | ✓ |  |  | ✓ | ✓ | androidNativeArm32, androidNativeArm64, androidNativeX64 | ✓ | ✓ |
 | `kiteplayer-io` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `kiteplayer-libass` | ✓ | ✓ | ✓ | ✓ |  |  | ✓ | ✓ |  | ✓ | ✓ |
-| `kiteplayer-network` | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  | ✓ | ✓ |
-| `kiteplayer-output` | ✓ | ✓ | ✓ | ✓ |  |  | ✓ | ✓ |  | ✓ |  |
+| `kiteplayer-libass` | ✓ | ✓ | iosArm64, iosSimulatorArm64 | ✓ |  |  | ✓ | ✓ | androidNativeArm32, androidNativeArm64, androidNativeX64 | ✓ | ✓ |
+| `kiteplayer-network` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `kiteplayer-output` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `kiteplayer-rt` |  |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |
 | `kiteplayer-subtitles` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `kiteplayer-view` | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  | ✓ |  |
-| `kiteplayer-view-bindings` | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |  |
+| `kiteplayer-view` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `kiteplayer-view-bindings` | ✓ | ✓ | ✓ | ✓ |  |  | ✓ | ✓ | androidNativeArm32, androidNativeArm64, androidNativeX64 | ✓ | ✓ |
 
 ## Video renderers
 
@@ -36,13 +36,14 @@ otherwise, and shows no HDR and no 360 degree view unless it says it does.
 
 | Renderer | Module | Source folder | Picture controls | HDR on an HDR screen | 360 degree video |
 | --- | --- | --- | --- | --- | --- |
+| `NoPictureRenderer` | `kiteplayer-compose-video` | `js` | no | no | no |
 | `KiteVideoRenderer` | `kiteplayer-compose-video` | `threaded` | yes | no | yes |
 | `WebKiteVideoRenderer` | `kiteplayer-compose-video` | `wasmJs` | yes | no | yes |
 | `AndroidGpuImageVideoRenderer` | `kiteplayer-output` | `android` | yes | no | no |
 | `AndroidSurfaceVideoRenderer` | `kiteplayer-output` | `android` | only without a MediaCodec target | when the screen and the stream allow | no |
-| `MetalVideoRenderer` | `kiteplayer-output` | `apple` | yes | when the screen and the stream allow | no |
-| `SampleBufferVideoRenderer` | `kiteplayer-output` | `apple` | no | no | no |
 | `UIKitVideoRenderer` | `kiteplayer-output` | `ios` | yes | no | no |
 | `AwtCanvasVideoRenderer` | `kiteplayer-output` | `jvm` | no | no | yes |
+| `MetalVideoRenderer` | `kiteplayer-output` | `macosAndIos` | yes | when the screen and the stream allow | no |
+| `SampleBufferVideoRenderer` | `kiteplayer-output` | `macosAndIos` | no | no | no |
 | `AppKitVideoRenderer` | `kiteplayer-output` | `macosArm64` | yes | no | no |
 | `WebCanvasVideoRenderer` | `kiteplayer-output` | `wasmJs` | no | no | no |

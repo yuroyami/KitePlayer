@@ -241,6 +241,11 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - A member function named like a POSIX call hides the call inside its class on Kotlin/Native. A
   `rename` that called `rename(from, to)` called itself, and the compiler said that `!=` cannot
   compare `Unit` with `Int`. Write `platform.posix.rename` in full there.
+- `size_t`, `NSUInteger` and a C `long` have 32 bits on watchosArm32, watchosArm64 and
+  androidNativeArm32, so a `toULong()` or a `0uL` passed to `fread` fails to compile there only.
+  Pass a size through `convert()`, and compare the result after `toLong()`.
+- Xcode 27's linker refuses armv7k, so no watchosArm32 test binary links on a current Mac. The
+  klibs still compile. A failed `linkWatchosArm32TestDebug` there is the host, not the change.
 - The atomicfu library is a plain dependency. The Kotlin Toolchain applies no atomicfu bytecode
   transform, so each atomic stays a real atomicfu object at run time.
 - The API site comes from the Dokka 2.3.0-Beta command line, which `build-plugins/dokka` runs for

@@ -100,6 +100,7 @@ internal class GaplessVideoQueueDeviceTest {
             val player = KitePlayer.create(
                 PlayerConfig(backends = base.copy(output = CountingOutput(base.output ?: AndroidOutputBackend, counts))),
             )
+            var failed: Throwable? = null
             try {
                 runBlocking {
                     player.attachRenderer(state.renderer)
@@ -127,10 +128,18 @@ internal class GaplessVideoQueueDeviceTest {
                             "${stats.submittedFrames}",
                     )
                 }
+            } catch (failure: Throwable) {
+                failed = failure
+                throw failure
             } finally {
                 // The emulator can hold a stop for 16 s inside MediaCodec.stop (#301), so the close
-                // gets the room the playback above has.
-                runBlocking { withTimeout(60_000) { player.closeAndAwait() } }
+                // gets the room the playback above has. A close that fails after the test failed
+                // is kept beside the first error rather than in its place (#992).
+                try {
+                    runBlocking { withTimeout(60_000) { player.closeAndAwait() } }
+                } catch (closeFailure: Throwable) {
+                    if (failed != null) failed.addSuppressed(closeFailure) else throw closeFailure
+                }
                 state.renderer.close()
             }
         } finally {

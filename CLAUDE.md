@@ -121,6 +121,10 @@ Each line is something that bit someone. Delete a line when it stops being true.
 
 ### Tests that fail for reasons that are not bugs
 
+- A core test that holds a lane (`releaseDispatcher`, `rasterDispatcher`) and fails before it frees
+  the lane can hang instead of failing. A looping player left open keeps the test scheduler busy
+  past the one-minute `runTest` limit. Free the lane and close in a catch, as
+  `HandoffReleaseDeadlineTest` does (#992).
 - A visualiser fixture must outlast its render. The player hears three seconds before the first
   frame, so a six second run needs at least nine seconds of audio. A shorter fixture ends inside
   the run, every drawing answers the music stopping, and the held-tone check reports an invented
@@ -283,6 +287,9 @@ Each line is something that bit someone. Delete a line when it stops being true.
 
 ### Engine invariants, each of which caused a real bug when violated
 
+- **The actor releases a session only through `releaseWithinDeadline`.** A `releaseSession` call on
+  the actor lets one native close that never returns stop the player and every later close. A stop
+  did that (#590), then both gapless joins (#992).
 - **The audio submit call bypasses the whole pipeline. The decoded-submit call is the real door.**
   Submit writes its floats straight to the ring: no channel mix, no resample, no tempo. A caller who
   reaches for it because the format already matches gets audio that skipped every stage. The first

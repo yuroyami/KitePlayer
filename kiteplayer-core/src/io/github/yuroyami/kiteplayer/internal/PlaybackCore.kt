@@ -11390,7 +11390,9 @@ internal class PlaybackCore(
         val incoming = prepared.session
         pendingNext = null
         emitEvent(PlayerEvent.Ended)
-        detachSession(forHandoff = true)?.let { releaseSession(it) }
+        // Under the close deadline, as every other teardown: a decoder close that never returns at
+        // the join used to hold the actor, so the next item never became current and close hung (#992).
+        detachSession(forHandoff = true)?.let { releaseWithinDeadline(it) }
         // What an open resets for a new item, except the play intent, the status and the epoch,
         // which carry on with the device.
         media = next.item
@@ -11479,7 +11481,8 @@ internal class PlaybackCore(
         // The pass plays another file of an ordered edition than the one before it (#501).
         val fileChanged = session?.let { it.timeline?.runs?.getOrNull(it.run)?.segmentUid } !=
             incoming.timeline?.runs?.getOrNull(incoming.run)?.segmentUid
-        detachSession(forHandoff = true)?.let { releaseSession(it) }
+        // Under the close deadline, as at the join to the next item (#992).
+        detachSession(forHandoff = true)?.let { releaseWithinDeadline(it) }
         // The markers behind the start are armed again, as the seek back to it armed them. The
         // next run of an ordered edition goes on along the timeline, so its markers are crossed
         // as the position reaches them (#501).
@@ -13180,9 +13183,9 @@ internal class PlaybackCore(
 
     /**
      * Releases [detached] on the release lane and waits at most [closeDeadline] for it, as close
-     * releases its own (#590). Every other teardown, a stop's, a failed worker's or a rebuild's,
-     * used to release inline on the actor with no deadline, so a device stop that never returned
-     * kept the actor from its mailbox and a later close waited for ever. Past the deadline the
+     * releases its own (#590). Every other teardown, a stop's, a failed worker's, a rebuild's or a
+     * gapless handoff's (#992), used to release inline on the actor with no deadline, so a device
+     * stop that never returned kept the actor from its mailbox and a later close waited for ever. Past the deadline the
      * runtime is marked wedged and the actor goes on: the release keeps running, and a close
      * reports the compromised runtime at once. Once wedged, a later release is started and not
      * waited for, since it queues behind the one that wedged. A release that throws inside the

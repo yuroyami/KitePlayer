@@ -223,6 +223,12 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Fixed
 
+- A decoder close that never returns at a gapless join no longer stops the player there (#992).
+  The join to the next item and the join to the next pass of a repeat released the item before
+  it on the player's own loop with no deadline. The next item then never became current, and a
+  later `closeAndAwait()` waited for ever. Both joins now release under the close deadline, as
+  every other teardown does since #590. Past it the player warns `ResourcesNotReleased`, plays
+  on, and a close reports `RuntimeCompromised`.
 - A signed address that expires while a stream plays in `KitePlayerWorker` is renewed as on the
   other targets (#546, #453). The worker's reader threw a 401 or 403 as a plain failure and kept
   no refusal, so the player never opened the item again for a fresh address and warned nothing.

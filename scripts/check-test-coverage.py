@@ -48,6 +48,8 @@ EXCUSED = {
         "the simulator cannot start the CoreAudio output unit or give a VideoToolbox frame (#155)",
     ("kiteplayer-ffmpeg", "mingwX64"):
         "the Windows job links the FFmpeg backend's tests but has no media to run them on",
+    ("kiteplayer-sample-shared", "iosSimulatorArm64"):
+        "the sample's media choice is plain Kotlin, which its JVM and Android host runs already cover",
 }
 
 
@@ -244,14 +246,30 @@ def self_test():
         got = covered_by_ci(text, runner)
         if got != expected:
             failures.append(f"self-test: {name}: read {sorted(got)}, expected {sorted(expected)}")
+    # An inline list was once read as no platforms, so those modules escaped the common-test rule.
+    lists = [
+        ("an inline platform list", "product:\n  type: kmp/lib\n  platforms: [ jvm, js ]\n", {"jvm", "js"}),
+        ("a block platform list", "product:\n  type: kmp/lib\n  platforms:\n    - jvm\n    - js\n", {"jvm", "js"}),
+    ]
+    for name, text, expected in lists:
+        got = platforms_in(text)
+        if got != expected:
+            failures.append(f"self-test: {name}: read {sorted(got)}, expected {sorted(expected)}")
     return failures
+
+
+def platforms_in(text):
+    """The platforms a module.yaml text declares under `product.platforms`, as an inline list or a block."""
+    inline = re.search(r"^[ \t]+platforms:[ \t]*\[([^\]]*)\]", text, re.M)
+    if inline:
+        return {p.strip() for p in inline.group(1).split(",") if p.strip()}
+    match = re.search(r"^\s+platforms:\s*\n((?:\s+-\s+\w+\s*\n)+)", text, re.M)
+    return set(re.findall(r"-\s+(\w+)", match.group(1))) if match else set()
 
 
 def declared_platforms(module_dir):
     """The platforms a module's module.yaml declares under `product.platforms`."""
-    text = (module_dir / "module.yaml").read_text()
-    match = re.search(r"^\s+platforms:\s*\n((?:\s+-\s+\w+\s*\n)+)", text, re.M)
-    return set(re.findall(r"-\s+(\w+)", match.group(1))) if match else set()
+    return platforms_in((module_dir / "module.yaml").read_text())
 
 
 def main() -> int:

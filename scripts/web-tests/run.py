@@ -25,10 +25,12 @@ JS_MODULES = (
     "kiteplayer-core",
     "kiteplayer-subtitles",
     "kiteplayer-io",
+    "kiteplayer-output",
     "kiteplayer-adaptive",
     "kiteplayer-network",
     "kiteplayer",
     "kiteplayer-libass",
+    "kiteplayer-view",
 )
 WASM_NODE_MODULES = (
     "kiteplayer-core",

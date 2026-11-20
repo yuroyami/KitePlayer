@@ -27,9 +27,9 @@ product:
     - mingwX64
 
 aliases:
-  # kiteplayer-output calls the kitert functions in its code for these three platforms. The toolchain commonizes
+  # kiteplayer-output calls the kitert functions in its code for these four platforms. The toolchain commonizes
   # kitert only for the platform sets of this module's own fragments, so this fragment makes that set exist here.
-  - macosAndIos: [ macosArm64, iosArm64, iosSimulatorArm64 ]
+  - macosAndIos: [ macosArm64, iosArm64, iosSimulatorArm64, iosX64 ]
 
 apply:
   - //kiteplayer.module-template.yaml

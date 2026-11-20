@@ -184,7 +184,7 @@ jq -n --slurpfile archives "$archives" --argjson tags "$tags" \
     def runtimes: [
         {id: "libcxx-android", name: "LLVM libc++ (Android NDK)", version: $ndk,
          licence: "Apache-2.0 WITH LLVM-exception", homepage: "https://developer.android.com/ndk",
-         comment: "The C++ runtime of the Android NDK that built the adapters, which each Android adapter in the AAR links statically. The version is the NDK revision."},
+         comment: "The C++ runtime of the Android NDK that built the adapters, which each Android adapter in the AAR links statically. The version is the NDK revision of the adapters. An Android Native executable that Kotlin/Native links against the androidNative klibs of kiteplayer-libass also links libc++ statically, the copy that the Kotlin/Native toolchain carries."},
         {id: "gcc-runtime-mingw", name: "GCC runtime libraries (libstdc++, libgcc)", version: $gcc,
          licence: "GPL-3.0-or-later WITH GCC-exception-3.1", homepage: "https://gcc.gnu.org",
          comment: "From the Kotlin/Native MinGW toolchain, which MSYS2 builds. \(windows)"},

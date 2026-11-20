@@ -14,6 +14,19 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ### Added
 
+- More platform variants, so each module now builds for every platform its dependencies support.
+  `docs/capabilities.md` lists what plays on each one.
+  - `kiteplayer-output`, `kiteplayer-view`, `kiteplayer-adaptive` and `kiteplayer-network` build for
+    all 21 platforms of `kiteplayer-core` (#981, #982).
+  - `kiteplayer-ffmpeg` and `kiteplayer-view-bindings` add `js`, `iosX64`, `androidNativeArm32`,
+    `androidNativeArm64` and `androidNativeX64`. `kiteplayer-libass` and `kiteplayer` add the
+    three Android Native platforms (#983).
+  - `kiteplayer-compose`, `kiteplayer-compose-ui`, `kiteplayer-compose-video` and
+    `kiteplayer-compose-interop` add `js` and native `macosArm64` (#980).
+  - `kiteplayer-audioviz` adds `js`, `wasmJs` and native `macosArm64` (#775).
+  - Not yet: KiteFFmpeg 0.6.0 publishes no tvOS, watchOS or `androidNativeX86` build, so the FFmpeg
+    modules skip them. Compose Multiplatform has no `iosX64`, tvOS, watchOS, Linux, Windows or
+    Android Native build. The libass chain release has no `iosX64` archive yet.
 - `PlaybackWarning.RenderQualityUnavailable` and `VideoRenderer.appliesRenderQuality` (#769). A
   render quality set with `setRenderQuality` was stored, published and silently dropped by every
   renderer with no shader: the default Android view, the desktop canvas view, the web canvas, the

@@ -46,13 +46,15 @@ fun findJniJavaHome(): File? {
 }
 
 /**
- * The `konanc` launcher of Kotlin/Native [kotlinVersion]: the copy that the toolchain unpacked,
- * or else one in the konan data directory.
+ * The `konanc` launcher of Kotlin/Native [kotlinVersion]: a copy in the konan data directory, or
+ * else the copy that the toolchain unpacked.
  *
- * The toolchain unpacks into a folder of `extract.cache` and writes `<folder>.flag` when the unpack
- * is done. A C task can start while that unpack still runs, and a half-written folder has no
- * compiler jar, so only a flagged folder counts. When an unflagged one is all there is, this waits
- * for its flag.
+ * The konan data directory comes first, because nothing rewrites a copy there. The toolchain
+ * unpacks into a folder of `extract.cache` and writes `<folder>.flag` as its last step. When it
+ * later finds that flag wrong, it empties the folder in place and unpacks again, and the old flag
+ * stays until the new one is written. So a toolchain folder counts only when it is flagged, its
+ * flag still matches it (see [isUnpackDone]), and it holds the compiler jar. When an unpack is
+ * under way, this waits for it.
  */
 fun findKonanc(kotlinVersion: String): File? {
     val launcher = if (hostIsWindows) "bin/konanc.bat" else "bin/konanc"
@@ -60,16 +62,18 @@ fun findKonanc(kotlinVersion: String): File? {
         .filter { it.isDirectory && "kotlin-native-prebuilt-$kotlinVersion-" in it.name }
     fun launchers(folders: List<File>) = folders
         .flatMap { dir -> listOf(dir) + dir.listFiles().orEmpty().filter(File::isDirectory) }
-        .map { it.resolve(launcher) }
-        .firstOrNull { it.isFile }
+        .firstOrNull { isCompleteKonanHome(it, launcher) }
+        ?.resolve(launcher)
     fun unpacked() = launchers(unpackedFolders().filter(::isUnpackDone))
     val konanHome = konanDataDir().listFiles().orEmpty()
         .filter { it.isDirectory && it.name.startsWith("kotlin-native-prebuilt-") && it.name.endsWith("-$kotlinVersion") }
-        .map { it.resolve(launcher) }
-        .firstOrNull { it.isFile }
+        .firstOrNull { isCompleteKonanHome(it, launcher) }
+        ?.resolve(launcher)
+    konanHome?.let { return it }
     unpacked()?.let { return it }
-    if (konanHome != null || unpackedFolders().isEmpty()) return konanHome
-    // An unpack is under way. It takes about 20 seconds; a folder that stays unflagged is a dead one.
+    // Wait only while an unpack is under way. A finished folder with no compiler jar will not heal.
+    if (unpackedFolders().all(::isUnpackDone)) return null
+    // An unpack takes about 20 seconds; a folder that stays unfinished is a dead one.
     val deadline = System.nanoTime() + UNPACK_WAIT_NANOS
     while (System.nanoTime() < deadline) {
         Thread.sleep(500)
@@ -78,8 +82,21 @@ fun findKonanc(kotlinVersion: String): File? {
     return null
 }
 
-/** True when the toolchain finished unpacking [folder]: it writes `<folder>.flag` as its last step. */
-private fun isUnpackDone(folder: File): Boolean = File(folder.path + ".flag").isFile
+/**
+ * True when the toolchain finished unpacking [folder] and has not started again. Its flag names
+ * the folder's top-level entry count, and the toolchain itself trusts the folder only while that
+ * count holds. A count that differs means an unpack is under way.
+ */
+internal fun isUnpackDone(folder: File): Boolean {
+    val flag = File(folder.path + ".flag")
+    val lines = runCatching { flag.readLines() }.getOrNull() ?: return false
+    val expected = lines.firstOrNull { it.startsWith("topLevelEntries:") }?.substringAfter(':')?.trim()?.toIntOrNull()
+    return expected == null || folder.listFiles().orEmpty().size == expected
+}
+
+/** True when [home] holds the [launcher] and the compiler jar that the launcher runs. */
+private fun isCompleteKonanHome(home: File, launcher: String): Boolean =
+    home.resolve(launcher).isFile && home.resolve("konan/lib/kotlin-native-compiler-embeddable.jar").isFile
 
 private const val UNPACK_WAIT_NANOS = 5L * 60 * 1_000_000_000
 

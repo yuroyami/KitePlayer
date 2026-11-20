@@ -20,6 +20,7 @@ import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.pathString
+import kotlin.io.path.readLines
 import kotlin.io.path.writeText
 
 /**
@@ -121,13 +122,25 @@ private fun toolchainCache(): Path {
     }
 }
 
+/**
+ * True when the toolchain finished unpacking [folder]. It writes `<folder>.flag` as its last step, with
+ * the folder's top-level entry count. When it unpacks a folder again, it empties the folder in place and
+ * the old flag stays until the end, so a count that differs from the flag means an unpack is under way.
+ */
+private fun isUnpacked(folder: Path): Boolean {
+    val flag = folder.resolveSibling("${folder.fileName}.flag")
+    if (!flag.exists()) return false
+    val expected = runCatching { flag.readLines() }.getOrDefault(emptyList())
+        .firstOrNull { it.startsWith("topLevelEntries:") }?.substringAfter(':')?.trim()?.toIntOrNull()
+    return expected == null || folder.listDirectoryEntries().size == expected
+}
+
 /** The standard library klibs, and for native code the platform libraries, that the platform code compiles against. */
 private fun platformLibraries(platform: String, analysisPlatform: String, kotlinVersion: String): List<String> {
     val cache = toolchainCache()
     if (analysisPlatform == "native") {
         val distribution = cache.resolve("extract.cache").listDirectoryEntries("*kotlin-native-prebuilt-$kotlinVersion-*")
-            // The toolchain writes `<folder>.flag` once a folder is fully unpacked.
-            .firstOrNull { it.isDirectory() && it.resolveSibling("${it.fileName}.flag").exists() }
+            .firstOrNull { it.isDirectory() && isUnpacked(it) && it.resolve("klib/common/stdlib").isDirectory() }
             ?: error("No Kotlin/Native $kotlinVersion in $cache. Build a native platform first.")
         // The libraries of one target stand in for the whole folder. They declare the same API for the docs.
         val target = when {

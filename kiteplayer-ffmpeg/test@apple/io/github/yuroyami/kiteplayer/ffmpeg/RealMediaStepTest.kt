@@ -9,6 +9,7 @@ import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.PlayerConfig
 import io.github.yuroyami.kiteplayer.SeekMode
 import io.github.yuroyami.kiteplayer.StepDirection
+import io.github.yuroyami.kiteplayer.TrackKind
 import io.github.yuroyami.kiteplayer.output.AppleOutputBackend
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.toKString
@@ -111,10 +112,18 @@ class RealMediaStepTest {
     }
 
     @Test
-    fun `play after ten forward steps carries on from the picture`() = runBlocking {
+    fun `play after ten forward steps carries on from the picture`() = playsOnFromThePicture(soundOff = false)
+
+    /** With no sound, the video clock is the position, and it also stopped where playback paused. */
+    @Test
+    fun `play after ten forward steps with the sound off carries on from the picture`() =
+        playsOnFromThePicture(soundOff = true)
+
+    private fun playsOnFromThePicture(soundOff: Boolean) = runBlocking {
         val player = player()
         try {
             player.open(MediaItem("$mediaDir/truevfr720.mp4"))
+            if (soundOff) player.selectTrack(TrackKind.Audio, null)
             player.play()
             withTimeoutOrNull(10.seconds) { while (player.position() < 1.seconds) delay(5.milliseconds) }
             player.pause()

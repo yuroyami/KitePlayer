@@ -160,11 +160,12 @@ jobs:
       # The Kotlin/Native host target. kiteplayer-ffmpeg here is the format conformance matrix
       # against real clips, and kiteplayer plays one clip through KitePlayerPlatform.createOrNull().
       #
-      # kiteplayer-output runs through scripts/run-native-tests.sh, which drops ONE assertion and
-      # nothing else: "the anchor the device publishes is in the near future on the engine clock".
-      # It measured -451.7 ms against a window of -5 to +500 on this runner. That is the DEVICE, not
-      # the clock bases: a virtual output device lags where real hardware leads. The test reports
-      # as not run rather than passed, and a developer on a real Mac runs all of them.
+      # kiteplayer-output and kiteplayer-ffmpeg run through scripts/run-native-tests.sh, which drops
+      # the few tests that need real audio hardware and nothing else. "The anchor the device publishes
+      # is in the near future on the engine clock" measured -451.7 ms against a window of -5 to +500
+      # on this runner. That is the DEVICE, not the clock bases: a virtual output device lags where
+      # real hardware leads. The tests report as not run rather than passed, and a developer on a
+      # real Mac runs all of them.
       - name: Kotlin/Native macosArm64 tests
         run: |
           . scripts/test-env.sh
@@ -172,8 +173,9 @@ jobs:
           # toolchain 0.14.0 discovers no test at all for an exclude with no include, so both are set.
           ./kotlin test -p macosArm64 -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
             -m kiteplayer-rt -m kiteplayer-libass -m kiteplayer-adaptive -m kiteplayer-network \
-            -m kiteplayer-ffmpeg -m kiteplayer -m kiteplayer-view --include-classes='*' --exclude-classes='*SoakTest'
+            -m kiteplayer -m kiteplayer-view --include-classes='*' --exclude-classes='*SoakTest'
           ./scripts/run-native-tests.sh -m kiteplayer-output -p macosArm64 --exclude-set no-audio-hardware
+          ./scripts/run-native-tests.sh -m kiteplayer-ffmpeg -p macosArm64 --exclude-set no-audio-hardware
 
       # Dokka fails on an unresolved KDoc link, which would otherwise render as plain text.
       - name: API reference

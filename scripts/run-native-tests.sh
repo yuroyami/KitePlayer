@@ -45,6 +45,10 @@ exclude_set() {
             # And its buffer runs deep: with a route of 180 ms the latency read 418 ms and 378 ms in two
             # runs of four, where a device buffer of at most 100 ms beside the route is the bound.
             excludes+=("*CoreAudioSinkOutputLatencyTest.theReportedRouteLatencyIsInTheSinksDeadline")
+            # Play after frame steps starts the device again, and its lag reads as a step back: the
+            # position went back to 1.1 s from the picture at 1.35 s, where the bound is 100 ms. The
+            # same test with the sound off still runs, and both pass on real hardware.
+            excludes+=("*RealMediaStepTest.play after ten forward steps carries on from the picture")
             ;;
         # The iOS simulator cannot open an audio device ("opening the audio device failed" from a
         # simctl-spawned process). The same suites pass on macosArm64 and on a device. Two classes

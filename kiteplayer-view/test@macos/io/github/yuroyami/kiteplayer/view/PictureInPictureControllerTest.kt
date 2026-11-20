@@ -51,7 +51,8 @@ class PictureInPictureControllerTest {
 
     @Test
     fun theSystemsPlaybackQuestionsReachThePlayer() {
-        player.state.value = PlayerSnapshot(status = PlaybackStatus.Playing, duration = 90.seconds)
+        // The play button reads playRequested, not the status (#943).
+        player.state.value = PlayerSnapshot(status = PlaybackStatus.Playing, duration = 90.seconds, playRequested = true)
         assertFalse(playback.pictureInPictureControllerIsPlaybackPaused(controller))
         playback.pictureInPictureControllerTimeRangeForPlayback(controller).useContents {
             assertEquals(90.0, CMTimeGetSeconds(duration.readValue()))

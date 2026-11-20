@@ -11,7 +11,6 @@ import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.IO
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -82,7 +81,7 @@ internal class AudioVizFeed(
     }
 
     /** Starts following [source] for song scans, once, for as long as this feed lives. */
-    fun startSongScan(source: SongScanSource, scanDispatcher: CoroutineDispatcher = Dispatchers.IO) {
+    fun startSongScan(source: SongScanSource, scanDispatcher: CoroutineDispatcher = songScanDispatcher) {
         if (!scanStarted.compareAndSet(false, true) || closed.load()) return
         SongScanner(
             source, this, { scanPolicy.load() }, scanDispatcher,

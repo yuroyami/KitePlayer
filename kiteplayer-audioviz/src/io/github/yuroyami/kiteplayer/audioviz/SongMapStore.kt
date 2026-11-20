@@ -42,7 +42,9 @@ public interface SongMapStore {
          * One file per map inside [path], which is created when the first map is written.
          *
          * Give it a directory of its own: it deletes the oldest entries when there are more than
-         * [maximumEntries]. A map of a four minute song is about ten kilobytes.
+         * [maximumEntries]. A map of a four minute song is about ten kilobytes. A browser page has
+         * no file system, so on the web this store keeps nothing; implement [SongMapStore] over the
+         * browser's own storage there.
          */
         public fun inDirectory(path: String, maximumEntries: Int = 128): SongMapStore {
             require(maximumEntries >= 1) { "a store keeps at least one map" }

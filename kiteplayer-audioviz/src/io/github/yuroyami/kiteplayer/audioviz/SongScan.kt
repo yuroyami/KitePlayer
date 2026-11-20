@@ -105,6 +105,9 @@ internal class PlayerScanSource(private val player: KitePlayer) : SongScanSource
 /** How many ranges of one song may be scanned at once. Half the cores, so playback keeps its own. */
 internal expect fun scanWorkerCount(): Int
 
+/** The dispatcher a song scan runs on: the IO pool, or the default one on the web, which has no IO pool. */
+internal expect val songScanDispatcher: CoroutineDispatcher
+
 /** A map handed to the analysis worker, with its cache key and what to do if live audio disagrees. */
 internal class MapInstall(val map: SongMap, val key: String, val identity: Long, val onRejected: () -> Unit)
 

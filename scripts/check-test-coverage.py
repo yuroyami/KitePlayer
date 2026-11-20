@@ -54,6 +54,13 @@ EXCUSED = {
     ("kiteplayer-ffmpeg", "js"):
         "KiteFFmpeg's js build is a placeholder whose media calls throw FFmpegError.Unsupported; "
         "the wasmJs jobs run the backend's tests on the web",
+    ("kiteplayer-audioviz", "macosArm64"):
+        "the iOS simulator job runs the same tests through the same Kotlin/Native and Skia code, "
+        "and a second native run took 16 minutes on an M2 Mac",
+    ("kiteplayer-audioviz", "js"):
+        "no web job loads Compose and Skia yet; the visualiser's tests run on the JVM, Android and the iOS simulator",
+    ("kiteplayer-audioviz", "wasmJs"):
+        "no web job loads Compose and Skia yet; the visualiser's tests run on the JVM, Android and the iOS simulator",
     ("kiteplayer-sample-shared", "iosSimulatorArm64"):
         "the sample's media choice is plain Kotlin, which its JVM and Android host runs already cover",
 }

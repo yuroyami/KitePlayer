@@ -4,8 +4,9 @@ import androidx.compose.runtime.Composable
 
 /**
  * Whether the system asks apps to reduce motion, read once where [rememberAudioVizState] makes its
- * state (#964): Reduce Motion on iOS, and on Android the animator duration scale, which Remove
- * animations sets to zero. The desktop JVM has no setting it can read for every system, so false.
+ * state (#964): Reduce Motion on iOS and macOS, the prefers-reduced-motion media query on the web,
+ * and on Android the animator duration scale, which Remove animations sets to zero. The desktop JVM
+ * has no setting it can read for every system, so false.
  */
 @Composable
 internal expect fun systemReducesMotion(): Boolean

@@ -26,8 +26,11 @@ import platform.posix.readdir
 import platform.posix.rename
 import platform.posix.stat
 import platform.posix.unlink
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 
-/** Song map files on iOS, through POSIX. A write lands through a temporary file and a rename. */
+/** Song map files on iOS and macOS, through POSIX. A write lands through a temporary file and a rename. */
 internal actual object SongMapFiles {
     actual fun read(path: String): ByteArray? {
         val file = fopen(path, "rb") ?: return null
@@ -109,3 +112,5 @@ internal actual object SongMapFiles {
 /** Half the cores, at least one, so a scan never takes the device away from playback. */
 internal actual fun scanWorkerCount(): Int =
     (NSProcessInfo.processInfo.activeProcessorCount.toInt() / 2).coerceAtLeast(1)
+
+internal actual val songScanDispatcher: CoroutineDispatcher get() = Dispatchers.IO

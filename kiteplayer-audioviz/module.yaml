@@ -2,11 +2,11 @@
 # palettes, and a director that changes drawings with the music.
 product:
   type: kmp/lib
-  platforms: [ jvm, android, iosArm64, iosSimulatorArm64 ]
+  platforms: [ jvm, android, js, wasmJs, macosArm64, iosArm64, iosSimulatorArm64 ]
 
 aliases:
-  # Platforms where Compose draws with Skiko.
-  - skiko: [ jvm, iosArm64, iosSimulatorArm64 ]
+  # Platforms where Compose draws with Skiko: every Compose platform but Android.
+  - skiko: [ jvm, js, wasmJs, macosArm64, iosArm64, iosSimulatorArm64 ]
 
 apply:
   - //kiteplayer.module-template.yaml
@@ -79,6 +79,18 @@ settings@iosSimulatorArm64:
   kotlin:
     freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-audioviz, -Xshort-module-name=kiteplayer-audioviz ]
 
+settings@js:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-audioviz ]
+
+settings@wasmJs:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-audioviz ]
+
+settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-audioviz, -Xshort-module-name=kiteplayer-audioviz ]
+
 # Tests compile into their own klib, which needs a different name. The test blocks name the
 # same platforms as the blocks above, so the toolchain applies them last.
 test-settings@iosArm64:
@@ -86,5 +98,17 @@ test-settings@iosArm64:
     freeCompilerArgs: [ -module-name=kiteplayer-audioviz_test, -Xshort-module-name=kiteplayer-audioviz_test ]
 
 test-settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-audioviz_test, -Xshort-module-name=kiteplayer-audioviz_test ]
+
+test-settings@js:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=kiteplayer-audioviz_test ]
+
+test-settings@wasmJs:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=kiteplayer-audioviz_test ]
+
+test-settings@macosArm64:
   kotlin:
     freeCompilerArgs: [ -module-name=kiteplayer-audioviz_test, -Xshort-module-name=kiteplayer-audioviz_test ]

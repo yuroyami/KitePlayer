@@ -4,6 +4,8 @@ import java.io.File
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 
 /** Song map files on the desktop. A write lands through a temporary file, so a crash leaves no half map. */
 internal actual object SongMapFiles {
@@ -46,3 +48,5 @@ internal actual object SongMapFiles {
 
 /** Half the cores, at least one, so a scan never takes the machine away from playback. */
 internal actual fun scanWorkerCount(): Int = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1)
+
+internal actual val songScanDispatcher: CoroutineDispatcher get() = Dispatchers.IO

@@ -260,6 +260,68 @@ open class CompileKiteRt(
             val sysroot = specFor(konanTargetName).konanSysroot
             val hasSysroot = sysroot == null || dependencies.resolve(sysroot).isDirectory
             if (!hasLlvm || !hasSysroot) provisionKonanDependencies(konanTargetName, kotlinVersion, log)
+            awaitUnpacked(dependencies, konanTargetName, log)
+        }
+
+        /** The LLVM tools that the C tasks here run. */
+        val LLVM_TOOLS: List<String> = listOf("clang", "llvm-ar")
+
+        /** How long [awaitUnpacked] waits for konan, as long as a cold download and unpack can take. */
+        const val UNPACK_WAIT_NANOS: Long = 5L * 60 * 1_000_000_000
+
+        /**
+         * Waits until konan has finished unpacking the LLVM package and the sysroot of
+         * [konanTargetName]. A Kotlin/Native compile beside the C task can still be unpacking them.
+         * Konan marks such a folder with `.unstable` and lists it in `.extracted` only when it is
+         * done. A C task that read the folder before that found clang and no llvm-ar (#993).
+         */
+        fun awaitUnpacked(
+            dependenciesDir: File,
+            konanTargetName: String,
+            log: (String) -> Unit = {},
+            waitNanos: Long = UNPACK_WAIT_NANOS,
+            pause: () -> Unit = { Thread.sleep(500) },
+        ) {
+            val deadline = System.nanoTime() + waitNanos
+            var told = false
+            while (true) {
+                val gaps = unpackGaps(dependenciesDir, konanTargetName)
+                if (gaps.isEmpty()) return
+                if (System.nanoTime() >= deadline) {
+                    throw BuildFailure(
+                        "Konan did not finish unpacking under ${dependenciesDir.absolutePath} for " +
+                            "'$konanTargetName': ${gaps.joinToString("; ")}.",
+                    )
+                }
+                if (!told) log("waiting for konan to finish unpacking: ${gaps.joinToString("; ")}")
+                told = true
+                pause()
+            }
+        }
+
+        /** What konan has not finished for [konanTargetName] under [dependenciesDir], or nothing. */
+        fun unpackGaps(dependenciesDir: File, konanTargetName: String): List<String> {
+            // Only konan's own unpack writes .extracted, so a folder made by hand has none.
+            val extracted = dependenciesDir.resolve(".extracted").takeIf { it.isFile }
+                ?.readLines()?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
+            fun gapsOf(dir: File): List<String> = buildList {
+                if (dir.resolve(".unstable").exists()) add("${dir.name} is still being unpacked")
+                if (extracted != null && dir.name !in extracted) add("${dir.name} is not in .extracted yet")
+            }
+            val gaps = mutableListOf<String>()
+            val llvmBin = runCatching { resolveLlvmBinDir(dependenciesDir, DEFAULT_LLVM_PACKAGE) }.getOrNull()
+            if (llvmBin == null) {
+                gaps += "no LLVM package with clang yet"
+            } else {
+                gaps += gapsOf(llvmBin.parentFile)
+                LLVM_TOOLS.filter { resolveTool(llvmBin, it) == null }
+                    .forEach { gaps += "${llvmBin.parentFile.name} has no bin/$it yet" }
+            }
+            specFor(konanTargetName).konanSysroot?.substringBefore('/')?.let { name ->
+                val dir = dependenciesDir.resolve(name)
+                if (dir.isDirectory) gaps += gapsOf(dir) else gaps += "no $name yet"
+            }
+            return gaps
         }
     }
 }

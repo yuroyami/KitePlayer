@@ -357,6 +357,86 @@ class CompileKiteRtTest {
         )
     }
 
+    /** A konan dependencies folder with one LLVM package that holds [tools], as konan leaves it. */
+    private fun konanTree(root: File, tools: List<String> = CompileKiteRt.LLVM_TOOLS, listed: Boolean = true): File {
+        val llvm = root.resolve(CompileKiteRt.DEFAULT_LLVM_PACKAGE)
+        tools.forEach { writeExecutable(llvm.resolve("bin/$it")) }
+        // Konan lists every package it finished. An unlisted LLVM package sits beside a listed one.
+        root.resolve(".extracted").writeText(if (listed) "${llvm.name}\n" else "libffi-3.3-1-macos-arm64\n")
+        return llvm
+    }
+
+    @Test
+    fun `a finished unpack has no gaps, and neither has a folder made by hand`() {
+        val root = createTempDirectory()
+        try {
+            konanTree(root)
+            assertEquals(emptyList(), CompileKiteRt.unpackGaps(root, "macos_arm64"))
+            root.resolve(".extracted").delete()
+            assertEquals(emptyList(), CompileKiteRt.unpackGaps(root, "macos_arm64"), "no .extracted means no konan unpack to wait for")
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `an LLVM package that konan is still unpacking is waited for until it is done`() {
+        // CI run 44796613133 on a cold runner: clang was there, llvm-ar was not yet (#993).
+        val root = createTempDirectory()
+        try {
+            val llvm = konanTree(root, tools = listOf("clang"), listed = false)
+            llvm.resolve(".unstable").writeText("")
+            val gaps = CompileKiteRt.unpackGaps(root, "macos_arm64")
+            assertTrue(gaps.any { "still being unpacked" in it }, "$gaps")
+            assertTrue(gaps.any { "no bin/llvm-ar" in it }, "$gaps")
+            assertTrue(gaps.any { "not in .extracted" in it }, "$gaps")
+
+            var pauses = 0
+            val messages = mutableListOf<String>()
+            CompileKiteRt.awaitUnpacked(root, "macos_arm64", { messages += it }) {
+                // Konan finishes during the first pause.
+                pauses++
+                writeExecutable(llvm.resolve("bin/llvm-ar"))
+                llvm.resolve(".unstable").delete()
+                root.resolve(".extracted").writeText("${llvm.name}\n")
+            }
+            assertEquals(1, pauses)
+            assertEquals(1, messages.size, "the wait is reported once: $messages")
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `an unpack that never finishes fails and names what is missing`() {
+        val root = createTempDirectory()
+        try {
+            konanTree(root, tools = listOf("clang"))
+            val failure = assertFailsWith<BuildFailure> {
+                CompileKiteRt.awaitUnpacked(root, "macos_arm64", waitNanos = 0) { error("no pause past the deadline") }
+            }
+            assertContains(failure.message.orEmpty(), "no bin/llvm-ar")
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `a sysroot is waited for like the LLVM package`() {
+        val root = createTempDirectory()
+        try {
+            konanTree(root)
+            val sysroot = CompileKiteRt.specFor("linux_x64").konanSysroot!!
+            assertTrue(CompileKiteRt.unpackGaps(root, "linux_x64").any { "no ${sysroot.substringBefore('/')}" in it })
+            root.resolve(sysroot).mkdirs()
+            assertTrue(CompileKiteRt.unpackGaps(root, "linux_x64").any { "not in .extracted" in it })
+            root.resolve(".extracted").appendText("${sysroot.substringBefore('/')}\n")
+            assertEquals(emptyList(), CompileKiteRt.unpackGaps(root, "linux_x64"))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
     private fun createTempDirectory(): File {
         val directory = File.createTempFile("kiteplayer-rt-build-support", "")
         assertTrue(directory.delete())

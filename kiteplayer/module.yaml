@@ -70,6 +70,26 @@ plugins:
   dokka:
     enabled: true
     moduleName: kiteplayer
+    # `./kotlin do dokkaSite` merges the pages of these modules into build/dokka/html, the site
+    # that docs.yml publishes. Only one module may set siteName.
+    siteName: KitePlayer
+    siteModules:
+      - kiteplayer
+      - kiteplayer-compose
+      - kiteplayer-compose-ui
+      - kiteplayer-compose-video
+      - kiteplayer-compose-interop
+      - kiteplayer-view
+      - kiteplayer-view-bindings
+      - kiteplayer-core
+      - kiteplayer-subtitles
+      - kiteplayer-io
+      - kiteplayer-ffmpeg
+      - kiteplayer-output
+      - kiteplayer-network
+      - kiteplayer-adaptive
+      - kiteplayer-libass
+      - kiteplayer-audioviz
 
 
 # The JVM tests run in the module folder. They read the clips of scripts/testmedia.sh from here.

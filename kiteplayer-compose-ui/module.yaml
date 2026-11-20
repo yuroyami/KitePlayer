@@ -2,7 +2,7 @@
 # factory and no network.
 product:
   type: kmp/lib
-  platforms: [ jvm, android, iosArm64, iosSimulatorArm64, wasmJs ]
+  platforms: [ jvm, android, js, wasmJs, macosArm64, iosArm64, iosSimulatorArm64 ]
 
 apply:
   - //kiteplayer.module-template.yaml
@@ -64,6 +64,14 @@ settings@wasmJs:
   kotlin:
     freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-compose-ui ]
 
+settings@js:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-compose-ui ]
+
+settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-compose-ui, -Xshort-module-name=kiteplayer-compose-ui ]
+
 # Tests compile into their own klib, which needs a different name. The test blocks name the
 # same platforms as the blocks above, so the toolchain applies them last.
 test-settings@iosArm64:
@@ -77,3 +85,11 @@ test-settings@iosSimulatorArm64:
 test-settings@wasmJs:
   kotlin:
     freeCompilerArgs: [ -Xir-module-name=kiteplayer-compose-ui_test ]
+
+test-settings@js:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=kiteplayer-compose-ui_test ]
+
+test-settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-compose-ui_test, -Xshort-module-name=kiteplayer-compose-ui_test ]

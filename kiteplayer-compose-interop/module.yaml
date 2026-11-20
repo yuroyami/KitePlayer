@@ -1,7 +1,7 @@
 # The Compose video path that hosts the platform's native video view.
 product:
   type: kmp/lib
-  platforms: [ jvm, android, iosArm64, iosSimulatorArm64, js, wasmJs ]
+  platforms: [ jvm, android, js, wasmJs, macosArm64, iosArm64, iosSimulatorArm64 ]
 
 apply:
   - //kiteplayer.module-template.yaml
@@ -65,6 +65,10 @@ settings@wasmJs:
   kotlin:
     freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-compose-interop ]
 
+settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-compose-interop, -Xshort-module-name=kiteplayer-compose-interop ]
+
 # Tests compile into their own klib, which needs a different name. The test blocks name the
 # same platforms as the blocks above, so the toolchain applies them last.
 test-settings@iosArm64:
@@ -82,3 +86,7 @@ test-settings@js:
 test-settings@wasmJs:
   kotlin:
     freeCompilerArgs: [ -Xir-module-name=kiteplayer-compose-interop_test ]
+
+test-settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-compose-interop_test, -Xshort-module-name=kiteplayer-compose-interop_test ]

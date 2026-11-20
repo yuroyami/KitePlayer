@@ -1,13 +1,13 @@
 # The Compose video path that Compose draws itself.
 product:
   type: kmp/lib
-  platforms: [ jvm, android, iosArm64, iosSimulatorArm64, wasmJs ]
+  platforms: [ jvm, android, js, wasmJs, macosArm64, iosArm64, iosSimulatorArm64 ]
 
 aliases:
   # Platforms where the frame upload runs on a thread of its own.
-  - threaded: [ android, iosArm64, iosSimulatorArm64, jvm ]
-  # Platforms where Compose draws with Skiko.
-  - skiko: [ iosArm64, iosSimulatorArm64, jvm ]
+  - threaded: [ android, iosArm64, iosSimulatorArm64, jvm, macosArm64 ]
+  # The threaded platforms where Compose draws with Skiko. js draws with Skiko too, but has no video path.
+  - skiko: [ iosArm64, iosSimulatorArm64, jvm, macosArm64 ]
 
 apply:
   - //kiteplayer.module-template.yaml
@@ -26,7 +26,7 @@ dependencies@android:
   - //kiteplayer-ffmpeg
   - //kiteplayer-output
 
-dependencies@ios:
+dependencies@apple:
   - //kiteplayer-ffmpeg
   - //kiteplayer-output
 
@@ -84,6 +84,14 @@ settings@wasmJs:
   kotlin:
     freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-compose-video ]
 
+settings@js:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-compose-video ]
+
+settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-compose-video, -Xshort-module-name=kiteplayer-compose-video ]
+
 # Tests compile into their own klib, which needs a different name. The test blocks name the
 # same platforms as the blocks above, so the toolchain applies them last.
 test-settings@iosArm64:
@@ -97,3 +105,11 @@ test-settings@iosSimulatorArm64:
 test-settings@wasmJs:
   kotlin:
     freeCompilerArgs: [ -Xir-module-name=kiteplayer-compose-video_test ]
+
+test-settings@js:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=kiteplayer-compose-video_test ]
+
+test-settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-compose-video_test, -Xshort-module-name=kiteplayer-compose-video_test ]

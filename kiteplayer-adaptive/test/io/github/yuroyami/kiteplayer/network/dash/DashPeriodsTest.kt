@@ -262,13 +262,21 @@ class DashPeriodsTest {
         assertEquals(20 shl 20, moved.single().data.size - 12, "the 20 MiB segment was not served whole")
     }
 
+    // Joined once at the end: growing one array per read copies 20 MiB thousands of times, which
+    // takes Kotlin/Native past the test's time limit.
     private suspend fun MediaIo.readAll(): ByteArray {
-        var out = ByteArray(0)
-        val buffer = ByteArray(4096)
+        val chunks = mutableListOf<ByteArray>()
+        val buffer = ByteArray(64 * 1024)
         while (true) {
             val count = read(buffer, 0, buffer.size)
             if (count < 0) break
-            out += buffer.copyOf(count)
+            chunks += buffer.copyOf(count)
+        }
+        val out = ByteArray(chunks.sumOf { it.size })
+        var at = 0
+        for (chunk in chunks) {
+            chunk.copyInto(out, at)
+            at += chunk.size
         }
         return out
     }

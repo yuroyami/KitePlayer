@@ -99,7 +99,8 @@ publication() {
 }
 macos() {
     # The device soaks fail without KPRT_DEVICE_SOAK, so they run only when it is set (#641).
-    local soaks=(--exclude-classes='*SoakTest')
+    # Toolchain 0.14.0 finds no native test for an exclude with no include, so both are set.
+    local soaks=(--include-classes='*' --exclude-classes='*SoakTest')
     [ -n "${KPRT_DEVICE_SOAK:-}" ] && soaks=()
     kotlin test -p macosArm64 -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
         -m kiteplayer-output -m kiteplayer-rt \

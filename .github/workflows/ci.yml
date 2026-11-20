@@ -441,7 +441,11 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      # Saved by the last step, not by actions/cache at the end of the job: that saves only when
+      # every step passed. After a run of failed jobs this one started empty, and Maven Central
+      # refused its downloads with HTTP 429.
+      - uses: actions/cache/restore@v4
+        id: toolchain
         with:
           path: ~/.cache/JetBrains/Kotlin
           key: kotlin-linux-jvm-android-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
@@ -560,6 +564,13 @@ jobs:
             build/logs/**
           retention-days: 14
           if-no-files-found: ignore
+
+      - name: Keep the toolchain this job filled
+        if: always() && steps.toolchain.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/JetBrains/Kotlin
+          key: ${{ steps.toolchain.outputs.cache-primary-key }}
 
   # ---------------------------------------------------------------------------------------------
   # The one publish of a run: every published module to Maven Local. A KitePlayer library publishes

@@ -2,9 +2,9 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteffmpeg.MediaByteSource
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlin.coroutines.Continuation
-import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
 import kotlin.coroutines.intrinsics.startCoroutineUninterceptedOrReturn

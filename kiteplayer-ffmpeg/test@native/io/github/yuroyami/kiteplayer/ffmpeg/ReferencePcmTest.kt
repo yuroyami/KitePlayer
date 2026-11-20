@@ -16,6 +16,7 @@ import io.github.yuroyami.kiteplayer.spi.AudioSinkEvent
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.convert
 import kotlinx.cinterop.toKString
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.flow.Flow
@@ -150,7 +151,7 @@ class ReferencePcmTest {
             fseek(file, 0, 0)
             val bytes = ByteArray(size)
             bytes.usePinned { pinned ->
-                val read = fread(pinned.addressOf(0), 1uL, size.toULong(), file)
+                val read = fread(pinned.addressOf(0), 1u.convert(), size.convert(), file)
                 check(read.toInt() == size) { "short read on $path: $read of $size" }
             }
             return bytes

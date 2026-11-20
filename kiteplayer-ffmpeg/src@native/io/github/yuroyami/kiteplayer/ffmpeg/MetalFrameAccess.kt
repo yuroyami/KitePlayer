@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalForeignApi::class, KiteFFmpegLowLevelApi::class)
+@file:OptIn(ExperimentalForeignApi::class, KiteFFmpegLowLevelApi::class, UnsafeNumber::class)
 
 package io.github.yuroyami.kiteplayer.ffmpeg
 
@@ -10,6 +10,7 @@ import io.github.yuroyami.kiteffmpeg.withPlanes
 import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.UnsafeNumber
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.convert
 import kotlinx.cinterop.usePinned

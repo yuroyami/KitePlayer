@@ -2,7 +2,21 @@
 # Compose modules can show a caller's player without picking a factory or a network transport.
 product:
   type: kmp/lib
-  platforms: [ jvm, android, iosArm64, iosSimulatorArm64 ]
+  platforms:
+    - jvm
+    - android
+    - js
+    - wasmJs
+    - macosArm64
+    - iosArm64
+    - iosSimulatorArm64
+    - iosX64
+    - linuxX64
+    - linuxArm64
+    - mingwX64
+    - androidNativeArm32
+    - androidNativeArm64
+    - androidNativeX64
 
 apply:
   - //kiteplayer.module-template.yaml
@@ -45,6 +59,46 @@ settings@iosSimulatorArm64:
   kotlin:
     freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-view-bindings, -Xshort-module-name=kiteplayer-view-bindings ]
 
+settings@js:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-view-bindings ]
+
+settings@wasmJs:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-view-bindings ]
+
+settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-view-bindings, -Xshort-module-name=kiteplayer-view-bindings ]
+
+settings@iosX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-view-bindings, -Xshort-module-name=kiteplayer-view-bindings ]
+
+settings@linuxX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-view-bindings, -Xshort-module-name=kiteplayer-view-bindings ]
+
+settings@linuxArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-view-bindings, -Xshort-module-name=kiteplayer-view-bindings ]
+
+settings@mingwX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-view-bindings, -Xshort-module-name=kiteplayer-view-bindings ]
+
+settings@androidNativeArm32:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-view-bindings, -Xshort-module-name=kiteplayer-view-bindings ]
+
+settings@androidNativeArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-view-bindings, -Xshort-module-name=kiteplayer-view-bindings ]
+
+settings@androidNativeX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-view-bindings, -Xshort-module-name=kiteplayer-view-bindings ]
+
 # Tests compile into their own klib, which needs a different name. The test blocks name the
 # same platforms as the blocks above, so the toolchain applies them last.
 test-settings@iosArm64:
@@ -52,5 +106,45 @@ test-settings@iosArm64:
     freeCompilerArgs: [ -module-name=kiteplayer-view-bindings_test, -Xshort-module-name=kiteplayer-view-bindings_test ]
 
 test-settings@iosSimulatorArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-view-bindings_test, -Xshort-module-name=kiteplayer-view-bindings_test ]
+
+test-settings@js:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=kiteplayer-view-bindings_test ]
+
+test-settings@wasmJs:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=kiteplayer-view-bindings_test ]
+
+test-settings@macosArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-view-bindings_test, -Xshort-module-name=kiteplayer-view-bindings_test ]
+
+test-settings@iosX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-view-bindings_test, -Xshort-module-name=kiteplayer-view-bindings_test ]
+
+test-settings@linuxX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-view-bindings_test, -Xshort-module-name=kiteplayer-view-bindings_test ]
+
+test-settings@linuxArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-view-bindings_test, -Xshort-module-name=kiteplayer-view-bindings_test ]
+
+test-settings@mingwX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-view-bindings_test, -Xshort-module-name=kiteplayer-view-bindings_test ]
+
+test-settings@androidNativeArm32:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-view-bindings_test, -Xshort-module-name=kiteplayer-view-bindings_test ]
+
+test-settings@androidNativeArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-view-bindings_test, -Xshort-module-name=kiteplayer-view-bindings_test ]
+
+test-settings@androidNativeX64:
   kotlin:
     freeCompilerArgs: [ -module-name=kiteplayer-view-bindings_test, -Xshort-module-name=kiteplayer-view-bindings_test ]

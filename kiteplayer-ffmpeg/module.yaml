@@ -4,21 +4,29 @@ product:
   platforms:
     - jvm
     - android
+    - js
+    - wasmJs
     - macosArm64
     - iosArm64
     - iosSimulatorArm64
+    - iosX64
     - linuxX64
     - linuxArm64
     - mingwX64
-    - wasmJs
+    - androidNativeArm32
+    - androidNativeArm64
+    - androidNativeX64
 
 aliases:
-  # Code that runs over the FFmpeg C API in-process: every platform but the web one.
-  - jvmAndNative: [ jvm, android, macosArm64, iosArm64, iosSimulatorArm64, linuxX64, linuxArm64, mingwX64 ]
+  # Code that runs over the FFmpeg C API in-process: every platform but the web ones.
+  - jvmAndNative: [ jvm, android, macosArm64, iosArm64, iosSimulatorArm64, iosX64, linuxX64, linuxArm64, mingwX64,
+      androidNativeArm32, androidNativeArm64, androidNativeX64 ]
   - jvmAndAndroid: [ jvm, android ]
-  - posix: [ macosArm64, iosArm64, iosSimulatorArm64, linuxX64, linuxArm64 ]
+  - posix: [ macosArm64, iosArm64, iosSimulatorArm64, iosX64, linuxX64, linuxArm64, androidNativeArm32,
+      androidNativeArm64, androidNativeX64 ]
   # The tests that drive the real FFmpeg backend: the JVM and every native platform.
-  - realBackend: [ jvm, macosArm64, iosArm64, iosSimulatorArm64, linuxX64, linuxArm64, mingwX64 ]
+  - realBackend: [ jvm, macosArm64, iosArm64, iosSimulatorArm64, iosX64, linuxX64, linuxArm64, mingwX64,
+      androidNativeArm32, androidNativeArm64, androidNativeX64 ]
 
 apply:
   - //kiteplayer.module-template.yaml
@@ -105,6 +113,26 @@ settings@wasmJs:
   kotlin:
     freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-ffmpeg ]
 
+settings@js:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=io.github.yuroyami:kiteplayer-ffmpeg ]
+
+settings@iosX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-ffmpeg, -Xshort-module-name=kiteplayer-ffmpeg ]
+
+settings@androidNativeArm32:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-ffmpeg, -Xshort-module-name=kiteplayer-ffmpeg ]
+
+settings@androidNativeArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-ffmpeg, -Xshort-module-name=kiteplayer-ffmpeg ]
+
+settings@androidNativeX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=io.github.yuroyami:kiteplayer-ffmpeg, -Xshort-module-name=kiteplayer-ffmpeg ]
+
 # Tests compile into their own klib, which needs a different name. The test blocks name the
 # same platforms as the blocks above, so the toolchain applies them last.
 test-settings@macosArm64:
@@ -134,3 +162,23 @@ test-settings@mingwX64:
 test-settings@wasmJs:
   kotlin:
     freeCompilerArgs: [ -Xir-module-name=kiteplayer-ffmpeg_test ]
+
+test-settings@js:
+  kotlin:
+    freeCompilerArgs: [ -Xir-module-name=kiteplayer-ffmpeg_test ]
+
+test-settings@iosX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-ffmpeg_test, -Xshort-module-name=kiteplayer-ffmpeg_test ]
+
+test-settings@androidNativeArm32:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-ffmpeg_test, -Xshort-module-name=kiteplayer-ffmpeg_test ]
+
+test-settings@androidNativeArm64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-ffmpeg_test, -Xshort-module-name=kiteplayer-ffmpeg_test ]
+
+test-settings@androidNativeX64:
+  kotlin:
+    freeCompilerArgs: [ -module-name=kiteplayer-ffmpeg_test, -Xshort-module-name=kiteplayer-ffmpeg_test ]

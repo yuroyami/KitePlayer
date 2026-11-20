@@ -12,6 +12,7 @@ flags name them, with a loop variable read as the list the loop walks; comments 
 and a test binary run by hand takes its platform from where it was linked (#730). The web runner's
 module lists count for a platform only when a block calls the runner with it. A folder for an alias, such
 as test@apple or test@native, is covered through the platforms of its own jobs and is not read here.
+A platform folder that holds no test, only what the shared tests need to compile, has nothing to run.
 
 A module's common `test/` folder must run on every platform of COMMON_PLATFORMS that its module.yaml
 declares, unless EXCUSED names why it cannot (#728).
@@ -23,6 +24,8 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+# A kotlin.test or JUnit test function, by its annotation.
+TEST_ANNOTATION = re.compile(r"@([\w.]+\.)?Test\b")
 
 # Each test folder, by its platform, and the word a ci.yml block names that platform by.
 FOLDERS = {
@@ -48,6 +51,9 @@ EXCUSED = {
         "the simulator cannot start the CoreAudio output unit or give a VideoToolbox frame (#155)",
     ("kiteplayer-ffmpeg", "mingwX64"):
         "the Windows job links the FFmpeg backend's tests but has no media to run them on",
+    ("kiteplayer-ffmpeg", "js"):
+        "KiteFFmpeg's js build is a placeholder whose media calls throw FFmpegError.Unsupported; "
+        "the wasmJs jobs run the backend's tests on the web",
     ("kiteplayer-sample-shared", "iosSimulatorArm64"):
         "the sample's media choice is plain Kotlin, which its JVM and Android host runs already cover",
 }
@@ -272,6 +278,11 @@ def declared_platforms(module_dir):
     return platforms_in((module_dir / "module.yaml").read_text())
 
 
+def holds_tests(folder):
+    """Whether a test folder has a test to run, and not only the actuals that shared tests need."""
+    return any(TEST_ANNOTATION.search(file.read_text(errors="replace")) for file in folder.rglob("*.kt"))
+
+
 def main() -> int:
     failures = self_test()
     for failure in failures:
@@ -284,7 +295,7 @@ def main() -> int:
         module = module_dir.name
         for folder, platform in FOLDERS.items():
             tests = module_dir / folder
-            if tests.is_dir() and any(tests.rglob("*.kt")) and (module, platform) not in covered:
+            if tests.is_dir() and holds_tests(tests) and (module, platform) not in covered:
                 gaps.append(f"{module}/{folder}: no CI job runs {module}'s tests on {platform}")
         common = module_dir / "test"
         if common.is_dir() and any(common.rglob("*.kt")):

@@ -7,6 +7,7 @@ import io.github.yuroyami.kiteffmpeg.MediaType
 import io.github.yuroyami.kiteplayer.MediaItem
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.convert
 import kotlinx.cinterop.toKString
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.runBlocking
@@ -35,7 +36,7 @@ class ThumbnailsTest {
         val file = fopen(path, "wb") ?: error("cannot write $path")
         try {
             bytes.usePinned { pinned ->
-                check(fwrite(pinned.addressOf(0), 1uL, bytes.size.toULong(), file).toInt() == bytes.size)
+                check(fwrite(pinned.addressOf(0), 1u.convert(), bytes.size.convert(), file).toInt() == bytes.size)
             }
         } finally {
             fclose(file)

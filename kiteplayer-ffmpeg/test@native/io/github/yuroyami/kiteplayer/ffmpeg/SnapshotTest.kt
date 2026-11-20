@@ -9,6 +9,7 @@ import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.convert
 import kotlinx.cinterop.toKString
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.runBlocking
@@ -42,7 +43,7 @@ class SnapshotTest {
             fseek(file, 0, SEEK_SET)
             val bytes = ByteArray(size)
             bytes.usePinned { pinned ->
-                val read = fread(pinned.addressOf(0), 1uL, size.toULong(), file)
+                val read = fread(pinned.addressOf(0), 1u.convert(), size.convert(), file)
                 check(read.toInt() == size) { "short read on $path: $read of $size" }
             }
             return bytes
@@ -55,7 +56,7 @@ class SnapshotTest {
         val file = fopen(path, "wb") ?: error("cannot write $path")
         try {
             bytes.usePinned { pinned ->
-                val written = fwrite(pinned.addressOf(0), 1uL, bytes.size.toULong(), file)
+                val written = fwrite(pinned.addressOf(0), 1u.convert(), bytes.size.convert(), file)
                 check(written.toInt() == bytes.size) { "short write on $path" }
             }
         } finally {

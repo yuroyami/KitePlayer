@@ -3,6 +3,7 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.convert
 import kotlinx.cinterop.usePinned
 import platform.posix.SEEK_END
 import platform.posix.SEEK_SET
@@ -21,7 +22,7 @@ internal actual fun readTestFile(path: String): ByteArray? {
         val bytes = ByteArray(size)
         if (size > 0) {
             bytes.usePinned { pinned ->
-                val read = fread(pinned.addressOf(0), 1uL, size.toULong(), file)
+                val read = fread(pinned.addressOf(0), 1u.convert(), size.convert(), file)
                 check(read.toInt() == size) { "short read on $path: $read of $size" }
             }
         }

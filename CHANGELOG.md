@@ -10,7 +10,7 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ## [Unreleased]
 
-## [0.4.0] - 2026-11-13
+## [0.4.0] - 2026-11-21
 
 ### Added
 

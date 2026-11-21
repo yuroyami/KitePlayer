@@ -6,13 +6,22 @@
 # KOTLIN_TOOLCHAIN_* environment variables listed below:
 #   ./kotlin publish mavenCentral
 #
-# By default the deployment waits on the Central Portal after validation (publishingMode manual in
-# library.module-template.yaml). The final Publish click is human, deliberately: Central is
-# immutable and a version cannot be withdrawn. The release input switches the upload job to auto.
+# By default the run releases what it uploads: the release input is on, so the upload job switches
+# publishingMode to auto and every deployment goes live on Maven Central once the portal has
+# validated it, with no Publish click (#998). The upload comes last, after the tests, the
+# attestation and the check that this runner built the attested bytes, so everything that can stop
+# a release has already passed when it starts. Central is immutable and a version cannot be
+# withdrawn, so a run that should stop at the portal for a look first sets the release input off;
+# its deployments then wait there, validated, for a Publish click on each one. The committed
+# publishingMode in library.module-template.yaml stays manual, so a publish from the maintainer's
+# machine still waits on the portal.
 #
-# THE ONE STEP THAT IS NOT ATOMIC is the release itself: the upload stages a deployment, and a
-# person releases it. Nothing in a deployment is public until the Publish click releases all of it
-# together, so drop a failed or wrong deployment on the portal instead of releasing it.
+# THE ONE STEP THAT IS NOT ATOMIC is the release itself: the upload makes one deployment per
+# module, and each is released on its own once it validates. A deployment that fails validation is
+# not released and the others are, so a failed upload can leave a version partly on Central; fix
+# the cause and publish the missing modules under the same version. With the release input off,
+# nothing is public until the Publish clicks, so drop a failed or wrong deployment on the portal
+# instead of releasing it.
 #
 # TESTS FIRST. The whole of CI runs on the commit being published, and the upload waits for it. A
 # red test stops the run before anything reaches the portal.
@@ -61,9 +70,9 @@ on:
         description: "Version to publish (must match settings.publishing.version in library.module-template.yaml), e.g. 0.3.0"
         required: true
       release:
-        description: "Also release the deployment on the Central Portal. Off leaves it validated for a human to publish."
+        description: "Release the deployments on Maven Central once validated. Off leaves them on the Central Portal for a human to publish."
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: read
@@ -262,7 +271,8 @@ jobs:
           path: ${{ runner.temp }}/attested
 
       # Before anything builds, so that every publication of this job reads the same settings.
-      # Only in this runner's checkout: the committed default stays manual.
+      # Only in this runner's checkout: the committed default stays manual, for a publish from the
+      # maintainer's machine. The release input is on unless a run turns it off.
       - name: Release the deployment on the portal
         if: inputs.release
         run: |
@@ -296,7 +306,9 @@ jobs:
           ./kotlin publish mavenCentral
 
       # The same comparison once more, after the upload, from an emptied Maven Local. With the
-      # release input off, a failure here means: drop the deployment on the portal.
+      # release input off, a failure here means: drop the deployment on the portal. With it on, the
+      # version is already live, so a failure here means the attestation does not name the bytes
+      # on Central: say so on the release page and publish a fixed version.
       - name: The uploaded files are the attested ones
         env:
           KITEPLAYER_LIBASS_REQUIRE_ALL_HOST_JNI: "true"

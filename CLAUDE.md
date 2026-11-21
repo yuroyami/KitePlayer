@@ -97,9 +97,10 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - The four Actions secrets that `publish.yml` reads are set, so it can upload. Dispatch it with the version as
   an input; it is compared against `settings.publishing.version` in
   `library.module-template.yaml` and a mismatch fails before any work. It then runs the whole of `ci.yml` on the same commit, and the upload waits for it, so a
-  release run takes as long as CI plus the upload and one flaky test stops a release. Leave the
-  `release` input off to leave the validated deployment on the portal and press Publish there
-  yourself. The attest job signs the file list before the upload job runs, and that job builds
+  release run takes as long as CI plus the upload and one flaky test stops a release. The
+  `release` input is on by default, so a run's deployments go live on Central with no Publish click
+  (#998); set it off only to leave them validated on the portal and press Publish there yourself,
+  once per module. The attest job signs the file list before the upload job runs, and that job builds
   again on a fresh runner and stops before the upload when one byte differs from the list (#777).
   Publishing from the maintainer's machine is `./kotlin publish mavenCentral`, with the
   credentials in the `KOTLIN_TOOLCHAIN_MAVEN_CENTRAL_USERNAME`, `KOTLIN_TOOLCHAIN_MAVEN_CENTRAL_PASSWORD`,

@@ -32,7 +32,7 @@ settings:
     signArtifacts: true
     publishSources: true
     # manual uploads and validates the bundle, then waits for Publish on the Central Portal.
-    # publish.yml switches it to auto when its release input is on.
+    # publish.yml switches it to auto when its release input is on, which is its default.
     mavenCentral:
       enabled: true
       publishingMode: manual

@@ -231,6 +231,13 @@ public class AudioPlayback(
     private var anchorFloorNanos: Long? = null
 
     /**
+     * True once a device report has dated the running clock since the last [play] or [flush].
+     * Until then the clock runs on from where it stood, up to the device's latency ahead of the
+     * sound (#995).
+     */
+    private var deviceDated = false
+
+    /**
      * The gapless join: the next queue item's audio continuing this ring. See
      * `docs/gapless-queue.md`. Under [lock], because the feeder moves it forward until
      * [Join.Writing] and a reader on any thread moves it to [Join.Crossed].
@@ -697,9 +704,13 @@ public class AudioPlayback(
         crossLocked()
         val snapshot = playoutClock.snapshot()
         val playout = snapshot.pts
+        val media = playout?.let(::mediaLocked)
+        // A join holds the reading where mediaLocked moved it off the timeline.
+        val held = playout != null && media != (timeline.mediaAt(playout.micros)?.let(::Pts) ?: playout)
         snapshot.copy(
-            pts = playout?.let(::mediaLocked),
+            pts = media,
             speed = playout?.let { timeline.slopeAt(it.micros) } ?: timeline.slopeAt(0),
+            settled = !snapshot.paused && deviceDated && starvedHoldUs == null && !held,
         )
     }
 
@@ -760,6 +771,7 @@ public class AudioPlayback(
             if (frozen == null || heardNow < frozen) playoutClock.setAt(Pts(heardNow), generation, now)
         } else {
             playoutClock.setAt(anchor.pts, generation, anchor.audibleAtNanos)
+            deviceDated = true
             holdAtLastSoundLocked(anchor)
         }
         // The clock reads up to the device's latency behind the anchor, so lines are kept for a
@@ -857,6 +869,7 @@ public class AudioPlayback(
     public suspend fun play() {
         synchronized(lock) {
             playoutClock.resume()
+            deviceDated = false
             anchorFloorNanos = ring?.anchor()?.audibleAtNanos
             ring?.hold(false)
         }
@@ -960,6 +973,7 @@ public class AudioPlayback(
         synchronized(lock) {
             ring?.flush()
             playoutClock.invalidate()
+            deviceDated = false
             timeline.clear()
             // An empty ring has nothing on either side of a join, and the samples that follow
             // carry the current item's own timestamps.

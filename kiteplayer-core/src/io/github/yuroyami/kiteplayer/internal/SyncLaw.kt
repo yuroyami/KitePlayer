@@ -5,8 +5,9 @@ import io.github.yuroyami.kiteplayer.Pts
 /**
  * The rule that decides how long the frame currently on screen should stay there.
  *
- * This is the whole of audio/video synchronisation for the video path, and it is a pure function, so
- * every case in it is covered by a table-driven test rather than by watching a video and squinting.
+ * This is the whole of audio/video synchronisation for the video path, apart from the one alignment
+ * that `VideoPlayback.tick` makes after each start (#995). It is a pure function, so every case in it
+ * is covered by a table-driven test rather than by watching a video and squinting.
  *
  * The thresholds are the ones ffplay and mpv converged on over a decade of bug reports against real
  * files. They are not arbitrary and they are not tuned here.
@@ -66,7 +67,7 @@ internal object SyncLaw {
         val diff = videoClock.micros - masterClock.micros
         if (diff <= -maxFrameDurationUs || diff >= maxFrameDurationUs) return nominalDelayUs
 
-        val syncThreshold = nominalDelayUs.coerceIn(SYNC_THRESHOLD_MIN_US, SYNC_THRESHOLD_MAX_US)
+        val syncThreshold = syncThresholdUs(nominalDelayUs)
 
         return when {
             // Video is behind the master: shorten the current frame, possibly to nothing, so the
@@ -84,6 +85,9 @@ internal object SyncLaw {
             else -> nominalDelayUs
         }
     }
+
+    /** The offset from the master below which [targetDelayUs] corrects nothing, for a frame of [nominalDelayUs]. */
+    fun syncThresholdUs(nominalDelayUs: Long): Long = nominalDelayUs.coerceIn(SYNC_THRESHOLD_MIN_US, SYNC_THRESHOLD_MAX_US)
 
     /** What [targetDelayUs] decided, for statistics and tests. */
     fun classify(nominalDelayUs: Long, correctedDelayUs: Long): SyncAction = when {

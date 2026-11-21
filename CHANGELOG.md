@@ -242,6 +242,15 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
   later `closeAndAwait()` waited for ever. Both joins now release under the close deadline, as
   every other teardown does since #590. Past it the player warns `ResourcesNotReleased`, plays
   on, and a close reports `RuntimeCompromised`.
+- The picture now keeps step with the sound from the start of a playback and after every seek
+  (#995). The picture schedule woke up to 50 ms after the sound started, and the sync rule
+  corrects no offset under 40 ms. So the picture stayed up to 40 ms behind the sound for the
+  whole playback, and each start gave a different offset. A picture file with a separate sound
+  file measured 30 to 40 ms. The schedule now starts with the sound and moves onto the sound
+  clock once after each start. The marker clip measures 0 to 3 ms, before and after a seek.
+- While the player waits for the network to come back, `position` reports the place where the
+  item opens again (#995). It reported the place of the last pass before the wait, which could
+  be a little earlier.
 - A signed address that expires while a stream plays in `KitePlayerWorker` is renewed as on the
   other targets (#546, #453). The worker's reader threw a 401 or 403 as a plain failure and kept
   no refusal, so the player never opened the item again for a fresh address and warned nothing.

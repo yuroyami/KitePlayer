@@ -136,6 +136,55 @@ class VideoPlaybackTest {
         video.close()
     }
 
+    // The schedule started wherever the start left it, and SyncLaw corrects no offset under 40 ms,
+    // so a picture that started 20 ms behind the sound stayed 20 ms behind it (#995).
+    @Test
+    fun `a start behind the master moves onto it once, and a resume moves onto it again`() = runTest {
+        val clock = TestClock()
+        val renderer = RecordingRenderer()
+        val video = playback(renderer, clock)
+        listOf(0L, 40L, 80L, 120L).forEach { video.submit(FakeVideoFrame(pts(it))) }
+        // The master runs 20 ms ahead of the schedule, inside the threshold of a 40 ms frame.
+        fun ahead(millis: Long) = pts(clock.nanos() / 1_000_000 + millis)
+
+        video.tick(null)
+        assertEquals(20.milliseconds, video.tick(ahead(20)), "frame 40 comes 20 ms sooner")
+        clock.advance(20.milliseconds)
+        video.tick(ahead(20))
+        clock.advance(40.milliseconds)
+        video.tick(ahead(20))
+        assertEquals(listOf(0L, 20L, 60L).map { it * 1_000_000 }, renderer.targets, "each frame is due when the master reads its time")
+
+        // A pause, and the sound comes back 20 ms ahead again.
+        video.pauseSchedule()
+        clock.advance(100.milliseconds)
+        video.resumeSchedule()
+        video.tick(pts(100))
+        clock.advance(20.milliseconds)
+        video.tick(pts(120))
+        assertEquals(180L * 1_000_000, renderer.targets.last(), "the resume moved the schedule onto the master")
+        video.close()
+    }
+
+    // The audio clock runs on from where it stood until a device report dates it, so an alignment to
+    // that reading would aim at a clock about to step back by the device's latency (#995).
+    @Test
+    fun `an unsettled master moves nothing and the first settled reading does`() = runTest {
+        val clock = TestClock()
+        val renderer = RecordingRenderer()
+        val video = playback(renderer, clock)
+        listOf(0L, 40L, 80L).forEach { video.submit(FakeVideoFrame(pts(it))) }
+
+        video.tick(null)
+        assertEquals(40.milliseconds, video.tick(pts(20), null, masterSettled = false), "an unsettled reading moved the schedule")
+        clock.advance(10.milliseconds)
+        assertEquals(10.milliseconds, video.tick(pts(30), null, masterSettled = true), "the settled reading did not")
+        clock.advance(10.milliseconds)
+        video.tick(pts(40), null, masterSettled = true)
+        assertEquals(listOf(0L, 20L).map { it * 1_000_000 }, renderer.targets)
+        video.close()
+    }
+
     @Test
     fun `the queue never holds more than the capacity it was given`() = runTest {
         val clock = TestClock()

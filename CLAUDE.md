@@ -299,6 +299,10 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - **The actor releases a session only through `releaseWithinDeadline`.** A `releaseSession` call on
   the actor lets one native close that never returns stop the player and every later close. A stop
   did that (#590), then both gapless joins (#992).
+- **A write of `SCHEDULER_RUNNING` to a parked schedule sends `schedulerNudge` with it.** The
+  parked schedule polls every 50 ms, and `SyncLaw` corrects no offset under 40 ms. Without the
+  nudge the picture started up to 50 ms after the sound and kept up to 40 ms of it (#995).
+  `VideoPlayback.tick` aligns once per start, and only to a `settled` audio clock reading.
 - **The audio submit call bypasses the whole pipeline. The decoded-submit call is the real door.**
   Submit writes its floats straight to the ring: no channel mix, no resample, no tempo. A caller who
   reaches for it because the format already matches gets audio that skipped every stage. The first

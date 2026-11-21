@@ -6174,6 +6174,9 @@ internal class PlaybackCore(
         }
         clearSeekMaskUnlessPending()
         reconnect = wait
+        // The position the wait reports is the one the item opens again at, as after a seek in the
+        // wait. The last pass published one from up to a pass earlier.
+        wait.atUs?.let { publishedPositionMicros.value = it }
         networkBack.value = false
         networkWasLost.value = false
         wait.watch = watchNetwork(recovery)
@@ -7831,6 +7834,9 @@ internal class PlaybackCore(
         session.pictureHoldsPosition = false
         session.heldPositionUs = NO_POSITION
         session.schedulerMode.value = SCHEDULER_RUNNING
+        // A parked schedule polls every WORKER_POLL. Without the nudge the picture started up to
+        // 50 ms after the sound, and SyncLaw kept any part of that under 40 ms (#995).
+        session.schedulerNudge.trySend(Unit)
     }
 
     /**
@@ -15631,7 +15637,7 @@ internal class PlaybackCore(
                     // of every file, because an open ends paused on its first frame.
                     video.resumeSchedule()
                     val master = masterReading(session)
-                    val wait = video.tick(master?.pts, master?.speed)
+                    val wait = video.tick(master?.pts, master?.speed, master?.settled == true)
                     recordVideoClock(session, video)
                     // The pacing wait yields to a park request like every other idle wait: while
                     // playing, this sleep IS the schedule, so a seek that did not interrupt it paid

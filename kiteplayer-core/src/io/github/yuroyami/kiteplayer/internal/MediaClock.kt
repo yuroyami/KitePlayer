@@ -146,6 +146,12 @@ internal data class ClockSnapshot(
     val speed: Double,
     val paused: Boolean,
     val hostTimeNanos: Long = 0L,
+    /**
+     * True when [pts] moves with what is heard now. The audio clock says false until a device report
+     * dates it after a start, and while a join or a dry ring holds it (#995). A plain clock answers
+     * by [paused].
+     */
+    val settled: Boolean = !paused,
 ) {
     val isValid: Boolean get() = pts != null
 

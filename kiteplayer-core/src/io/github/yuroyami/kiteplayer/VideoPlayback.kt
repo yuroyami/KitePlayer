@@ -14,6 +14,8 @@ import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
+import kotlin.math.abs
+import kotlin.math.roundToLong
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.microseconds
 
@@ -162,6 +164,12 @@ public class VideoPlayback(
      */
     private var frameTimerNanos: Long = 0
     private var started = false
+
+    /**
+     * True from each place the schedule starts or re-anchors until [tick] has moved it onto the
+     * master clock (#995).
+     */
+    private var phasePending = true
 
     /** The duration the last step gave the frame on screen, for the slot of a frame with none after it. */
     private var lastNominalUs = 0L
@@ -322,8 +330,12 @@ public class VideoPlayback(
      */
     public suspend fun tick(masterClock: Pts?): Duration = tick(masterClock, null)
 
-    /** [tick], pacing at [masterRate], the rate the master clock runs at, or at [speed] when null. */
-    internal suspend fun tick(masterClock: Pts?, masterRate: Double?): Duration {
+    /**
+     * [tick], pacing at [masterRate], the rate the master clock runs at, or at [speed] when null.
+     * [masterSettled] is false while the master runs ahead of a device report or is held, so the
+     * schedule does not align to it (#995).
+     */
+    internal suspend fun tick(masterClock: Pts?, masterRate: Double?, masterSettled: Boolean = masterClock != null): Duration {
         pace(masterRate)
         val next = queue.peek() ?: return IDLE_WAIT
 
@@ -348,6 +360,7 @@ public class VideoPlayback(
             startAtNanos.value = NO_START
             frameTimerNanos = if (due != NO_START && now - due <= START_SLACK_NANOS) due else now
             started = true
+            phasePending = true
             return present(frameTimerNanos, masterClock)
         }
 
@@ -363,6 +376,22 @@ public class VideoPlayback(
         lastNominalUs = nominalUs
 
         val videoNow = videoClock.nowOrNull()
+        // A start leaves the schedule off the master by however far the two started apart, and
+        // SyncLaw corrects no offset under its threshold, so up to 40 ms stayed for the whole
+        // playback (#995). The first settled reading inside the threshold moves the schedule onto
+        // the master, once per start. SyncLaw still corrects a larger offset first.
+        if (phasePending && masterSettled && videoNow != null && masterClock != null) {
+            val offsetUs = videoNow.micros - masterClock.micros
+            if (abs(offsetUs) < SyncLaw.syncThresholdUs(nominalUs)) {
+                phasePending = false
+                // Behind is negative, so the next frame comes that much sooner, as in SyncLaw. In
+                // whole milliseconds, because a wait ends on a whole millisecond and a finer shift
+                // made every wake after it late by the fraction.
+                if (abs(offsetUs) >= PHASE_TOLERANCE_US) {
+                    frameTimerNanos += (offsetUs / appliedSpeed / 1_000.0).roundToLong() * 1_000_000L
+                }
+            }
+        }
         val delayUs = SyncLaw.targetDelayUs(nominalUs, videoNow, masterClock, maxFrameDurationUs)
 
         // The one media-to-wall conversion in the schedule. SyncLaw thinks entirely in media
@@ -377,6 +406,7 @@ public class VideoPlayback(
         // difference between recovering from a stall and presenting a burst of frames to catch up.
         if (delayUs > 0 && now - frameTimerNanos > SyncLaw.FRAME_TIMER_RESYNC_US * 1_000) {
             frameTimerNanos = now
+            phasePending = true
         }
         // The frame whose slot this is sets the video clock whether it is shown or dropped, as
         // ffplay's update_video_pts does before its drop decision. Otherwise the frame after a drop
@@ -431,6 +461,7 @@ public class VideoPlayback(
         startAtNanos.value = NO_START
         frameTimerNanos = clock.nanos()
         started = true
+        phasePending = true
         // Nothing plays while this frame is shown, so the clock holds it: running, it counted the
         // time the renderer took to draw the frame, and a paused player then read 400 ms ahead of
         // its picture after a slow draw (#588). The schedule's resume starts the clock from here.
@@ -551,6 +582,8 @@ public class VideoPlayback(
         val frozenAtNanos = videoClock.lastUpdatedNanos
         videoClock.resume()
         if (started) frameTimerNanos += clock.nanos() - frozenAtNanos
+        // The sound starts again on its own clock, so the two are in phase only by chance (#995).
+        phasePending = true
     }
 
     /** Marks the end of a generation. Everything queued is dropped and the schedule restarts. */
@@ -580,6 +613,9 @@ public class VideoPlayback(
         val IDLE_WAIT: Duration = 2_000.microseconds
 
         const val NO_START: Long = Long.MIN_VALUE
+
+        /** An offset from the master under this is rounding and wake jitter, so [tick] leaves it (#995). */
+        const val PHASE_TOLERANCE_US: Long = 2_000
 
         /**
          * How late a wake may be and still keep the slot a join gave the first frame. Under a frame

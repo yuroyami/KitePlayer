@@ -248,6 +248,11 @@ Each line is something that bit someone. Delete a line when it stops being true.
   `.extracted` list.
 - CI test runs on a simulator link every test binary first, one at a time. A link beside a running
   simulator starved it on the small CI Mac, and a test ran out of its one-minute limit (#991).
+- Kotlin/Native refuses a comma in a backtick test name, and the JVM accepts it. A name that passed
+  every JVM run failed the compile of every native test job (#995). Keep commas out of test names.
+- Run `python3 scripts/check-test-coverage.py` after any change to a test command in `ci.yml`. It
+  reads modules only from literal `-m` flags and `for` loop values. A module list in a shell
+  variable hid 13 test folders from it, and it failed the Linux JVM job (#991).
 - A property named `field` is unreachable by that name inside any accessor of the same class,
   because `field` is the backing-field keyword there. The compiler then reports "Property must be
   initialized" on a completely different property.

@@ -372,15 +372,19 @@ jobs:
 
       # Every test binary links before any test runs, one link at a time. A link that ran beside the
       # simulator starved it on this small runner, and a test ran out of its one-minute limit (#991).
+      # The two module lists are the same. They stay written out, because check-test-coverage.py
+      # reads the modules of each test command from its literal -m flags.
       - name: iosSimulatorArm64 tests
         run: |
           . scripts/test-env.sh
-          modules="kiteplayer-core kiteplayer-subtitles kiteplayer-io kiteplayer-rt kiteplayer-view
-            kiteplayer-adaptive kiteplayer-network kiteplayer-libass kiteplayer-audioviz kiteplayer
-            kiteplayer-compose-video"
-          for module in $modules; do ./kotlin task ":${module}:linkIosSimulatorArm64TestDebug"; done
-          # shellcheck disable=SC2046,SC2086 # one -m and one module name per word
-          ./kotlin test -p iosSimulatorArm64 $(printf -- '-m %s ' $modules)
+          for module in kiteplayer-core kiteplayer-subtitles kiteplayer-io kiteplayer-rt kiteplayer-view \
+            kiteplayer-adaptive kiteplayer-network kiteplayer-libass kiteplayer-audioviz kiteplayer \
+            kiteplayer-compose-video; do
+            ./kotlin task ":${module}:linkIosSimulatorArm64TestDebug"
+          done
+          ./kotlin test -p iosSimulatorArm64 -m kiteplayer-core -m kiteplayer-subtitles -m kiteplayer-io \
+            -m kiteplayer-rt -m kiteplayer-view -m kiteplayer-adaptive -m kiteplayer-network \
+            -m kiteplayer-libass -m kiteplayer-audioviz -m kiteplayer -m kiteplayer-compose-video
           ./scripts/run-native-tests.sh -m kiteplayer-output -p iosSimulatorArm64 --exclude-set simulator-audio
 
       - name: Compile the iOS device targets

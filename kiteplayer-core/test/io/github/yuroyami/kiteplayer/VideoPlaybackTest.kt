@@ -139,7 +139,7 @@ class VideoPlaybackTest {
     // The schedule started wherever the start left it, and SyncLaw corrects no offset under 40 ms,
     // so a picture that started 20 ms behind the sound stayed 20 ms behind it (#995).
     @Test
-    fun `a start behind the master moves onto it once, and a resume moves onto it again`() = runTest {
+    fun `a start behind the master moves onto it once and a resume moves onto it again`() = runTest {
         val clock = TestClock()
         val renderer = RecordingRenderer()
         val video = playback(renderer, clock)

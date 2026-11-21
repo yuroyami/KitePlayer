@@ -45,14 +45,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # The toolchain cache holds the JDK, the Maven downloads and the Kotlin/Native distribution.
-      - uses: actions/cache@v4
+      # Only restored: the publish job of ci.yml saves it for every macOS job (#994).
+      - uses: actions/cache/restore@v4
         with:
           path: |
             ~/Library/Caches/JetBrains/Kotlin
             ~/.konan
-          key: kotlin-docs-macos-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
+            !~/.konan/kotlin-native-prebuilt-*
+          key: kotlin-macos-host-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
           restore-keys: |
-            kotlin-docs-macos-
             kotlin-macos-host-
 
       # `dokka` writes the pages of each published module, and `dokkaSite` merges them.

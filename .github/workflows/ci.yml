@@ -2,10 +2,23 @@
 # which downloads its own JDKs, Kotlin/Native and dependencies. The Android SDK comes from the
 # runner image (ANDROID_HOME).
 #
-#   - Each job caches the toolchain folder and `~/.konan`. `~/.konan` holds the LLVM and the
-#     per-target sysroots that the C build plugins (kitert-c, libass-native) compile with. On a
-#     fresh runner those plugins download Kotlin/Native themselves when the toolchain has not
-#     unpacked it yet, so no warm-up step is needed.
+#   - Four jobs save the toolchain cache, one per runner family, and the other jobs only restore
+#     one of them (#994). GitHub keeps 10 GB of caches per repository and evicts the oldest
+#     first, and a cache per job needed about 25 GB:
+#       - `kotlin-macos-host-`: saved by the publish job (device-test-artifacts), which compiles
+#         every platform. Every macOS job restores it, docs.yml and publish.yml too.
+#       - `kotlin-linux-native-`: saved by linux-native. linux-arm64-link and android-emulator
+#         restore it.
+#       - `kotlin-linux-jvm-android-`: saved by linux-jvm-android. web, js and audioviz-survey.yml
+#         restore it.
+#       - `kotlin-mingw-x64-`: saved by windows-native, the one Windows job.
+#     A restore needs the same path list as the save, so a change to one list goes to every
+#     step that names the same key.
+#   - `~/.konan` holds the LLVM and the per-target sysroots that the C build plugins (kitert-c,
+#     libass-native) compile with. On a fresh runner those plugins download Kotlin/Native into
+#     `~/.konan` themselves when the toolchain has not unpacked it yet, so no warm-up step is
+#     needed. The caches leave that copy out: on a warm runner the plugins use the toolchain's
+#     own copy, which the cache holds.
 #   - Every `./kotlin test` names its platforms with `-p`. Without it, a macOS runner would also try
 #     to run the Linux and Windows test binaries.
 #   - Every job says what it does NOT cover. A green tick that quietly skipped something is the
@@ -113,13 +126,13 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
-      # Only restored: the publish job saves this cache, and it compiles every platform, so the
-      # cache holds what this job needs.
+      # Only restored: the publish job of ci.yml saves this cache for every macOS job (#994).
       - uses: actions/cache/restore@v4
         with:
           path: |
             ~/Library/Caches/JetBrains/Kotlin
             ~/.konan
+            !~/.konan/kotlin-native-prebuilt-*
           key: kotlin-macos-host-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
           restore-keys: |
             kotlin-macos-host-
@@ -226,14 +239,15 @@ jobs:
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      # Only restored: the publish job of ci.yml saves this cache for every macOS job (#994).
+      - uses: actions/cache/restore@v4
         with:
           path: |
             ~/Library/Caches/JetBrains/Kotlin
             ~/.konan
-          key: kotlin-macos-jvm-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
+            !~/.konan/kotlin-native-prebuilt-*
+          key: kotlin-macos-host-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
           restore-keys: |
-            kotlin-macos-jvm-
             kotlin-macos-host-
 
       # kiteplayer-libass embeds the libass chain that KiteFFmpeg cross-builds, downloaded from the
@@ -333,17 +347,16 @@ jobs:
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
-      # Saved by the last step, not by actions/cache at the end of the job: that saves only when
-      # every step passed, so a cold run that failed left the next run cold too (#989).
+      # Only restored: the publish job of ci.yml saves this cache for every macOS job (#994).
       - uses: actions/cache/restore@v4
-        id: toolchain
         with:
           path: |
             ~/Library/Caches/JetBrains/Kotlin
             ~/.konan
-          key: kotlin-ios-sim-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
+            !~/.konan/kotlin-native-prebuilt-*
+          key: kotlin-macos-host-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
           restore-keys: |
-            kotlin-ios-sim-
+            kotlin-macos-host-
 
       # kiteplayer-output runs through scripts/run-native-tests.sh with the simulator-audio set:
       # the two CoreAudio classes that need a device in every test, and nine tests of
@@ -387,15 +400,6 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-      - name: Keep the toolchain this job filled
-        if: always() && steps.toolchain.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ~/Library/Caches/JetBrains/Kotlin
-            ~/.konan
-          key: ${{ steps.toolchain.outputs.cache-primary-key }}
-
   # ---------------------------------------------------------------------------------------------
   # tvOS and watchOS, on their simulators. `./kotlin test` runs only iOS simulator tests through
   # simctl, so these run through scripts/run-native-tests.sh.
@@ -406,14 +410,16 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      # Only restored: the publish job of ci.yml saves this cache for every macOS job (#994).
+      - uses: actions/cache/restore@v4
         with:
           path: |
             ~/Library/Caches/JetBrains/Kotlin
             ~/.konan
-          key: kotlin-tvos-watchos-sim-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
+            !~/.konan/kotlin-native-prebuilt-*
+          key: kotlin-macos-host-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
           restore-keys: |
-            kotlin-tvos-watchos-sim-
+            kotlin-macos-host-
 
       - name: The simulator runtimes on this image
         run: xcrun simctl list runtimes
@@ -463,7 +469,8 @@ jobs:
       - uses: actions/checkout@v4
       # Saved by the last step, not by actions/cache at the end of the job: that saves only when
       # every step passed. After a run of failed jobs this one started empty, and Maven Central
-      # refused its downloads with HTTP 429.
+      # refused its downloads with HTTP 429. web, js and audioviz-survey.yml restore this cache and
+      # save none (#994).
       - uses: actions/cache/restore@v4
         id: toolchain
         with:
@@ -614,14 +621,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # Saved right after the publish, not by actions/cache at the end of the job: that saves only
-      # when every step passed, so a job that kept failing later never saved one. The other macOS
-      # jobs restore it, because it holds every platform.
+      # when every step passed, so a job that kept failing later never saved one. Every other macOS
+      # job only restores it, because it holds every platform (#994).
       - uses: actions/cache/restore@v4
         id: toolchain
         with:
           path: |
             ~/Library/Caches/JetBrains/Kotlin
             ~/.konan
+            !~/.konan/kotlin-native-prebuilt-*
           key: kotlin-macos-host-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
           restore-keys: |
             kotlin-macos-host-
@@ -644,6 +652,7 @@ jobs:
           path: |
             ~/Library/Caches/JetBrains/Kotlin
             ~/.konan
+            !~/.konan/kotlin-native-prebuilt-*
           key: ${{ steps.toolchain.outputs.cache-primary-key }}
 
       - uses: actions/upload-artifact@v4
@@ -721,14 +730,15 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: actions/cache@v4
+      # Only restored: the linux-native job saves this cache for every Linux Kotlin/Native job (#994).
+      - uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cache/JetBrains/Kotlin
             ~/.konan
-          key: kotlin-android-emulator-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
+            !~/.konan/kotlin-native-prebuilt-*
+          key: kotlin-linux-native-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
           restore-keys: |
-            kotlin-android-emulator-
             kotlin-linux-native-
 
       - name: Enable hardware acceleration
@@ -991,11 +1001,16 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      # Saved by the last step, not by actions/cache at the end of the job: that saves only when
+      # every step passed, so a cold run that failed left the next run cold too. linux-arm64-link
+      # and android-emulator restore this cache and save none (#994).
+      - uses: actions/cache/restore@v4
+        id: toolchain
         with:
           path: |
             ~/.cache/JetBrains/Kotlin
             ~/.konan
+            !~/.konan/kotlin-native-prebuilt-*
           key: kotlin-linux-native-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
           restore-keys: |
             kotlin-linux-native-
@@ -1045,6 +1060,16 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+      - name: Keep the toolchain this job filled
+        if: always() && steps.toolchain.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cache/JetBrains/Kotlin
+            ~/.konan
+            !~/.konan/kotlin-native-prebuilt-*
+          key: ${{ steps.toolchain.outputs.cache-primary-key }}
+
   # ---------------------------------------------------------------------------------------------
   # Linux arm64: linked on x64, executed on an arm64 runner.
   # ---------------------------------------------------------------------------------------------
@@ -1054,14 +1079,15 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      # Only restored: the linux-native job saves this cache for every Linux Kotlin/Native job (#994).
+      - uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cache/JetBrains/Kotlin
             ~/.konan
-          key: kotlin-linux-arm64-cross-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
+            !~/.konan/kotlin-native-prebuilt-*
+          key: kotlin-linux-native-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
           restore-keys: |
-            kotlin-linux-arm64-cross-
             kotlin-linux-native-
 
       - name: Link the linuxArm64 test binaries
@@ -1220,12 +1246,13 @@ jobs:
         run: ./scripts/install-emscripten.sh "$RUNNER_TEMP/emsdk"
       - name: kiteplayer-libass C suites on wasm32
         run: ./kiteplayer-libass/native/scripts/run-c-tests.sh wasm32
-      - uses: actions/cache@v4
+      # Only restored: the linux-jvm-android job saves this cache for every Linux JVM and web job (#994).
+      - uses: actions/cache/restore@v4
         with:
           path: ~/.cache/JetBrains/Kotlin
-          key: kotlin-web-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
+          key: kotlin-linux-jvm-android-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
           restore-keys: |
-            kotlin-web-
+            kotlin-linux-jvm-android-
 
       - name: Install the ffmpeg CLI the clips are recorded against
         run: |
@@ -1301,12 +1328,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: lts/*
-      - uses: actions/cache@v4
+      # Only restored: the linux-jvm-android job saves this cache for every Linux JVM and web job (#994).
+      - uses: actions/cache/restore@v4
         with:
           path: ~/.cache/JetBrains/Kotlin
-          key: kotlin-js-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
+          key: kotlin-linux-jvm-android-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
           restore-keys: |
-            kotlin-js-
+            kotlin-linux-jvm-android-
 
       - name: JS tests, node
         run: python3 scripts/web-tests/run.py --platform js

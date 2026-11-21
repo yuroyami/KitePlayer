@@ -118,14 +118,15 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      # Only restored: the publish job of ci.yml saves this cache for every macOS job (#994).
+      - uses: actions/cache/restore@v4
         with:
           path: |
             ~/Library/Caches/JetBrains/Kotlin
             ~/.konan
-          key: kotlin-publish-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
+            !~/.konan/kotlin-native-prebuilt-*
+          key: kotlin-macos-host-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
           restore-keys: |
-            kotlin-publish-
             kotlin-macos-host-
 
       # The version emscripten-version.txt pins, the one CI links with (#778).
@@ -241,14 +242,15 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      # Only restored: the publish job of ci.yml saves this cache for every macOS job (#994).
+      - uses: actions/cache/restore@v4
         with:
           path: |
             ~/Library/Caches/JetBrains/Kotlin
             ~/.konan
-          key: kotlin-publish-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
+            !~/.konan/kotlin-native-prebuilt-*
+          key: kotlin-macos-host-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
           restore-keys: |
-            kotlin-publish-
             kotlin-macos-host-
 
       - name: Install emscripten

@@ -24,12 +24,12 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      # Only restored: the linux-jvm-android job of ci.yml saves this cache (#994).
+      - uses: actions/cache/restore@v4
         with:
           path: ~/.cache/JetBrains/Kotlin
-          key: kotlin-audioviz-survey-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
+          key: kotlin-linux-jvm-android-${{ hashFiles('kotlin', 'project.yaml', '*.module-template.yaml', '**/module.yaml', 'libs.versions.toml', 'build-plugins/**/plugin.yaml') }}
           restore-keys: |
-            kotlin-audioviz-survey-
             kotlin-linux-jvm-android-
 
       # Some suites play the test clips. Ubuntu's FFmpeg 6.1 makes every clip but one, which

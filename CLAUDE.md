@@ -62,7 +62,10 @@ Each line is something that bit someone. Delete a line when it stops being true.
   one platform at a time first, and compile every platform in one CI job only: the publish job (#975).
 - A CI job that fails with "Could not find" for an artifact that Maven Central serves may have a
   broken toolchain cache, not a network problem. GitHub evicts cache entries once a repository
-  holds more than 10 GB. Delete that job's `kotlin-<job>-` entry with `gh cache delete`.
+  holds more than 10 GB. Delete the broken `kotlin-<family>-` entry with `gh cache delete`.
+- A new CI job restores one of the four shared toolchain caches and saves none. A cache per job
+  needed about 25 GB, so GitHub evicted most of them and jobs started cold (#994). The header of
+  `ci.yml` lists which job saves each cache. A restore must name the same path list as the save.
 - `./kotlin ... | tail` reports the exit code of `tail`. A background build once reported success
   with BUILD FAILED sitting in its own log.
 - Moving or renaming the checkout breaks the prebuilt C test binaries: they carry an absolute path

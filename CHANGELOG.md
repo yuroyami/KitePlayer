@@ -251,6 +251,12 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 - While the player waits for the network to come back, `position` reports the place where the
   item opens again (#995). It reported the place of the last pass before the wait, which could
   be a little earlier.
+- Play after a pause on a live RTSP stream no longer takes the position back near zero (#996).
+  FFmpeg pairs RTSP replies with requests in order. When a keepalive reply was still on its way
+  as the PAUSE went out, the PLAY after the pause took a keepalive reply with no Range and no
+  RTP-Info, and FFmpeg dated the stream from zero again. The sound was live and correct. The
+  FFmpeg source now moves such a stream on from its last timestamp before the pause, plus the
+  time the pause took. A camera that answers PLAY without those two headers gets the same fix.
 - A signed address that expires while a stream plays in `KitePlayerWorker` is renewed as on the
   other targets (#546, #453). The worker's reader threw a 401 or 403 as a plain failure and kept
   no refusal, so the player never opened the item again for a fresh address and warned nothing.

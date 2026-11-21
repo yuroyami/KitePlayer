@@ -78,6 +78,8 @@ import io.github.yuroyami.kiteffmpeg.Frame as KiteFrame
 import kotlin.concurrent.Volatile
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToLong
+import kotlin.time.ComparableTimeMark
+import kotlin.time.TimeSource
 
 /**
  * The engine's source and decoders, over KiteFFmpeg.
@@ -196,6 +198,9 @@ public class KiteFFmpegSource internal constructor(
      * because that list is normalised through it.
      */
     private val mapper = TimestampMapper(source.startTimeMicros)
+
+    /** Moves a stream that a resume dated again from zero back onto its own timeline (#996). */
+    private val resumeShift = ResumeShift(mapper)
 
     /**
      * One canonical table for the public track list, every reader selection and every decoder, with
@@ -486,7 +491,7 @@ public class KiteFFmpegSource internal constructor(
     override fun pauseReading(): Boolean = source.pause()
 
     /** KiteFFmpeg's resume, which asks the sender to play on only while a pause is in effect. */
-    override fun resumeReading(): Boolean = source.resume()
+    override fun resumeReading(): Boolean = source.resume().also { lifted -> if (lifted) resumeShift.resumed() }
 
     override suspend fun readPacket(): PlayerPacket? {
         val reader = reader ?: error("selectStreams must be called before readPacket")
@@ -503,6 +508,8 @@ public class KiteFFmpegSource internal constructor(
             hls?.failureAtEnd()?.let { throw it }
             return null
         }
+        // Only a live source is ever paused at its sender, so only its streams can need the shift.
+        if (realTime) resumeShift.read(packet.streamIndex, packet.dtsMicros ?: packet.ptsMicros)
         recorder.copy(packet)
         absorbLayout(packet)
         // The whole new set, from this packet on (#423), with an Ogg's comments over its container's.
@@ -799,11 +806,71 @@ public class KiteFFmpegSource internal constructor(
  */
 internal class TimestampMapper(private val containerStartMicros: Long) {
 
+    /**
+     * Microseconds added to each stream's timestamps, by KiteFFmpeg stream index, so that a stream
+     * goes forward after a resume that dated it again from zero (#996). [ResumeShift] writes it on
+     * the demux lane, and only at a stream's first packet after a resume, when the engine has
+     * dropped every packet and frame read before it.
+     */
+    @Volatile
+    var resumeShifts: Map<Int, Long> = emptyMap()
+
     /** A point on the timeline. Null in, null out: an absent timestamp is not a timestamp of zero. */
     fun mapTimestamp(micros: Long?): Pts? = micros?.let { Pts(it - containerStartMicros) }
 
+    /** A point on [stream]'s timeline, with that stream's resume shift. */
+    fun mapTimestamp(micros: Long?, stream: Int): Pts? {
+        val shifts = resumeShifts
+        val shift = if (shifts.isEmpty()) 0L else shifts[stream] ?: 0L
+        return micros?.let { Pts(it - containerStartMicros + shift) }
+    }
+
     /** An interval. Rescaled by KiteFFmpeg and shifted by nothing. */
     fun mapDuration(micros: Long?): Pts? = micros?.let { Pts(it) }
+}
+
+/**
+ * Keeps a live stream's timestamps going forward across a pause of its sender (#996).
+ *
+ * FFmpeg dates the packets after an RTSP PLAY from the Range and RTP-Info of the reply. It pairs
+ * each reply with the request that waits, in order, so a keepalive reply still unread when the
+ * PAUSE goes out becomes the reply to the PAUSE. Each later request then takes the reply of the one
+ * before, and the PLAY takes a keepalive reply, which has neither header: the stream starts again
+ * from zero. A camera that answers PLAY without the two headers does the same.
+ *
+ * So after a resume, a stream whose first timestamp is not later than its last one before the
+ * pause moves on: to that last timestamp plus the time between the two reads, which is where a
+ * stream that plays on at the live edge stands. Demux lane only.
+ */
+internal class ResumeShift(
+    private val mapper: TimestampMapper,
+    private val clock: TimeSource.WithComparableMarks = TimeSource.Monotonic,
+) {
+    /** A stream's last timestamp read, with its shift, and when it was read. */
+    private class LastRead(val micros: Long, val at: ComparableTimeMark)
+
+    private val last = HashMap<Int, LastRead>()
+
+    /** The streams whose next packet is their first after a resume. */
+    private val pending = HashSet<Int>()
+
+    /** Marks every stream read so far, after a resume that lifted a pause. */
+    fun resumed() {
+        pending.addAll(last.keys)
+    }
+
+    /** Takes in a packet just read: [micros] is its decode time, or its presentation time without one. */
+    fun read(stream: Int, micros: Long?) {
+        if (micros == null) return
+        val now = clock.markNow()
+        val before = last[stream]
+        var shift = mapper.resumeShifts[stream] ?: 0L
+        if (pending.remove(stream) && before != null && micros + shift <= before.micros) {
+            shift = before.micros + (now - before.at).inWholeMicroseconds - micros
+            mapper.resumeShifts += stream to shift
+        }
+        last[stream] = LastRead(micros + shift, now)
+    }
 }
 
 /**
@@ -1062,7 +1129,7 @@ internal class KiteFFmpegPacket(
     override val newContainerTags: Map<String, String>? = null,
 ) : PlayerPacket {
     override val streamIndex: Int get() = index ?: native.streamIndex
-    override val pts: Pts? get() = mapper.mapTimestamp(native.ptsMicros)
+    override val pts: Pts? get() = mapper.mapTimestamp(native.ptsMicros, native.streamIndex)
 
     /**
      * The decode timestamp, on the same relative timeline as [pts] and in the same unit.
@@ -1070,7 +1137,7 @@ internal class KiteFFmpegPacket(
      * It used to be the packet's raw tick count wrapped in a microsecond type, which is only ever
      * right on a stream whose time base happens to be 1/1000000.
      */
-    override val dts: Pts? get() = mapper.mapTimestamp(native.dtsMicros)
+    override val dts: Pts? get() = mapper.mapTimestamp(native.dtsMicros, native.streamIndex)
 
     override val duration: Pts? get() = mapper.mapDuration(native.durationMicros)
     override val isKeyframe: Boolean get() = native.isKeyframe
@@ -1283,7 +1350,7 @@ private class KiteFFmpegVideoDecoder(
         val duration = mapper.mapDuration(frame.durationMicros)
         val info = frame.info
         val pts = continuity.timestamp(
-            real = mapper.mapTimestamp(frame.ptsMicros),
+            real = mapper.mapTimestamp(frame.ptsMicros, decoder.stream.index),
             duration = duration,
             frameRate = stream.frameRate,
             isKeyframe = info.isKeyframe,
@@ -1669,7 +1736,7 @@ private class KiteFFmpegAudioDecoder(
             }
         }
 
-        val mapped = mapper.mapTimestamp(frame.ptsMicros)
+        val mapped = mapper.mapTimestamp(frame.ptsMicros, decoder.stream.index)
         val pts = if (mapped != null) {
             anchorMicros = mapped.micros
             samplesSinceAnchor = 0

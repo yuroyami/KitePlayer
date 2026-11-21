@@ -56,8 +56,8 @@ internal class KiteFFmpegImageSubtitleDecoder(
         } catch (damaged: io.github.yuroyami.kiteffmpeg.FFmpegException) {
             null
         } ?: return true
-        val start = mapper.mapTimestamp(subtitle.startMicros)?.micros ?: packet?.pts?.micros ?: return true
-        val end = mapper.mapTimestamp(subtitle.endMicros)?.micros?.takeIf { it > start } ?: SubtitleCue.OPEN_END
+        val start = mapper.mapTimestamp(subtitle.startMicros, decoder.stream.index)?.micros ?: packet?.pts?.micros ?: return true
+        val end = mapper.mapTimestamp(subtitle.endMicros, decoder.stream.index)?.micros?.takeIf { it > start } ?: SubtitleCue.OPEN_END
         val images = subtitle.images.filter { it.width > 0 && it.height > 0 }
         // A stream that states no canvas means the video's own picture; with no video either, the
         // images' own extent is the only frame of reference left.

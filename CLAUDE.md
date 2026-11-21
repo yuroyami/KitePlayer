@@ -205,9 +205,16 @@ Each line is something that bit someone. Delete a line when it stops being true.
   each stream's latest report at PLAY, as a camera does. Without that, RTSP over UDP played 300 ms
   out of sync, which reads like an engine bug (#395).
 - FFmpeg starts an RTSP stream's timestamps again at every PLAY, the one after a pause included,
-  from the Range and RTP-Info the reply carries. A test server that answers PLAY with neither sends
-  the position back near zero on resume, which reads like an engine bug. `RtspCamera` dates each
-  PLAY as a camera does (#441).
+  from the Range and RTP-Info the reply carries. `RtspCamera` dates each PLAY as a camera does
+  (#441).
+- FFmpeg pairs RTSP replies with requests in order, not by CSeq. A keepalive reply still unread
+  when the PAUSE goes out moves every later pairing by one, and the PLAY after the pause takes a
+  keepalive reply with no Range, so the stream starts again from zero. `ResumeShift` in
+  `KiteFFmpegSource` moves such a stream back onto its own timeline, and
+  `RtspCamera(holdsKeepaliveReplies = true)` makes the crossing happen every time (#996).
+- A paused player's keepalives can be half the session timeout plus about a second apart, because
+  the engine asks every second and FFmpeg sends only once half the timeout has passed. A test
+  camera with a timeout of 2 seconds ends the session now and then. `RtspPauseTest` uses 4 (#997).
 - A test of a paused live player needs a pause that outlasts the read-ahead. FFmpeg sends the RTSP
   keepalive from inside a read, and an audio-only stream takes far longer than a short pause to
   fill the default 30 second budget, so the old reads kept the session alive and the test passed

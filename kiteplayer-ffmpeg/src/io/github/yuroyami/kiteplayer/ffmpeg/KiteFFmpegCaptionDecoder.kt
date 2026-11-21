@@ -81,12 +81,12 @@ internal class KiteFFmpegCaptionDecoder(
         } catch (damaged: io.github.yuroyami.kiteffmpeg.FFmpegException) {
             null
         } ?: return true
-        val start = mapper.mapTimestamp(subtitle.startMicros)?.micros ?: packet?.pts?.micros ?: return true
+        val start = mapper.mapTimestamp(subtitle.startMicros, decoder.stream.index)?.micros ?: packet?.pts?.micros ?: return true
         if (realTime) {
             pending.addLast(track.captionScreen(subtitle.texts, start))
             return true
         }
-        val end = mapper.mapTimestamp(subtitle.endMicros)?.micros?.takeIf { it > start } ?: SubtitleCue.OPEN_END
+        val end = mapper.mapTimestamp(subtitle.endMicros, decoder.stream.index)?.micros?.takeIf { it > start } ?: SubtitleCue.OPEN_END
         subtitle.texts.forEach { event -> track.parseEvent(event, start, end)?.let(pending::addLast) }
         return true
     }

@@ -27,10 +27,15 @@ import kotlin.concurrent.thread
  *
  * With [keepsPausedSessions] false a keepalive does not keep a paused session, as on a camera that
  * drops one anyway, so a pause past the timeout always ends it.
+ *
+ * With [holdsKeepaliveReplies], the reply to a keepalive during play waits for the next request,
+ * as from a camera far away, and the two replies then go out in order. That next request meets a
+ * reply that is not its own first, which a client must tell apart by CSeq (#996).
  */
 internal class RtspCamera(
     private val timeoutSeconds: Int,
     private val keepsPausedSessions: Boolean = true,
+    private val holdsKeepaliveReplies: Boolean = false,
 ) : AutoCloseable {
     private val server = ServerSocket(0, 4, InetAddress.getLoopbackAddress()).apply { soTimeout = 100 }
     private val stopping = AtomicBoolean(false)
@@ -52,6 +57,9 @@ internal class RtspCamera(
 
     /** Sessions that ended because they heard nothing for longer than the timeout. */
     val expired = AtomicInteger(0)
+
+    /** Requests whose reply went out behind a held keepalive reply. */
+    val crossedReplies = AtomicInteger(0)
 
     /** Connections served, which is one more than the first each time a player reopens. */
     val connections: Int get() = sessions.get()
@@ -96,6 +104,9 @@ internal class RtspCamera(
         private var nextPacketAt = 0L
         private var sequence = 0
 
+        /** The reply to a keepalive during play, held until the next request. */
+        private var heldReply: ByteArray? = null
+
         fun run() {
             socket.soTimeout = 5
             val buffer = ByteArray(4096)
@@ -132,6 +143,11 @@ internal class RtspCamera(
 
         private fun answer(request: Request): Boolean {
             note("$id ${request.line}")
+            heldReply?.let { held ->
+                heldReply = null
+                crossedReplies.incrementAndGet()
+                if (!send(held)) return false
+            }
             expireWhenSilent()
             val cseq = request.headers["cseq"] ?: "0"
             val named = request.headers["session"]?.substringBefore(';')?.trim()
@@ -172,7 +188,7 @@ internal class RtspCamera(
                 }
                 "GET_PARAMETER" -> {
                     keepalives.incrementAndGet()
-                    reply(cseq, "200 OK", listOf(session))
+                    reply(cseq, "200 OK", listOf(session), held = holdsKeepaliveReplies && playing)
                 }
                 "TEARDOWN" -> {
                     playing = false
@@ -182,13 +198,23 @@ internal class RtspCamera(
             }
         }
 
-        private fun reply(cseq: String, status: String, headers: List<String> = emptyList(), body: String = ""): Boolean {
+        private fun reply(
+            cseq: String,
+            status: String,
+            headers: List<String> = emptyList(),
+            body: String = "",
+            held: Boolean = false,
+        ): Boolean {
             val text = buildString {
                 append("RTSP/1.0 ").append(status).append("\r\n")
                 append("CSeq: ").append(cseq).append("\r\n")
                 headers.forEach { append(it).append("\r\n") }
                 if (body.isNotEmpty()) append("Content-Length: ").append(body.encodeToByteArray().size).append("\r\n")
                 append("\r\n").append(body)
+            }
+            if (held) {
+                heldReply = text.encodeToByteArray()
+                return true
             }
             return send(text.encodeToByteArray())
         }

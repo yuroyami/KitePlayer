@@ -23,11 +23,15 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
 /**
- * The whole player on an RTSP camera that ends a session it does not hear from within two seconds
- * (#441). A pause of five seconds outlasts that and the player's two seconds of read-ahead, so only
+ * The whole player on an RTSP camera that ends a session it does not hear from within four seconds
+ * (#441). A pause of seven seconds outlasts that and the player's two seconds of read-ahead, so only
  * the keepalives a paused player sends keep the session, and play then goes on at the live edge,
- * over the same connection. A camera that
- * drops the session anyway is opened again on play rather than failing.
+ * over the same connection. A camera that drops the session anyway is opened again on play rather
+ * than failing.
+ *
+ * A paused player asks for a keepalive about every second, and FFmpeg sends one when half the
+ * session timeout has passed. So two keepalives can be up to half the timeout plus a second apart,
+ * and a timeout of two seconds left no margin (#997).
  *
  * [RtspCamera] stamps its media with the wall time, as a camera does, so the position jumps by
  * about the length of the pause when play goes on at the live edge, and would not move at all if
@@ -37,7 +41,7 @@ class RtspPauseTest {
 
     @Test
     fun aPausePastTheSessionTimeoutIsKeptAliveAndPlaysOnAtTheLiveEdge() = runBlocking {
-        RtspCamera(timeoutSeconds = 2).use { camera ->
+        RtspCamera(timeoutSeconds = SESSION_TIMEOUT_SECONDS).use { camera ->
             val player = player()
             try {
                 withTimeout(30.seconds) { player.open(MediaItem(camera.url, openOptions = mapOf("rtsp_transport" to "tcp"))) }
@@ -67,6 +71,44 @@ class RtspPauseTest {
                 assertEquals(1, camera.pauses.get() - pausesBefore, "the camera was not told of the pause once: $log")
                 assertTrue(pausedKeepalives >= 2, "the paused session was kept alive $pausedKeepalives times: $log")
                 assertEquals(1, camera.plays.get() - playsBefore, "the camera was not asked to play on once: $log")
+                assertTrue(moved >= PAUSE, "play went on $moved from where the pause left it: $log")
+                assertEquals(PlaybackStatus.Playing, player.state.value.status, log)
+            } finally {
+                player.closeAndAwait()
+            }
+        }
+    }
+
+    /**
+     * A PAUSE that goes out while a keepalive reply is still on its way takes that reply, and FFmpeg
+     * then gives each later request the reply of the one before. The PLAY after the pause takes a
+     * keepalive reply, which has no Range and no RTP-Info, so FFmpeg dates the stream from zero
+     * again. The source moves it back onto its own timeline (#996).
+     */
+    @Test
+    fun aPauseThatCrossesAKeepaliveReplyPlaysOnAtTheLiveEdge() = runBlocking {
+        RtspCamera(timeoutSeconds = SESSION_TIMEOUT_SECONDS, holdsKeepaliveReplies = true).use { camera ->
+            val player = player()
+            try {
+                withTimeout(30.seconds) { player.open(MediaItem(camera.url, openOptions = mapOf("rtsp_transport" to "tcp"))) }
+                awaitPauses(camera, 1)
+                player.play()
+                awaitPlaying(player, camera.transcript)
+                // The camera holds the reply to this keepalive until the PAUSE arrives.
+                val keepalivesBefore = camera.keepalives.get()
+                withTimeout(10.seconds) { while (camera.keepalives.get() == keepalivesBefore) delay(5) }
+                player.pause()
+                awaitPauses(camera, 2)
+                val pausedAt = player.position()
+                delay(PAUSE)
+                player.play()
+                awaitPlaying(player, camera.transcript)
+                val statuses = awaitSteadyPlaying(player)
+                val moved = player.position() - pausedAt
+                val log = "statuses $statuses, error ${player.state.value.error}, moved $moved\n${camera.transcript}"
+                assertTrue(camera.crossedReplies.get() >= 1, "the PAUSE did not meet a held keepalive reply: $log")
+                assertEquals(0, camera.expired.get(), "the camera ended the session: $log")
+                assertEquals(1, camera.connections, "the stream was opened again: $log")
                 assertTrue(moved >= PAUSE, "play went on $moved from where the pause left it: $log")
                 assertEquals(PlaybackStatus.Playing, player.state.value.status, log)
             } finally {
@@ -165,7 +207,16 @@ class RtspPauseTest {
         /** How long a player may take to settle on Playing after play. */
         val STEADY_DEADLINE: Duration = 10.seconds
 
-        /** Longer than the camera's session timeout, so only a keepalive keeps the session. */
-        val PAUSE: Duration = 5.seconds
+        /**
+         * The camera's session timeout. Two keepalives of a paused player can be up to half of it
+         * plus a second apart, so four seconds leaves a second of margin (#997).
+         */
+        const val SESSION_TIMEOUT_SECONDS = 4
+
+        /**
+         * Longer than the camera's session timeout, so only a keepalive keeps the session, and long
+         * enough for two keepalives, which come at most about three seconds apart.
+         */
+        val PAUSE: Duration = 7.seconds
     }
 }

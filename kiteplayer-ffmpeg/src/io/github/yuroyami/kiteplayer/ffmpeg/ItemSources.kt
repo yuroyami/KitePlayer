@@ -333,6 +333,22 @@ internal fun urlFallbackOptions(uri: String, options: Map<String, String>, forma
 internal val URL_FALLBACK_READ_TIMEOUT: Duration = 10.seconds
 
 /**
+ * How long a read of [uri] waits with [options] before FFmpeg gives up on a quiet sender, as
+ * [urlFallbackOptions] sets it, or null for a scheme with no such timeout. A stalled read reports
+ * at least this much silence (#863), because FFmpeg reads ahead and the packets it had buffered
+ * keep arriving after the timeout fired.
+ */
+internal fun fallbackReadTimeout(uri: String, options: Map<String, String>): Duration? {
+    val key = when (fallbackScheme(uri)) {
+        "http", "tcp", "rtmp" -> "rw_timeout"
+        "udp", "rtsp" -> "timeout"
+        else -> return null
+    }
+    val micros = options[key]?.toLongOrNull() ?: return URL_FALLBACK_READ_TIMEOUT
+    return if (micros > 0) with(Duration) { micros.microseconds } else null
+}
+
+/**
  * The parent of every read, seek and nested open of one source. A supervisor, so one reader that
  * throws, as a segment's open over a failing network does, fails that call alone and the next
  * segment still opens (#718). With kotlinx.coroutines 1.11 a plain `Job` behaves the same, since a

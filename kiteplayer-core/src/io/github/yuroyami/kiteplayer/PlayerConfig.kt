@@ -280,7 +280,10 @@ public data class BufferPolicy @Throws(IllegalArgumentException::class) construc
      * The count runs only while the engine waits for the source: a packet read, an open that
      * reads through a [MediaIo], or the read of an external subtitle file. A packet from the source
      * or bytes from the reader start it again, so a slow source that still delivers never stalls.
-     * An open through the backend's own protocols is bounded by their timeouts instead.
+     * An item that the backend reads with its own protocols, such as rtsp, udp, rtmp, tcp, and
+     * http without `kiteplayer-network`, is bounded by those protocols' timeouts instead: 10
+     * seconds a read in the FFmpeg backend, or what `MediaItem.openOptions` sets. A read that runs
+     * out of it ends the session with [PlaybackError.SourceStalled] too.
      * An external subtitle file that stalls is skipped with a warning instead. Ending a read needs
      * a source that can interrupt; the FFmpeg backend can.
      *

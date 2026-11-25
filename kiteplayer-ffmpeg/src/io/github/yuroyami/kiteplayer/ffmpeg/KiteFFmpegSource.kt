@@ -115,6 +115,8 @@ internal fun OpenedItem.toSource(): KiteFFmpegSource =
  * item without the effect it asked for.
  */
 internal fun KiteFFmpegSource.attachItemFilters(media: MediaItem) {
+    itemUri = media.uri
+    readTimeout = fallbackReadTimeout(media.uri, media.openOptions)
     videoFilterDescription = media.videoFilter
     val audioChain = media.audioFilter ?: return
     if (!io.github.yuroyami.kiteffmpeg.FFmpeg.hasFilter("abuffer")) {
@@ -168,6 +170,18 @@ public class KiteFFmpegSource internal constructor(
     }
 
     private var reader: PacketReader? = null
+
+    /** The item's address, which a stalled read names (#863). */
+    internal var itemUri: String = ""
+
+    /**
+     * When the last packet arrived. FFmpeg reports a timed-out read again at once on the next read,
+     * so a stall is measured from here, not from the read that reported it (#863).
+     */
+    private var lastPacketAt = TimeSource.Monotonic.markNow()
+
+    /** The read timeout the item's protocol was opened with, or null for none (#863). */
+    internal var readTimeout: kotlin.time.Duration? = null
 
     /**
      * Where this source's decoders report a degradation they had to accept and carry on through.
@@ -500,9 +514,22 @@ public class KiteFFmpegSource internal constructor(
         growing?.waitAtEnd = true
         val read = try {
             reader.read()
+        } catch (failure: FFmpegException) {
+            // A protocol's own read timeout fired, so the sender went quiet. That is a stall, the
+            // same error a MediaIo reader's stall timeout gives, not a generic demuxer failure (#863).
+            if (failure.error is FFmpegError.TimedOut) {
+                throw io.github.yuroyami.kiteplayer.PlaybackException(
+                    io.github.yuroyami.kiteplayer.PlaybackError.SourceStalled(
+                        itemUri,
+                        maxOf(lastPacketAt.elapsedNow(), readTimeout ?: kotlin.time.Duration.ZERO),
+                    ),
+                )
+            }
+            throw failure
         } finally {
             growing?.waitAtEnd = false
         }
+        if (read != null) lastPacketAt = TimeSource.Monotonic.markNow()
         val packet = read ?: run {
             // FFmpeg skips what it cannot read, so a stream whose server stopped answering ends here too.
             hls?.failureAtEnd()?.let { throw it }

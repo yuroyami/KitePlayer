@@ -18,6 +18,7 @@ import io.github.yuroyami.kiteplayer.TrackKind
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegMediaBackend
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame
 import io.github.yuroyami.kiteplayer.ffmpeg.corePixelBufferOrNull
+import io.github.yuroyami.kiteplayer.ffmpeg.UploadPlanePool
 import io.github.yuroyami.kiteplayer.ffmpeg.uploadPlanesOrNull
 import io.github.yuroyami.kiteplayer.output.AppKitSurface
 import io.github.yuroyami.kiteplayer.output.AppKitWindow
@@ -146,11 +147,12 @@ fun main(args: Array<String>) {
         )
         // The resolver is the consumer-side mapping of the backend's two frame truths onto the
         // renderer's seam: a VideoToolbox CVPixelBuffer with no copy, or native-format planes with
-        // one memcpy each.
+        // one memcpy each. The plane arrays come from a pool, and the renderer gives them back.
+        val pool = UploadPlanePool()
         val resolver = MetalPictureResolver { frame ->
             val decoded = frame as KiteFFmpegVideoFrame
             decoded.corePixelBufferOrNull()?.let { MetalPicture.CorePixelBuffer(it) }
-                ?: decoded.uploadPlanesOrNull()?.let { planes ->
+                ?: decoded.uploadPlanesOrNull(pool)?.let { planes ->
                     MetalPicture.SoftwarePlanes(
                         width = planes.width,
                         height = planes.height,
@@ -158,6 +160,7 @@ fun main(args: Array<String>) {
                         planes = planes.planes.map {
                             MetalPicture.SoftwarePlanes.Plane(it.bytes, it.bytesPerRow, it.rows)
                         },
+                        onRelease = { pool.recycle(planes) },
                     )
                 }
         }

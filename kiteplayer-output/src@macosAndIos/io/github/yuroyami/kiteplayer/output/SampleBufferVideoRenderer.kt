@@ -56,6 +56,22 @@ import platform.CoreMedia.CMTimeMake
 import platform.CoreMedia.CMVideoFormatDescriptionCreateForImageBuffer
 import platform.CoreMedia.CMVideoFormatDescriptionRefVar
 import platform.CoreMedia.kCMSampleAttachmentKey_DisplayImmediately
+import platform.CoreVideo.CVBufferRemoveAttachment
+import platform.CoreVideo.CVPixelBufferPoolCreate
+import platform.CoreVideo.CVPixelBufferPoolCreatePixelBuffer
+import platform.CoreVideo.CVPixelBufferPoolRef
+import platform.CoreVideo.CVPixelBufferPoolRefVar
+import platform.CoreVideo.CVPixelBufferPoolRelease
+import platform.CoreVideo.kCVImageBufferColorPrimariesKey
+import platform.CoreVideo.kCVImageBufferGammaLevelKey
+import platform.CoreVideo.kCVImageBufferTransferFunctionKey
+import platform.CoreVideo.kCVImageBufferYCbCrMatrixKey
+import platform.CoreVideo.kCVPixelBufferHeightKey
+import platform.CoreVideo.kCVPixelBufferPixelFormatTypeKey
+import platform.CoreVideo.kCVPixelBufferWidthKey
+import platform.CoreFoundation.CFNumberCreate
+import platform.CoreFoundation.kCFNumberSInt32Type
+import kotlinx.cinterop.IntVar
 import platform.CoreVideo.CVPixelBufferCreate
 import platform.CoreVideo.CVPixelBufferGetBaseAddress
 import platform.CoreVideo.CVPixelBufferGetBaseAddressOfPlane
@@ -298,7 +314,12 @@ public class SampleBufferVideoRenderer internal constructor(
             burner = null
             sink.flushAndRemoveImage()
         }
+        // A buffer still in the layer keeps its own reference, which outlives the pool's.
+        bufferPool.close()
     }
+
+    /** The buffers of software frames, reused rather than made for every frame (#842). */
+    private val bufferPool = SoftwareBufferPool()
 
     /**
      * Builds the sample for [picture], with the text burned in while there is text, and hands it
@@ -411,7 +432,12 @@ public class SampleBufferVideoRenderer internal constructor(
     private fun pixelBufferFor(frame: VideoFrame): CVPixelBufferRef? =
         when (val picture = resolve.resolve(frame)) {
             is MetalPicture.CorePixelBuffer -> CVPixelBufferRetain(picture.buffer.reinterpret())
-            is MetalPicture.SoftwarePlanes -> copyIntoPixelBuffer(picture, frame.colorSpace.fullRange, frame.colorSpace)
+            is MetalPicture.SoftwarePlanes -> try {
+                copyIntoPixelBuffer(picture, frame.colorSpace.fullRange, frame.colorSpace, bufferPool)
+            } finally {
+                // The planes are copied, so the resolver may have its arrays back (#840).
+                picture.release()
+            }
             null -> null
         }
 
@@ -564,6 +590,8 @@ internal fun copyIntoPixelBuffer(
         primaries = ColorPrimaries.Unspecified,
         transfer = ColorTransfer.Unspecified,
     ),
+    /** Where the buffer comes from. Null makes a new one, as a test does. */
+    pool: SoftwareBufferPool? = null,
 ): CVPixelBufferRef? {
     val type = when (picture.format) {
         PlayerPixelFormat.Nv12, PlayerPixelFormat.Yuv420p ->
@@ -573,30 +601,22 @@ internal fun copyIntoPixelBuffer(
         else -> return null
     }
     return memScoped {
-        val out = alloc<CVPixelBufferRefVar>()
-        // An IOSurface is what makes the buffer presentable by a display layer at all, and Metal
-        // compatibility is what lets the subtitle pass read it as a texture. Built in CoreFoundation
-        // rather than Foundation so the keys stay the CFStrings the API declares.
-        val surfaceProperties = CFDictionaryCreateMutable(
-            null, 0, kCFTypeDictionaryKeyCallBacks.ptr, kCFTypeDictionaryValueCallBacks.ptr,
-        )
-        val attributes = CFDictionaryCreateMutable(
-            null, 2, kCFTypeDictionaryKeyCallBacks.ptr, kCFTypeDictionaryValueCallBacks.ptr,
-        )
-        CFDictionarySetValue(attributes, kCVPixelBufferIOSurfacePropertiesKey, surfaceProperties)
-        CFDictionarySetValue(attributes, kCVPixelBufferMetalCompatibilityKey, kCFBooleanTrue)
-        val created = CVPixelBufferCreate(
-            allocator = null,
-            width = picture.width.toULong(),
-            height = picture.height.toULong(),
-            pixelFormatType = type,
-            pixelBufferAttributes = attributes,
-            pixelBufferOut = out.ptr,
-        )
-        CFRelease(attributes)
-        CFRelease(surfaceProperties)
-        val buffer = out.value
-        if (created != kCVReturnSuccess || buffer == null) return@memScoped null
+        val buffer = if (pool != null) {
+            pool.take(type, picture.width, picture.height)?.also { clearColorTags(it) }
+        } else {
+            val out = alloc<CVPixelBufferRefVar>()
+            val attributes = pixelBufferAttributes(type = null, width = 0, height = 0)
+            val created = CVPixelBufferCreate(
+                allocator = null,
+                width = picture.width.toULong(),
+                height = picture.height.toULong(),
+                pixelFormatType = type,
+                pixelBufferAttributes = attributes,
+                pixelBufferOut = out.ptr,
+            )
+            CFRelease(attributes)
+            out.value.takeIf { created == kCVReturnSuccess }
+        } ?: return@memScoped null
         CVPixelBufferLockBaseAddress(buffer, 0uL)
         val filled = runCatching {
             when (picture.format) {
@@ -653,7 +673,12 @@ private fun copyRows(plane: MetalPicture.SoftwarePlanes.Plane, into: COpaquePoin
     }
 }
 
-/** Two chroma planes in, one interleaved plane out, which is the layout Core Video wants. */
+/**
+ * Two chroma planes in, one interleaved plane out, which is the layout Core Video wants.
+ *
+ * Each row is interleaved in a Kotlin array and then copied out whole (#842). A store through a
+ * native pointer costs far more per byte than a store into an array.
+ */
 private fun interleaveChroma(
     u: MetalPicture.SoftwarePlanes.Plane,
     v: MetalPicture.SoftwarePlanes.Plane,
@@ -665,13 +690,103 @@ private fun interleaveChroma(
     // Bounded by the destination as copyRows is (#844).
     check(minOf(u.rows, v.rows) >= destinationRows) { "chroma planes of ${u.rows} and ${v.rows} rows cannot fill $destinationRows" }
     val samples = minOf(u.bytesPerRow, v.bytesPerRow, destinationBytesPerRow / 2)
-    for (row in 0 until destinationRows) {
-        val destinationRow = destination + row.toLong() * destinationBytesPerRow
-        val uRow = row * u.bytesPerRow
-        val vRow = row * v.bytesPerRow
-        for (sample in 0 until samples) {
-            destinationRow!![sample * 2] = u.bytes[uRow + sample]
-            destinationRow[sample * 2 + 1] = v.bytes[vRow + sample]
+    if (samples <= 0) return
+    val row = ByteArray(samples * 2)
+    row.usePinned { pinned ->
+        for (index in 0 until destinationRows) {
+            val uRow = index * u.bytesPerRow
+            val vRow = index * v.bytesPerRow
+            for (sample in 0 until samples) {
+                row[sample * 2] = u.bytes[uRow + sample]
+                row[sample * 2 + 1] = v.bytes[vRow + sample]
+            }
+            memcpy(destination + index.toLong() * destinationBytesPerRow, pinned.addressOf(0), row.size.toULong())
         }
+    }
+}
+
+/**
+ * The attributes of a pixel buffer for software frames. An IOSurface is what makes the buffer
+ * presentable by a display layer at all, and Metal compatibility is what lets the subtitle pass
+ * read it as a texture. A pool also needs the [type] and the size, which a single buffer takes as
+ * arguments. The caller releases the dictionary.
+ */
+private fun pixelBufferAttributes(type: UInt?, width: Int, height: Int): CFMutableDictionaryRef? = memScoped {
+    val surfaceProperties = CFDictionaryCreateMutable(
+        null, 0, kCFTypeDictionaryKeyCallBacks.ptr, kCFTypeDictionaryValueCallBacks.ptr,
+    )
+    val attributes = CFDictionaryCreateMutable(
+        null, 5, kCFTypeDictionaryKeyCallBacks.ptr, kCFTypeDictionaryValueCallBacks.ptr,
+    )
+    CFDictionarySetValue(attributes, kCVPixelBufferIOSurfacePropertiesKey, surfaceProperties)
+    CFDictionarySetValue(attributes, kCVPixelBufferMetalCompatibilityKey, kCFBooleanTrue)
+    CFRelease(surfaceProperties)
+    if (type != null) {
+        for ((key, number) in listOf(
+            kCVPixelBufferPixelFormatTypeKey to type.toInt(),
+            kCVPixelBufferWidthKey to width,
+            kCVPixelBufferHeightKey to height,
+        )) {
+            val value = alloc<IntVar>().apply { value = number }
+            val made = CFNumberCreate(null, kCFNumberSInt32Type, value.ptr)
+            CFDictionarySetValue(attributes, key, made)
+            CFRelease(made)
+        }
+    }
+    attributes
+}
+
+/** Takes off the colour tags a reused buffer kept from its last picture, which may have had others. */
+private fun clearColorTags(buffer: CVPixelBufferRef) {
+    CVBufferRemoveAttachment(buffer, kCVImageBufferColorPrimariesKey)
+    CVBufferRemoveAttachment(buffer, kCVImageBufferTransferFunctionKey)
+    CVBufferRemoveAttachment(buffer, kCVImageBufferYCbCrMatrixKey)
+    CVBufferRemoveAttachment(buffer, kCVImageBufferGammaLevelKey)
+}
+
+/**
+ * One `CVPixelBufferPool` for software frames of one format and size (#842). Each software frame
+ * then takes a buffer the layer has given back, instead of a new IOSurface. A frame of another
+ * format or size replaces the pool. Safe to use from any thread.
+ */
+internal class SoftwareBufferPool {
+    private val lock = SynchronizedObject()
+    private var pool: CVPixelBufferPoolRef? = null
+    private var key: Triple<UInt, Int, Int>? = null
+
+    /** How many pools this one has made, for a test. */
+    internal var poolsMade: Int = 0
+        private set
+
+    /** A buffer of [type] and size from the pool, or null when Core Video refuses one. The caller releases it. */
+    fun take(type: UInt, width: Int, height: Int): CVPixelBufferRef? = synchronized(lock) {
+        val wanted = Triple(type, width, height)
+        if (key != wanted) {
+            releasePool()
+            pool = makePool(type, width, height)
+            key = wanted
+            poolsMade++
+        }
+        val current = pool ?: return@synchronized null
+        memScoped {
+            val out = alloc<CVPixelBufferRefVar>()
+            if (CVPixelBufferPoolCreatePixelBuffer(null, current, out.ptr) != kCVReturnSuccess) null else out.value
+        }
+    }
+
+    fun close(): Unit = synchronized(lock) { releasePool() }
+
+    private fun releasePool() {
+        pool?.let { CVPixelBufferPoolRelease(it) }
+        pool = null
+        key = null
+    }
+
+    private fun makePool(type: UInt, width: Int, height: Int): CVPixelBufferPoolRef? = memScoped {
+        val attributes = pixelBufferAttributes(type, width, height)
+        val out = alloc<CVPixelBufferPoolRefVar>()
+        val status = CVPixelBufferPoolCreate(null, null, attributes, out.ptr)
+        CFRelease(attributes)
+        if (status != kCVReturnSuccess) null else out.value
     }
 }

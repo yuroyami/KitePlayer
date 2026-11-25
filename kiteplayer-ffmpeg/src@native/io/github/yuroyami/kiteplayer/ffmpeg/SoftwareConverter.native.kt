@@ -50,7 +50,13 @@ public object SoftwareConverter {
      * @throws IllegalArgumentException when the pixel format is not one this converter handles.
      * @throws IllegalStateException when the frame lives in hardware memory.
      */
-    public fun toRgba(frame: KiteFFmpegVideoFrame): ByteArray {
+    public fun toRgba(frame: KiteFFmpegVideoFrame): ByteArray = toRgba(frame, reuse = null)
+
+    /**
+     * [toRgba] into [reuse] when it is exactly `width * height * 4` bytes, and into a new array
+     * otherwise (#840). The bytes are overwritten in place, so the caller must be done with them.
+     */
+    public fun toRgba(frame: KiteFFmpegVideoFrame, reuse: ByteArray?): ByteArray {
         val width = frame.size.width
         val height = frame.size.height
         require(width > 0 && height > 0) { "frame has no dimensions: ${width}x$height" }
@@ -65,7 +71,7 @@ public object SoftwareConverter {
             frame.readableFrame().info.pixelFormat.toPlayerFormat()
         }
 
-        val out = ByteArray(width * height * 4)
+        val out = reuse?.takeIf { it.size == width * height * 4 } ?: ByteArray(width * height * 4)
         // A 10-bit source is tone mapped inside the conversion, before any cut to 8 bits (#731).
         val toneMap = HdrToneMap.forColorSpaceOrNull(frame.colorSpace, frame.toneMapPeakNits)
         var mappedDeep = false

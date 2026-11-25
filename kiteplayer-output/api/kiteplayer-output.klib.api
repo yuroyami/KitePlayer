@@ -159,6 +159,7 @@ sealed class io.github.yuroyami.kiteplayer.output/MetalPicture { // io.github.yu
 
     final class SoftwarePlanes : io.github.yuroyami.kiteplayer.output/MetalPicture { // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes|null[0]
         constructor <init>(kotlin/Int, kotlin/Int, io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat, kotlin.collections/List<io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.Plane>) // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.<init>|<init>(kotlin.Int;kotlin.Int;io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat;kotlin.collections.List<io.github.yuroyami.kiteplayer.output.MetalPicture.SoftwarePlanes.Plane>){}[0]
+        constructor <init>(kotlin/Int, kotlin/Int, io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat, kotlin.collections/List<io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.Plane>, kotlin/Function0<kotlin/Unit>) // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.<init>|<init>(kotlin.Int;kotlin.Int;io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat;kotlin.collections.List<io.github.yuroyami.kiteplayer.output.MetalPicture.SoftwarePlanes.Plane>;kotlin.Function0<kotlin.Unit>){}[0]
 
         final val format // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.format|{}format[0]
             final fun <get-format>(): io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.format.<get-format>|<get-format>(){}[0]

@@ -367,4 +367,51 @@ class SampleBufferVideoRendererTest {
         }
     }
 
+
+    @Test
+    fun aPoolMakesOneCoreVideoPoolPerFormatAndSize() {
+        val pool = SoftwareBufferPool()
+        try {
+            repeat(3) {
+                val buffer = assertNotNull(copyIntoPixelBuffer(planarPicture(), fullRange = true, pool = pool))
+                assertEquals(kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, CVPixelBufferGetPixelFormatType(buffer))
+                assertEquals(4uL, CVPixelBufferGetWidth(buffer))
+                CVPixelBufferRelease(buffer)
+            }
+            assertEquals(1, pool.poolsMade, "one size and format share one pool")
+            val bigger = assertNotNull(copyIntoPixelBuffer(planarPicture(8, 8), fullRange = true, pool = pool))
+            assertEquals(8uL, CVPixelBufferGetWidth(bigger))
+            CVPixelBufferRelease(bigger)
+            assertEquals(2, pool.poolsMade, "a new size takes a new pool")
+        } finally {
+            pool.close()
+        }
+    }
+
+    @Test
+    fun aPooledBufferHoldsTheInterleavedChroma() {
+        val pool = SoftwareBufferPool()
+        try {
+            // Twice, so the second picture lands in a buffer that held the first.
+            repeat(2) {
+                val buffer = assertNotNull(copyIntoPixelBuffer(planarPicture(), fullRange = true, pool = pool))
+                CVPixelBufferLockBaseAddress(buffer, 0uL)
+                try {
+                    val chroma = CVPixelBufferGetBaseAddressOfPlane(buffer, 1uL)!!.reinterpret<ByteVar>()
+                    val stride = CVPixelBufferGetBytesPerRowOfPlane(buffer, 1uL).toInt()
+                    for (y in 0 until 2) {
+                        for (x in 0 until 2) {
+                            assertEquals((100 + x + y * 10).toByte(), (chroma + (y * stride + x * 2).toLong())!![0], "Cb at $x,$y")
+                            assertEquals((200 + x + y * 10).toByte(), (chroma + (y * stride + x * 2 + 1).toLong())!![0], "Cr at $x,$y")
+                        }
+                    }
+                } finally {
+                    CVPixelBufferUnlockBaseAddress(buffer, 0uL)
+                }
+                CVPixelBufferRelease(buffer)
+            }
+        } finally {
+            pool.close()
+        }
+    }
 }

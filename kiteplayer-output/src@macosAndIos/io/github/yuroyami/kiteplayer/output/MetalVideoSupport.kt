@@ -62,9 +62,31 @@ public sealed class MetalPicture {
         public val format: PlayerPixelFormat,
         public val planes: List<Plane>,
     ) : MetalPicture() {
+        private var onRelease: (() -> Unit)? = null
+        private val released = kotlinx.atomicfu.atomic(false)
+
+        /**
+         * The same planes, and [onRelease] runs once when the renderer no longer reads their
+         * arrays (#840). A resolver that takes the arrays from a pool gives them back there.
+         */
+        public constructor(
+            width: Int,
+            height: Int,
+            format: PlayerPixelFormat,
+            planes: List<Plane>,
+            onRelease: () -> Unit,
+        ) : this(width, height, format, planes) {
+            this.onRelease = onRelease
+        }
+
         init {
             require(width > 0 && height > 0) { "SoftwarePlanes needs positive dimensions, got ${width}x$height" }
             require(planes.isNotEmpty()) { "SoftwarePlanes needs at least one plane" }
+        }
+
+        /** Says that no renderer reads the arrays any more. Only the first call counts. */
+        internal fun release() {
+            if (released.compareAndSet(expect = false, update = true)) onRelease?.invoke()
         }
 
         public class Plane(

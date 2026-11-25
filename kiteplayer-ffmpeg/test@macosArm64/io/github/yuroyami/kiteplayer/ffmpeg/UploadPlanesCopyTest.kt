@@ -91,6 +91,54 @@ class UploadPlanesCopyTest {
         }
     }
 
+    @Test
+    fun aRecycledPoolHandsTheSameArraysBack() = runBlocking {
+        val (source, frame) = firstFrame("sync1080p30.mp4")
+        try {
+            val pool = UploadPlanePool()
+            val first = assertNotNull(frame.uploadPlanesOrNull(pool))
+            val fresh = assertNotNull(frame.uploadPlanesOrNull())
+            pool.recycle(first)
+            assertEquals(first.planes.size, pool.size)
+            val second = assertNotNull(frame.uploadPlanesOrNull(pool))
+            assertEquals(0, pool.size, "every plane came from the pool")
+            first.planes.indices.forEach { index ->
+                assertTrue(first.planes[index].bytes === second.planes[index].bytes, "plane $index is the same array")
+                assertContentEquals(fresh.planes[index].bytes, second.planes[index].bytes, "plane $index")
+            }
+        } finally {
+            frame.close()
+            source.close()
+        }
+    }
+
+    @Test
+    fun thePoolKeepsNoMoreThanItsCapacity() {
+        val pool = UploadPlanePool(capacity = 2)
+        val planes = UploadPlanes(
+            2, 2, io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat.Yuv420p,
+            List(3) { UploadPlanes.UploadPlane(ByteArray(4), 2, 2) },
+        )
+        pool.recycle(planes)
+        assertEquals(2, pool.size)
+    }
+
+    @Test
+    fun theConverterWritesIntoTheArrayItIsGiven() = runBlocking {
+        val (source, frame) = firstFrame("sync1080p30.mp4")
+        try {
+            val fresh = SoftwareConverter.toRgba(frame)
+            val reuse = ByteArray(fresh.size) { 0x55 }
+            val converted = SoftwareConverter.toRgba(frame, reuse)
+            assertTrue(converted === reuse, "the array of the right size is reused")
+            assertContentEquals(fresh, converted)
+            assertTrue(SoftwareConverter.toRgba(frame, ByteArray(3)) !== reuse, "an array of another size is not")
+        } finally {
+            frame.close()
+            source.close()
+        }
+    }
+
     private companion object {
         const val RUNS = 7
 

@@ -225,6 +225,13 @@ final fun (io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame).io.github.yu
 final fun (io.github.yuroyami.kiteplayer/MediaItem).io.github.yuroyami.kiteplayer.ffmpeg/withVideoFilter(io.github.yuroyami.kiteffmpeg.dsl/FilterChain): io.github.yuroyami.kiteplayer/MediaItem // io.github.yuroyami.kiteplayer.ffmpeg/withVideoFilter|withVideoFilter@io.github.yuroyami.kiteplayer.MediaItem(io.github.yuroyami.kiteffmpeg.dsl.FilterChain){}[0]
 
 // Targets: [native]
+final class io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanePool { // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanePool|null[0]
+    constructor <init>(kotlin/Int = ...) // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanePool.<init>|<init>(kotlin.Int){}[0]
+
+    final fun recycle(io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes) // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanePool.recycle|recycle(io.github.yuroyami.kiteplayer.ffmpeg.UploadPlanes){}[0]
+}
+
+// Targets: [native]
 final class io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes { // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes|null[0]
     constructor <init>(kotlin/Int, kotlin/Int, io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat, kotlin.collections/List<io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.UploadPlane>) // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.<init>|<init>(kotlin.Int;kotlin.Int;io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat;kotlin.collections.List<io.github.yuroyami.kiteplayer.ffmpeg.UploadPlanes.UploadPlane>){}[0]
 
@@ -252,6 +259,7 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes { // io.github.yur
 // Targets: [native]
 final object io.github.yuroyami.kiteplayer.ffmpeg/SoftwareConverter { // io.github.yuroyami.kiteplayer.ffmpeg/SoftwareConverter|null[0]
     final fun toRgba(io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame): kotlin/ByteArray // io.github.yuroyami.kiteplayer.ffmpeg/SoftwareConverter.toRgba|toRgba(io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame){}[0]
+    final fun toRgba(io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame, kotlin/ByteArray?): kotlin/ByteArray // io.github.yuroyami.kiteplayer.ffmpeg/SoftwareConverter.toRgba|toRgba(io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame;kotlin.ByteArray?){}[0]
     final fun toneMapsHdr(io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/SoftwareConverter.toneMapsHdr|toneMapsHdr(io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo){}[0]
 }
 
@@ -260,6 +268,9 @@ final fun (io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame).io.github.
 
 // Targets: [native]
 final fun (io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame).io.github.yuroyami.kiteplayer.ffmpeg/uploadPlanesOrNull(): io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes? // io.github.yuroyami.kiteplayer.ffmpeg/uploadPlanesOrNull|uploadPlanesOrNull@io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame(){}[0]
+
+// Targets: [native]
+final fun (io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame).io.github.yuroyami.kiteplayer.ffmpeg/uploadPlanesOrNull(io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanePool): io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes? // io.github.yuroyami.kiteplayer.ffmpeg/uploadPlanesOrNull|uploadPlanesOrNull@io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame(io.github.yuroyami.kiteplayer.ffmpeg.UploadPlanePool){}[0]
 
 // Targets: [wasmJs]
 final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegWebPainter : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegWebPainter|null[0]

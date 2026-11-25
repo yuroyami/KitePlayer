@@ -368,8 +368,10 @@ public class MetalVideoRenderer internal constructor(
         // started after the close began is time that thread spends for nothing.
         if (closed.value) return
         val frame = pending.getAndSet(null) ?: return
+        var resolved: MetalPicture? = null
         try {
             val picture = resolver.resolve(frame)
+            resolved = picture
             if (picture == null) {
                 failed.incrementAndGet()
                 return
@@ -441,6 +443,8 @@ public class MetalVideoRenderer internal constructor(
             failed.incrementAndGet()
             eventFlow.tryEmit(RendererEvent.Failed(failure.message ?: "Metal encode failed"))
         } finally {
+            // A picture that did not become the retained one is read no more (#840).
+            if (resolved !== retainedPicture) (resolved as? MetalPicture.SoftwarePlanes)?.release()
             frame.close()
         }
     }
@@ -490,6 +494,8 @@ public class MetalVideoRenderer internal constructor(
         (retainedPicture as? MetalPicture.CorePixelBuffer)?.let {
             platform.CoreVideo.CVPixelBufferRelease(it.buffer.reinterpret())
         }
+        // Uploads copy the planes into textures as they encode, so nothing reads these arrays now.
+        (retainedPicture as? MetalPicture.SoftwarePlanes)?.release()
         retainedPicture = null
         retainedMeta = null
     }

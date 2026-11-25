@@ -126,6 +126,16 @@ public interface BackendSession : AutoCloseable {
     public val subtitleDecoders: List<SubtitleDecoderFactory>
 
     /**
+     * Why the video must decode on this session's own [videoDecoders] and not on a renderer's own
+     * decoder, or null when either may (#609). A backend names a decoder setting here that only its
+     * own decoders apply, as the FFmpeg backend does for its decoder options and low-delay
+     * decoding. The engine then skips the renderer's decoders with a
+     * [io.github.yuroyami.kiteplayer.PlaybackWarning.HardwareDecodeUnavailable] warning. The
+     * session's own decoders may still decode in hardware.
+     */
+    public val ownVideoDecodersReason: String? get() = null
+
+    /**
      * Where the engine installs its warning reporter after open, so backend degradations (a
      * hardware-to-software fallback, colour approximation) surface as
      * [io.github.yuroyami.kiteplayer.PlayerEvent.Warning] instead of dying in a backend-private

@@ -32,6 +32,12 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
   the protocol's own and not `BufferPolicy.stallTimeout`.
 - The flash guard of Apple's sample buffer renderer dims a flashing run one frame late, as the
   Metal renderer does (#847). It waited for the GPU on every picture to dim the first one.
+- A stream that the backend's decoder options or low-delay decoding tune, as
+  `PlaybackProfile.Scrubbing` and `PlaybackProfile.LowLatency` do, no longer decodes on a
+  renderer's own decoder, such as the MediaCodec decoder of the Android views (#609). That decoder
+  applied neither setting, so both profiles changed nothing about decoding there. The player warns
+  `HardwareDecodeUnavailable`, and the backend's own decoders may still decode in hardware. A
+  backend names such settings through the new `BackendSession.ownVideoDecodersReason`.
 
 ### Fixed
 

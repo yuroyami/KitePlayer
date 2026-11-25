@@ -107,4 +107,29 @@ class FilteredStreamDecoderTest {
         )
         run.harness.close()
     }
+
+    @Test
+    fun aBackendThatTunesItsDecodersKeepsTheStreamOffTheRenderer() = runTest {
+        val run = play(MediaItem("scripted://media"), script = MediaScript(ownVideoDecodersReason = "tuned decoders"))
+        assertEquals(0, run.rendererDecoders.asked, "the renderer's decoder took a stream the backend tunes")
+        assertTrue(run.harness.renderer!!.count > 0, "the backend's decoder draws the picture")
+        assertTrue(
+            run.harness.hardwareWarnings().any { it.reason.contains("tuned decoders") },
+            "the renderer's decoder was turned down silently",
+        )
+        run.harness.close()
+    }
+
+    @Test
+    fun requiringHardwareStillPlaysAStreamTheBackendTunes() = runTest {
+        // The backend's own decoders may decode in hardware, so a tuned stream is not refused.
+        val run = play(
+            MediaItem("scripted://media"),
+            config = PlayerConfig(hardwareDecode = HwdecPolicy.Require),
+            script = MediaScript(ownVideoDecodersReason = "tuned decoders"),
+        )
+        assertEquals(0, run.rendererDecoders.asked)
+        assertTrue(run.harness.renderer!!.count > 0, "a tuned stream was refused under Require")
+        run.harness.close()
+    }
 }

@@ -192,6 +192,8 @@ internal class MediaScript(
     val videoProjection: io.github.yuroyami.kiteplayer.VideoProjection? = null,
     /** Whether the video stream is interlaced, as its container states it (#609). */
     val videoFieldOrder: io.github.yuroyami.kiteplayer.spi.FieldOrder = io.github.yuroyami.kiteplayer.spi.FieldOrder.Unknown,
+    /** What the session answers for BackendSession.ownVideoDecodersReason (#609). */
+    val ownVideoDecodersReason: String? = null,
     val seekable: Boolean = true,
     /** Extra container tags, for the suites that read them. Merged over the harness's own three. */
     val containerTags: Map<String, String> = emptyMap(),
@@ -1036,6 +1038,8 @@ internal class ScriptedSession(
         if (script.recordable) ScriptedRecordingSource(scriptedSource) else null
 
     override val source: PlayerMediaSource get() = recordingSource ?: scriptedSource
+
+    override val ownVideoDecodersReason: String? get() = script.ownVideoDecodersReason
 
     val videoDecoderPolicies: MutableList<HwdecPolicy> = mutableListOf()
 

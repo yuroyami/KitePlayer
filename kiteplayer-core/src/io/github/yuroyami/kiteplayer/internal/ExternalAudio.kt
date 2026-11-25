@@ -186,6 +186,7 @@ internal class ExternalAudioSession(
     override val source: PlayerMediaSource = joined ?: main.source
 
     override val videoDecoders: List<VideoDecoderFactory> get() = main.videoDecoders
+    override val ownVideoDecodersReason: String? get() = main.ownVideoDecodersReason
     override val subtitleDecoders: List<SubtitleDecoderFactory> get() = main.subtitleDecoders
 
     /**

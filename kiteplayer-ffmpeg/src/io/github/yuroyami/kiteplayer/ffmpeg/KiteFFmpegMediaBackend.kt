@@ -35,7 +35,8 @@ public class KiteFFmpegMediaBackend(
     /**
      * Decoder configuration as `av_opt_set` strings, applied to every video decoder this backend
      * opens. `PlaybackProfile.decoderOptions` is the intended producer; a
-     * wrong key fails the decoder open with the funnel's own typed error.
+     * wrong key fails the decoder open with the funnel's own typed error. A renderer's own decoder
+     * does not take them, so a stream decodes on this backend's decoders while any are set.
      */
     private val decoderOptions: Map<String, String> = emptyMap(),
     /** Open video decoders in low-delay shape (the LowLatency profile). */
@@ -122,6 +123,15 @@ private class KiteFFmpegBackendSession(private val kiteCodec: KiteFFmpegSource) 
     }
 
     override val videoDecoders: List<VideoDecoderFactory> = kiteCodec.videoDecoderFactories()
+
+    /** The decoder options and low-delay decoding reach only this backend's decoders, not a renderer's (#609). */
+    override val ownVideoDecodersReason: String?
+        get() = when {
+            kiteCodec.videoDecoderOptions.isNotEmpty() ->
+                "the backend's decoder options (${kiteCodec.videoDecoderOptions.keys.joinToString()}) apply only to its own decoders"
+            kiteCodec.videoLowDelay -> "low-delay decoding applies only to the backend's own decoders"
+            else -> null
+        }
 
     override val audioDecoders: List<AudioDecoderFactory> = kiteCodec.audioDecoderFactories()
 

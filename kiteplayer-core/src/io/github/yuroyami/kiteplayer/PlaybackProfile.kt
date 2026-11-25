@@ -13,6 +13,10 @@ import kotlin.time.Duration.Companion.seconds
  * applies them through its typed layer. A profile is a VALUE: [toString] prints exactly what it
  * compiles to, which is what the diagnostics dump carries (law 4).
  *
+ * The decoder options and low-delay decoding reach only the backend's own decoders. A stream that
+ * the backend tunes with them therefore skips a renderer's own decoder, such as the MediaCodec
+ * decoder of the Android views, with a [PlaybackWarning.HardwareDecodeUnavailable] warning.
+ *
  * ```
  * @OptIn(KitePlayerLowLevelApi::class) // decoderOptions is low-level API
  * fun scrubbingPlayer(): KitePlayer {

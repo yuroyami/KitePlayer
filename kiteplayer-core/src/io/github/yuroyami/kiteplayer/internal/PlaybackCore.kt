@@ -3671,8 +3671,9 @@ internal class PlaybackCore(
         if (active.videoDecoderOrigin != VideoDecoderOrigin.Backend || active.videoDecoderDeferred) return false
         if (active.rendererDecodersAsked || stream.isCoverArt) return false
         if (attached.videoDecoderFactories().isEmpty()) return false
-        // A filtered stream stays on the backend's decoder, which applies the filter (#609).
-        if (softwareFramesNeeded(active.videoFilter, stream) != null) return false
+        // A filtered stream stays on the backend's decoder, which applies the filter, and so does
+        // one the backend tunes with settings a renderer's decoder does not take (#609).
+        if (rendererDecoderSkipped(active.backendSession, active.videoFilter, stream) != null) return false
         val selection = if (forceBackendSoftwareForMedia) {
             VideoDecoderSelection.BackendSoftwareOnly
         } else {
@@ -4377,7 +4378,7 @@ internal class PlaybackCore(
             val deferVideoDecoder = pending != null && videoStream != null && !videoStream.isCoverArt &&
                 pendingRenderer?.videoDecoderFactories().orEmpty().isNotEmpty() &&
                 rendererDecodes(videoSelection, config.hardwareDecode, source.seekable) &&
-                softwareFramesNeeded(itemVideoFilter, videoStream) == null
+                rendererDecoderSkipped(backendSession, itemVideoFilter, videoStream) == null
             val selectedVideoDecoder = if (deferVideoDecoder) null else videoStream?.let {
                 createVideoDecoder(
                     session = backendSession,
@@ -4697,15 +4698,18 @@ internal class PlaybackCore(
         // that would need one.
         val rendererEligible = pending == null && rendererDecodes(selection, policy, sourceSeekable)
         val offered = if (rendererEligible) pendingRenderer?.videoDecoderFactories().orEmpty() else emptyList()
-        if (filtered != null && offered.isNotEmpty()) {
+        // The backend's own decoder settings, such as a profile's, reach only its own decoders, which
+        // may still decode in hardware, so they skip the renderer's decoder and refuse nothing (#609).
+        val skipped = filtered ?: session.ownVideoDecodersReason
+        if (skipped != null && offered.isNotEmpty()) {
             report(
                 PlaybackWarning.HardwareDecodeUnavailable(
                     stream.codec,
-                    "$filtered, so the renderer's own decoder (${offered.joinToString { it.name }}) is not used",
+                    "$skipped, so the renderer's own decoder (${offered.joinToString { it.name }}) is not used",
                 ),
             )
         }
-        val rendererFactories = if (filtered == null) offered else emptyList()
+        val rendererFactories = if (skipped == null) offered else emptyList()
         val rendererAsked = rendererFactories.isNotEmpty()
         for (factory in rendererFactories) {
             val decoder = tryCreateVideoDecoder(factory, stream, policy, failures)
@@ -4812,6 +4816,13 @@ internal class PlaybackCore(
             "the stream is deinterlaced, and the deinterlacer runs on software frames"
         else -> null
     }
+
+    /**
+     * Why [stream] must not decode on a renderer's own decoder, or null when it may: a filter that
+     * [softwareFramesNeeded] names, or a decoder setting that only [session]'s own decoders apply (#609).
+     */
+    private fun rendererDecoderSkipped(session: BackendSession, itemFilter: String?, stream: PlayerStreamInfo): String? =
+        softwareFramesNeeded(itemFilter, stream) ?: session.ownVideoDecodersReason
 
     /** True when the configured policy would try the attached renderer's own decoders first. */
     private fun rendererDecodes(selection: VideoDecoderSelection, policy: HwdecPolicy, sourceSeekable: Boolean): Boolean =

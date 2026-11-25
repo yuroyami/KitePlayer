@@ -3833,6 +3833,7 @@ public final class io/github/yuroyami/kiteplayer/spi/AudioSinkFactory$DefaultImp
 
 public abstract interface class io/github/yuroyami/kiteplayer/spi/BackendSession : java/lang/AutoCloseable {
 	public abstract fun getAudioDecoders ()Ljava/util/List;
+	public fun getOwnVideoDecodersReason ()Ljava/lang/String;
 	public abstract fun getSource ()Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;
 	public abstract fun getSubtitleDecoders ()Ljava/util/List;
 	public abstract fun getVideoDecoders ()Ljava/util/List;
@@ -3840,6 +3841,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/BackendSession
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/BackendSession$DefaultImpls {
+	public static fun getOwnVideoDecodersReason (Lio/github/yuroyami/kiteplayer/spi/BackendSession;)Ljava/lang/String;
 	public static fun setWarningSink (Lio/github/yuroyami/kiteplayer/spi/BackendSession;Lkotlin/jvm/functions/Function1;)V
 }
 

@@ -681,6 +681,29 @@ class AwtCanvasVideoRendererTest {
         r.close()
     }
 
+    // The flag that the engine's picture-controls warning reads matches what reaches the screen (#722).
+    @Test
+    fun appliesAdjustmentsSaysWhetherABrighterPictureReachesTheScreen() = runTest {
+        suspend fun centreWith(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments?): Pair<Int, Boolean> {
+            val strategy = FakeStrategy()
+            val r = renderer { pixels, _, _ -> pixels.fill(0xFF808080.toInt()); true }
+            r.setCanvas(StrategyCanvas(strategy))
+            adjustments?.let(r::setAdjustments)
+            assertTrue(r.present(CountingFrame(), 0L))
+            val applies = r.appliesAdjustments
+            r.close()
+            return (strategy.backing.getRGB(80, 45) and 0xFFFFFF) to applies
+        }
+        val (plain, _) = centreWith(null)
+        val (brighter, applies) = centreWith(io.github.yuroyami.kiteplayer.VideoAdjustments(brightness = 0.3f))
+        assertEquals(0x808080, plain, "the grey picture reached the screen as painted")
+        assertEquals(
+            applies,
+            brighter != plain,
+            "appliesAdjustments is $applies and the picture read ${plain.toString(16)} then ${brighter.toString(16)}",
+        )
+    }
+
     @Test
     fun `a presented frame is reported after the strategy showed it`() = runTest {
         val strategy = FakeStrategy()

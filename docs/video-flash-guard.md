@@ -114,9 +114,10 @@ detector, `VideoFlashGuard` in the core's `spi` package, so every renderer appli
   factor.
 - Apple's sample buffer layer, the renderer picture in picture needs, shows pixel buffers and
   draws nothing itself (#562). While the guard is on it draws only the reduced copy of each new
-  picture on the GPU and reads it back at once, so the picture that completes a run is already
-  dimmed. A picture inside a run is composed dimmed into a new pixel buffer, the way a picture with
-  subtitles is, and that buffer is shown. A black layer over the display layer would not do: the
+  picture on the GPU and reads it back when the next picture arrives, so it dims one frame late, as
+  the Metal renderer does, and the video schedule never waits on the GPU for it (#847). A picture
+  inside a run is composed dimmed into a new pixel buffer, the way a picture with subtitles is, and
+  that buffer is shown. A black layer over the display layer would not do: the
   picture in picture window shows the layer's samples and nothing laid over them. Outside a run the
   picture reaches the layer as it is stored. An HDR picture inside a run is shown tone mapped to
   standard range, as it is while it carries subtitles. Without a Metal device there is no guard.

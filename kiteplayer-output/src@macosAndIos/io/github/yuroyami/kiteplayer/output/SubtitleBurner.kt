@@ -137,17 +137,20 @@ internal class SubtitleBurner private constructor(private val device: MTLDeviceP
     }
 
     /**
-     * The flash guard's factor for [pixels], shown at [nanos]: 1 outside a flashing run. The small
-     * copy is drawn and read back before this returns, so the picture that completes a run is
-     * already dimmed. A picture that cannot be measured keeps the factor of the one before.
+     * The flash guard's factor for [pixels], shown at [nanos]: 1 outside a flashing run. The copy of
+     * the picture before is read, which the GPU finished a frame ago, and the copy of this one is
+     * drawn for the next call, so the schedule never waits on the GPU here (#847). The picture that
+     * completes a run is dimmed one frame late, as on the Metal renderer. A picture that cannot be
+     * measured keeps the factor of the one before.
      */
     fun flashFactor(pixels: CVPixelBufferRef, facts: PictureFacts, nanos: Long): Float {
         val picture = MetalPicture.CorePixelBuffer(pixels)
         val guard = flashGuard ?: MetalFlashGuard(device).also { flashGuard = it }
         if (!composer.canEncode(picture)) return guard.current
         return runCatching {
+            val factor = guard.factorForNext()
             guard.submitted(composer.encodeMeasure(facts, picture, guard.target), nanos)
-            guard.factorForNext()
+            factor
         }.getOrDefault(guard.current)
     }
 

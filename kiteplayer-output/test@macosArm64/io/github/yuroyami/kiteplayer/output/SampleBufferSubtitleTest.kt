@@ -192,13 +192,14 @@ class SampleBufferSubtitleTest {
     }
 
     @Test
-    fun aStrobeIsDimmedFromThePictureThatMakesItsRun() {
+    fun aStrobeIsDimmedFromThePictureAfterTheOneThatMakesItsRun() {
         val shown = strobed(io.github.yuroyami.kiteplayer.FlashGuard.On)
         assertEquals(60, shown.size)
-        // The seventh leg is on picture 21. It is measured before it is shown, so it is dimmed itself.
-        assertTrue(shown.take(21).none { it.first }, "before the run every picture reaches the layer as it is stored")
-        assertTrue(shown.drop(21).all { it.first }, "inside the run every picture is composed")
-        val whites = shown.drop(21).filterIndexed { index, _ -> (index + 21) / 3 % 2 == 1 }.map { it.second }
+        // The seventh leg is on picture 21. Its copy is read as picture 22 is shown, so the run is
+        // dimmed from picture 22, one frame late, as on the Metal renderer (#847).
+        assertTrue(shown.take(22).none { it.first }, "before the run every picture reaches the layer as it is stored")
+        assertTrue(shown.drop(22).all { it.first }, "inside the run every picture is composed")
+        val whites = shown.drop(22).filterIndexed { index, _ -> (index + 22) / 3 % 2 == 1 }.map { it.second }
         // 0.08 of the light of white is about 81 of 255.
         assertTrue(whites.all { it in 70..92 }, "a white picture of the run came out as $whites")
     }
@@ -207,7 +208,7 @@ class SampleBufferSubtitleTest {
     fun aStrobeIsShownWholeWithTheGuardOffAndFollowsTheSystemSettingOtherwise() {
         assertTrue(strobed(io.github.yuroyami.kiteplayer.FlashGuard.Off, systemSetting = true).none { it.first })
         assertTrue(strobed(mode = null, systemSetting = false).none { it.first }, "FollowSystem with the setting off")
-        assertTrue(strobed(mode = null, systemSetting = true).drop(21).all { it.first }, "FollowSystem with the setting on")
+        assertTrue(strobed(mode = null, systemSetting = true).drop(22).all { it.first }, "FollowSystem with the setting on")
     }
 
     @Test

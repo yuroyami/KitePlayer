@@ -10,6 +10,40 @@ The entries under a version are written by hand. `scripts/release-notes.sh` give
 
 ## [Unreleased]
 
+### Added
+
+- The Metal renderer behind the native views of iOS and macOS draws a view into a 360 degree video
+  (#586). It drew the picture flat and warned `ProjectionUnavailable`. The scale mode, the framing,
+  linear-light scaling and the animation upscaler do not apply while a view is drawn. Android's
+  native view still draws the picture flat.
+- `MetalPicture.SoftwarePlanes` takes an `onRelease` call, which runs once when the renderer stops
+  reading the arrays (#840). `UploadPlanePool` and `uploadPlanesOrNull(pool)` reuse the arrays of
+  software frames on that call, and `SoftwareConverter.toRgba` takes an array to reuse. The iOS
+  native view uses them, so a software frame no longer makes new arrays.
+
+### Changed
+
+- The FFmpeg backend reports a VideoToolbox or Direct3D 11 decoder as `HwdecStatus.HardwareZeroCopy`
+  until a renderer first reads a frame's planes, and as `HardwareWithDownload` after that (#846).
+  It said `HardwareWithDownload` from the open, which overstated the cost of the Metal and sample
+  buffer renderers. They draw the decoder's own pixel buffer.
+- A read that FFmpeg's own protocol timed out, as for tcp, udp or rtsp, ends the session with
+  `PlaybackError.SourceStalled` (#863). It ended with a generic demuxer error. The timeout is still
+  the protocol's own and not `BufferPolicy.stallTimeout`.
+- The flash guard of Apple's sample buffer renderer dims a flashing run one frame late, as the
+  Metal renderer does (#847). It waited for the GPU on every picture to dim the first one.
+
+### Fixed
+
+- The Metal renderer on iOS converts a standard range BT.2020 picture to BT.709 in its shader
+  (#732). The iOS layer is untagged, so the system showed the picture as sRGB and it looked
+  oversaturated. The conversion is checked on a Mac, and the look on an iPhone is not checked yet.
+- `VideoScale.Fill` crops the picture to fill the window in the macOS AppKit renderer (#768). It
+  letterboxed the picture as `Fit` does.
+- The sample buffer renderer takes its pixel buffers from a pool for each format and size, and it
+  copies each chroma row in one call (#842). It made a new pixel buffer for every software frame and
+  wrote the chroma byte by byte.
+
 ## [0.4.0] - 2026-11-21
 
 ### Added

@@ -513,10 +513,10 @@ capabilities, built from the code, are in [docs/capabilities.md](docs/capabiliti
 
 KitePlayer puts FFmpeg and libass into your app as native code:
 
-- On Android, they add about 22 MB per ABI before compression (18.8 MB for FFmpeg and 3.4 MB for
+- On Android, they add about 21 MB per ABI before compression (18.8 MB for FFmpeg and 2.6 MB for
   libass, measured on `arm64-v8a`).
 - On the desktop JVM, the KiteFFmpeg jar is about 39 MB, because it carries FFmpeg for four
-  desktop platforms. The libass jar adds about 6 MB.
+  desktop platforms. The libass jar adds about 5.3 MB.
 - On the web, the page downloads about 1.5 MB for the codec module and 0.9 MB for the worker
   player, with gzip.
 

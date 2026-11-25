@@ -65,11 +65,13 @@ class DesktopVideoToolboxTest {
         val hardware = firstFrame(clip, HwdecPolicy.Auto)
         val software = firstFrame(clip, HwdecPolicy.Off)
         try {
-            assertEquals(HwdecStatus.HardwareWithDownload(HwdecKind.VideoToolbox), hardware.decoder.hardware)
+            assertEquals(HwdecStatus.HardwareZeroCopy(HwdecKind.VideoToolbox), hardware.decoder.hardware)
             assertEquals(HwSurfaceKind.CoreVideoPixelBuffer, hardware.frame.hardwareSurface)
             assertEquals(HwdecStatus.Software, software.decoder.hardware)
 
             val fromHardware = SoftwareConverter.toRgba(hardware.frame)
+            // The JVM converter reads the frame through its download, and the status says so (#846).
+            assertEquals(HwdecStatus.HardwareWithDownload(HwdecKind.VideoToolbox), hardware.decoder.hardware)
             val fromSoftware = SoftwareConverter.toRgba(software.frame)
             assertEquals(fromSoftware.size, fromHardware.size)
             val largest = fromSoftware.indices.maxOf {

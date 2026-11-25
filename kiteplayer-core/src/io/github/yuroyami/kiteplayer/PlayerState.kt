@@ -610,9 +610,9 @@ public sealed class HwdecStatus {
 
     /**
      * Hardware decoding, but frames are downloaded to main memory before presentation. The FFmpeg
-     * backend declares it at open for every hardware route, before a renderer is known, so on
-     * Apple platforms, where the Metal and sample buffer renderers draw the decoder's own pixel
-     * buffer, it overstates the cost (#846).
+     * backend reports a VideoToolbox or Direct3D 11 decoder as [HardwareZeroCopy] at open and moves
+     * to this status when the first frame is downloaded, so a renderer that draws the decoder's own
+     * surface keeps the zero copy status (#846).
      */
     public data class HardwareWithDownload(val kind: HwdecKind) : HwdecStatus()
 }

@@ -726,7 +726,7 @@ public class KiteFFmpegSource internal constructor(
         ),
         stream = stream,
         mapper = mapper,
-        hardware = hardware,
+        opened = hardware,
         continuity = continuity,
         warn = { onWarning(it) },
         // The graph runs on software frames only; the factory stands hardware down first.
@@ -1225,16 +1225,15 @@ public class KiteFFmpegVideoDecoderFactory internal constructor(
                         null -> null
                     },
                     hardwareAccel = (route as? HardwareRoute.Accel)?.accel,
-                    // HardwareWithDownload is a cautious claim made at open, before any renderer
-                    // takes a frame. It is true for mediacodec, which downloads inside FFmpeg's
-                    // wrapper, and for the JVM renderers. It overstates the Apple paths: the Metal
-                    // and sample buffer renderers draw the VideoToolbox CVPixelBuffer itself, and
-                    // the download twin is never made there. Telling the two apart needs each
-                    // frame to say whether its readable copy was made (#846).
-                    hardware = if (route == null) {
-                        HwdecStatus.Software
-                    } else {
-                        HwdecStatus.HardwareWithDownload(route.kind)
+                    // A VideoToolbox or Direct3D 11 frame is downloaded only when a renderer reads
+                    // its planes, so the decoder says zero copy until the first download happens and
+                    // with download after it (#846). The Metal and sample buffer renderers draw the
+                    // CVPixelBuffer itself and never download. Every other route downloads inside
+                    // FFmpeg's wrapper, as mediacodec does, so it says so from the start.
+                    hardware = when {
+                        route == null -> HwdecStatus.Software
+                        route.kind.downloadsLazily() -> HwdecStatus.HardwareZeroCopy(route.kind)
+                        else -> HwdecStatus.HardwareWithDownload(route.kind)
                     },
                     continuity = continuity,
                 )
@@ -1300,7 +1299,7 @@ private class KiteFFmpegVideoDecoder(
     private val decoder: StreamDecoder,
     private val stream: PlayerStreamInfo,
     private val mapper: TimestampMapper,
-    override val hardware: HwdecStatus,
+    opened: HwdecStatus,
     private val continuity: VideoDecoderContinuity,
     private val warn: (PlaybackWarning) -> Unit,
     /** The compiled filter chain every decoded frame runs through, or null for none. */
@@ -1311,6 +1310,17 @@ private class KiteFFmpegVideoDecoder(
 
     private var generation: Generation = Generation.Initial
     private var skippingNonReference = false
+
+    /** Read by the statistics on the actor while frames download on a renderer's thread. */
+    private val status = kotlinx.atomicfu.atomic(opened)
+
+    override val hardware: HwdecStatus get() = status.value
+
+    /** Called by a frame when its download twin is made: from then on this decoder downloads (#846). */
+    private val markDownloaded: () -> Unit = {
+        val now = status.value
+        if (now is HwdecStatus.HardwareZeroCopy) status.compareAndSet(now, HwdecStatus.HardwareWithDownload(now.kind))
+    }
 
     /** The graph, built from the first decoded frame's own geometry and format and rebuilt when that changes. */
     private var filterGraph: io.github.yuroyami.kiteffmpeg.FilterGraph? = null
@@ -1361,6 +1371,7 @@ private class KiteFFmpegVideoDecoder(
         val wrapped = KiteFFmpegVideoFrame(
             frame, pts, duration, generation, stream.rotationDegrees, stream.mirrored, stream.hdr, decoded.sceneMaxNits,
             crop = cropFitting(info.width, info.height),
+            onDownload = markDownloaded,
         )
         try {
             warnIfColorIsApproximated(wrapped.colorSpace)
@@ -1867,6 +1878,8 @@ public class KiteFFmpegVideoFrame internal constructor(
     override val sceneMaxNits: Float? = null,
     /** The container's crop, already checked to fit this frame. */
     override val crop: PictureCrop? = null,
+    /** Runs when this hardware frame's download twin is made, so its decoder can say it downloads (#846). */
+    private val onDownload: (() -> Unit)? = null,
 ) : VideoFrame, SoftwareReadableFrame {
 
     private val info = frame.info
@@ -1928,7 +1941,10 @@ public class KiteFFmpegVideoFrame internal constructor(
         check(hardwareSurface?.downloadsToMemory() == true) {
             "a $hardwareSurface frame needs its matching renderer"
         }
-        return downloadedTwin ?: frame.downloadFromHardware().also { downloadedTwin = it }
+        return downloadedTwin ?: frame.downloadFromHardware().also {
+            downloadedTwin = it
+            onDownload?.invoke()
+        }
     }
 
     /**

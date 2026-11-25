@@ -42,14 +42,22 @@ class VideoToolboxDecodeTest {
         val (source, decoder, frame) = firstVideoFrameAuto("colors-bt709.mp4")
         try {
             assertEquals(
-                HwdecStatus.HardwareWithDownload(HwdecKind.VideoToolbox),
+                HwdecStatus.HardwareZeroCopy(HwdecKind.VideoToolbox),
                 decoder.hardware,
-                "Auto on Apple must select VideoToolbox for h264",
+                "Auto on Apple must select VideoToolbox for h264, and nothing has downloaded yet",
             )
             assertEquals(HwSurfaceKind.CoreVideoPixelBuffer, frame.hardwareSurface)
             assertEquals(PlayerPixelFormat.Opaque, frame.pixelFormat)
+            // What the Metal and sample buffer renderers take, with no download (#846).
+            assertNotNull(frame.corePixelBufferOrNull())
+            assertEquals(HwdecStatus.HardwareZeroCopy(HwdecKind.VideoToolbox), decoder.hardware)
             val rgba = SoftwareConverter.toRgba(frame)
             assertEquals(320 * 240 * 4, rgba.size)
+            assertEquals(
+                HwdecStatus.HardwareWithDownload(HwdecKind.VideoToolbox),
+                decoder.hardware,
+                "the first download moves the status",
+            )
             assertTrue(frame.hasPts, "the first hardware frame carries its timestamp")
         } finally {
             frame.close()
@@ -65,9 +73,10 @@ class VideoToolboxDecodeTest {
     fun aVideotoolboxFrameIsReadableAsItsDownloadedPlanes() = runBlocking {
         val (source, decoder, frame) = firstVideoFrameAuto("colors-bt709.mp4")
         try {
-            assertEquals(HwdecStatus.HardwareWithDownload(HwdecKind.VideoToolbox), decoder.hardware)
+            assertEquals(HwdecStatus.HardwareZeroCopy(HwdecKind.VideoToolbox), decoder.hardware)
             assertEquals(PlayerPixelFormat.Opaque, frame.pixelFormat)
             println("VideoToolbox frame planes: ${frame.planeFormat}, ${frame.planeCount} of them")
+            assertEquals(HwdecStatus.HardwareWithDownload(HwdecKind.VideoToolbox), decoder.hardware)
             // A virtual machine, such as a CI runner, has no decode hardware, and its VideoToolbox
             // output is not the hardware decoder's, so there only readable planes are asserted.
             if (inVirtualMachine()) {
@@ -96,7 +105,7 @@ class VideoToolboxDecodeTest {
         try {
             val hardwareFrame = frame.hardwareSurface == HwSurfaceKind.CoreVideoPixelBuffer
             assertEquals(
-                if (hardwareFrame) HwdecStatus.HardwareWithDownload(HwdecKind.VideoToolbox) else HwdecStatus.Software,
+                if (hardwareFrame) HwdecStatus.HardwareZeroCopy(HwdecKind.VideoToolbox) else HwdecStatus.Software,
                 decoder.hardware,
                 "the status must name the decoder that made the frame",
             )

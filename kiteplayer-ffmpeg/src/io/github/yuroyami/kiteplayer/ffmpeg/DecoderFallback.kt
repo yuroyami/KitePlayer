@@ -87,10 +87,13 @@ private class ReplayFallbackDecoder(
     private var active: VideoDecoder? = initial
     private var usingHardware: Boolean = true
 
-    /** Read by the player actor while the decoder worker may demote. */
-    private val currentHardware = atomic(initial.hardware)
+    /** The hardware decoder, whose own status moves from zero copy to download on its first download (#846). */
+    private val hardwareDecoder: VideoDecoder = initial
 
-    override val hardware: HwdecStatus get() = currentHardware.value
+    /** Read by the player actor while the decoder worker may demote. */
+    private val demoted = atomic(false)
+
+    override val hardware: HwdecStatus get() = if (demoted.value) HwdecStatus.Software else hardwareDecoder.hardware
 
     private val retained: MutableList<RetainedPacket> = mutableListOf()
     private var retainedBytes: Int = 0
@@ -348,7 +351,7 @@ private class ReplayFallbackDecoder(
         // alive until replay finishes (or reopening fails).
         closeActiveQuietly()
         usingHardware = false
-        currentHardware.value = HwdecStatus.Software
+        demoted.value = true
 
         // Frames pulled only to satisfy hardware drain backpressure have never crossed the decoder
         // boundary. Drop those owners before replay recreates their ordinals; exposing both copies

@@ -96,7 +96,8 @@ class DesktopPlaybackTest {
                 val decode = withTimeoutOrNull(5.seconds) {
                     player.stats.first { it.hardwareDecode != HwdecStatus.Software }.hardwareDecode
                 } ?: player.stats.value.hardwareDecode
-                assertEquals(HwdecStatus.HardwareWithDownload(HwdecKind.VideoToolbox), decode)
+                // No renderer is attached, so no frame is downloaded and the status stays zero copy (#846).
+                assertEquals(HwdecStatus.HardwareZeroCopy(HwdecKind.VideoToolbox), decode)
             }
             println(
                 "desktop played to ${player.progress.value.position}, " +

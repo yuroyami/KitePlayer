@@ -154,10 +154,13 @@ public class AppKitVideoRenderer internal constructor(
         toneMapped = toneMapped,
         enqueueOnMain = { block -> dispatch_async(dispatch_get_main_queue()) { block() } },
         showImage = { image ->
-            window.imageView.image = image
+            window.imageView.show(image)
             if (keepDisplayAwake) MacDisplayAwake.framePresented()
         },
-        applyScale = { mode -> window.imageView.imageScaling = imageScalingFor(mode) },
+        applyScale = { mode ->
+            window.imageView.imageScaling = imageScalingFor(mode)
+            window.imageView.fill = mode == io.github.yuroyami.kiteplayer.VideoScale.Fill
+        },
     )
 
     private val presented = atomic(0L)
@@ -634,8 +637,9 @@ public class AppKitVideoRenderer internal constructor(
     override fun setViewport(width: Int, height: Int, scale: Float): Unit = Unit
 
     /**
-     * Fit and Stretch, through the image view's scaling (#768). The image view has no mode that
-     * fills its bounds and crops the overhang, so Fill draws as Fit here.
+     * Fit and Stretch go through the image view's scaling (#768). For Fill the view crops each
+     * picture to its own aspect and scales it proportionally, so the picture covers the view and its
+     * overhang is cut, as on UIKit. Subtitles are drawn into the picture, so a crop can cut them too.
      */
     override fun setScaleMode(mode: io.github.yuroyami.kiteplayer.VideoScale) {
         enqueueOnMain { applyScale(mode) }
@@ -822,7 +826,7 @@ public class AppKitVideoRenderer internal constructor(
     }
 }
 
-/** The image view's scaling for [mode]. Fill has no AppKit equivalent and draws as Fit (#768). */
+/** The image view's scaling for [mode]. Fill scales proportionally a picture already cropped to the view (#768). */
 internal fun imageScalingFor(mode: io.github.yuroyami.kiteplayer.VideoScale): platform.AppKit.NSImageScaling = when (mode) {
     io.github.yuroyami.kiteplayer.VideoScale.Stretch -> platform.AppKit.NSImageScaleAxesIndependently
     io.github.yuroyami.kiteplayer.VideoScale.Fit, io.github.yuroyami.kiteplayer.VideoScale.Fill -> platform.AppKit.NSImageScaleProportionallyUpOrDown

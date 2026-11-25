@@ -79,7 +79,7 @@ public class AppKitWindow(
     ) : this(title, width, height, if (useMetalLayer) AppKitSurface.Metal else AppKitSurface.Image)
 
     private val window: NSWindow
-    internal val imageView: NSImageView
+    internal val imageView: VideoImageView
 
     /** The layer a [MetalVideoRenderer] draws into; null unless built with [AppKitSurface.Metal]. */
     public val metalLayer: platform.QuartzCore.CAMetalLayer?
@@ -121,7 +121,7 @@ public class AppKitWindow(
         )
         window.title = title
 
-        imageView = NSImageView(frame = CGRectMake(0.0, 0.0, width.toDouble(), height.toDouble()))
+        imageView = VideoImageView(frame = CGRectMake(0.0, 0.0, width.toDouble(), height.toDouble()))
         imageView.imageScaling = NSImageScaleProportionallyUpOrDown
 
         val host = surfaceHost(

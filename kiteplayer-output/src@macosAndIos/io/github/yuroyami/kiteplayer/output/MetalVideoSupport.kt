@@ -181,6 +181,17 @@ struct QualityUniforms {
     float lumaTexelY;
 };
 
+/* The view into a 360 degree picture (#586): SphericalLens for each pixel of the target. A scale of
+ * 0 draws the picture flat through the quad, as before. */
+struct SphereUniforms {
+    float4 lens;    // the view's centre x and y in target pixels, the lens scale, 1 when the picture wraps
+    float4 turn0;   // the lens rotation, row by row
+    float4 turn1;
+    float4 turn2;
+    float4 bounds;  // the picture's left, top, width and height as shares of the whole sphere
+    float4 source;  // the part of the texture the picture is: left, top, width and height as shares
+};
+
 struct ToneUniforms {
     int   mode;         // 0 off (bit-exact SDR path), 1 PQ, 2 HLG, 3 standard range BT.2020 to BT.709
     float srcPeak;      // source peak in nits; the EETF's source anchor
@@ -443,14 +454,30 @@ fragment float4 kp_picture(
     constant ColorUniforms &c [[buffer(0)]],
     constant AdjustUniforms &adj [[buffer(1)]],
     constant ToneUniforms &tone [[buffer(2)]],
-    constant QualityUniforms &q [[buffer(3)]]
+    constant QualityUniforms &q [[buffer(3)]],
+    constant SphereUniforms &sphere [[buffer(4)]]
 ) {
     constexpr sampler s(mag_filter::linear, min_filter::linear, address::clamp_to_edge);
+    float2 texcoord = in.texcoord;
+    if (sphere.lens.z > 0.0) {
+        /* The fragment's position is its pixel's centre, counted down from the top of the target,
+         * which is where SphericalLens reads x + 0.5. */
+        float2 coord = in.position.xy;
+        float3 ray = float3(sphere.lens.z * (coord.x - sphere.lens.x), sphere.lens.z * (sphere.lens.y - coord.y), -1.0);
+        float3 d = float3(dot(sphere.turn0.xyz, ray), dot(sphere.turn1.xyz, ray), dot(sphere.turn2.xyz, ray));
+        float across = 0.5 + atan2(d.x, -d.z) * 0.15915494309;
+        float down = 0.5 - atan2(d.y, length(d.xz)) * 0.31830988618;
+        if (sphere.lens.w > 0.5) across = fract(across);
+        float u = (across - sphere.bounds.x) / sphere.bounds.z;
+        float v = (down - sphere.bounds.y) / sphere.bounds.w;
+        if (u < 0.0 || u > 1.0 || v < 0.0 || v > 1.0) return float4(0.0, 0.0, 0.0, 1.0);
+        texcoord = sphere.source.xy + float2(u, v) * sphere.source.zw;
+    }
     float3 rgb;
     if (c.mode == 2) {
         rgb = ((q.flags & 4) != 0 && q.lumaTexelX > 0.0)
-            ? kp_bicubic(planeA, s, in.texcoord, float2(1.0 / q.lumaTexelX, 1.0 / q.lumaTexelY)).rgb
-            : planeA.sample(s, in.texcoord).rgb;
+            ? kp_bicubic(planeA, s, texcoord, float2(1.0 / q.lumaTexelX, 1.0 / q.lumaTexelY)).rgb
+            : planeA.sample(s, texcoord).rgb;
     } else {
         float rawY;
         float rawCb;
@@ -460,7 +487,7 @@ fragment float4 kp_picture(
          * offset comes from the declared siting and the format's own subsampling, so 4:4:4 moves
          * nothing and centre-sited content moves nothing horizontally. It is geometry, not an
          * image effect, so it is applied on every frame rather than riding the debanding flag. */
-        float2 chromaCoord = in.texcoord + float2(c.chromaOffsetX, c.chromaOffsetY);
+        float2 chromaCoord = texcoord + float2(c.chromaOffsetX, c.chromaOffsetY);
         bool deband = (q.flags & 2) != 0;
         bool bicubic = (q.flags & 4) != 0 && q.lumaTexelX > 0.0;
         /* The luma sample, by whichever rule is in force. Debanding wins when both are asked for:
@@ -468,12 +495,12 @@ fragment float4 kp_picture(
          * kernel to resolve it. Chroma keeps the sampler's bilinear either way, which is what mpv
          * does too: chroma is half resolution and a kernel on it buys far less than it costs. */
         if (deband) {
-            rawY = kp_deband_plane(planeA, s, in.texcoord, float2(q.lumaTexelX, q.lumaTexelY),
+            rawY = kp_deband_plane(planeA, s, texcoord, float2(q.lumaTexelX, q.lumaTexelY),
                                    q.debandRange, q.debandThreshold, in.position.xy, q.frameSeed);
         } else if (bicubic) {
-            rawY = kp_bicubic(planeA, s, in.texcoord, float2(1.0 / q.lumaTexelX, 1.0 / q.lumaTexelY)).r;
+            rawY = kp_bicubic(planeA, s, texcoord, float2(1.0 / q.lumaTexelX, 1.0 / q.lumaTexelY)).r;
         } else {
-            rawY = planeA.sample(s, in.texcoord).r;
+            rawY = planeA.sample(s, texcoord).r;
         }
         if (c.mode == 1) {
             float2 uv = planeB.sample(s, chromaCoord).rg;

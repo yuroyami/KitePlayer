@@ -180,6 +180,12 @@ internal class MetalFrameComposer(
          * at its own size, the network doubles it, and the passes below take the doubled picture.
          */
         upscaler: Anime4kNetwork? = null,
+        /**
+         * The view into a 360 degree picture as [packSphereUniforms] packs it (#586), or null to draw
+         * the picture flat. The view covers the whole target, so the quad, the scale mode and the
+         * framing do not apply, and neither do linear-light scaling and the animation upscaler.
+         */
+        sphere: FloatArray? = null,
     ): MTLCommandBufferProtocol {
         check(!closed) { "the Metal frame composer is closed" }
         retireCompletedCommands()
@@ -193,10 +199,16 @@ internal class MetalFrameComposer(
         } else {
             DISABLED_TONE_UNIFORMS
         }
-        val qualityUniforms = if (extendedRangeHeadroom == null) {
+        val qualityUniforms = if (extendedRangeHeadroom == null && sphere == null) {
             qualityUniforms
         } else {
-            qualityUniforms.copyOf().also { it[0] = Float.fromBits(it[0].toRawBits() or EXTENDED_RANGE_FLAG) }
+            qualityUniforms.copyOf().also {
+                var flags = it[0].toRawBits()
+                if (extendedRangeHeadroom != null) flags = flags or EXTENDED_RANGE_FLAG
+                // The view reads the picture at each pixel's own point, so there is no picture-sized pass.
+                if (sphere != null) flags = flags and LINEAR_LIGHT_FLAG.inv()
+                it[0] = Float.fromBits(flags)
+            }
         }
         val inputs = when (picture) {
             is MetalPicture.SoftwarePlanes -> softwareInputs(picture)
@@ -209,7 +221,7 @@ internal class MetalFrameComposer(
         var releaseHandedOff = false
         try {
             val quad = quadOverride
-                ?: quadUniformsFor(frame, viewportWidth, viewportHeight, scaleMode, videoTransform)
+                ?: if (sphere != null) FULL_TARGET_QUAD else quadUniformsFor(frame, viewportWidth, viewportHeight, scaleMode, videoTransform)
             if (measureTarget != null) {
                 // The guard counts standard range light, whatever the target's own range is.
                 val measureTone = when {
@@ -221,7 +233,7 @@ internal class MetalFrameComposer(
             }
             // With the animation upscaler, everything below draws the doubled picture, which is
             // already RGB, in place of the planes.
-            val doubled = upscaler?.let { encodeUpscale(commands, it, inputs, quad, target, toneUniforms, qualityUniforms) }
+            val doubled = upscaler?.takeIf { sphere == null }?.let { encodeUpscale(commands, it, inputs, quad, target, toneUniforms, qualityUniforms) }
             val drawn = doubled?.first ?: inputs
             val drawnTone = if (doubled == null) toneUniforms else DISABLED_TONE_UNIFORMS
             val drawnQuality = doubled?.second ?: qualityUniforms
@@ -254,7 +266,7 @@ internal class MetalFrameComposer(
                     encoder.setFragmentTexture(light, atIndex = 0u)
                 } else {
                     encoder.setRenderPipelineState(picturePipeline)
-                    bindPicture(encoder, drawn, drawnTone, adjustUniforms, drawnQuality)
+                    bindPicture(encoder, drawn, drawnTone, adjustUniforms, drawnQuality, sphere ?: DISABLED_SPHERE_UNIFORMS)
                 }
                 encoder.drawPrimitives(MTLPrimitiveTypeTriangleStrip, vertexStart = 0u, vertexCount = 4u)
 
@@ -371,14 +383,18 @@ internal class MetalFrameComposer(
         }
     }
 
-    /** Binds the picture's planes and the four uniform blocks that [picturePipeline] reads. */
+    /** Binds the picture's planes and the five uniform blocks that [picturePipeline] reads. */
     private fun bindPicture(
         encoder: platform.Metal.MTLRenderCommandEncoderProtocol,
         inputs: PictureInputs,
         toneUniforms: FloatArray,
         adjustUniforms: FloatArray,
         qualityUniforms: FloatArray,
+        sphereUniforms: FloatArray = DISABLED_SPHERE_UNIFORMS,
     ) {
+        sphereUniforms.usePinned { pinned ->
+            encoder.setFragmentBytes(pinned.addressOf(0), (sphereUniforms.size * 4).toULong(), atIndex = 4u)
+        }
         val colors = inputs.uniforms
         colors.usePinned { pinned ->
             encoder.setFragmentBytes(pinned.addressOf(0), (colors.size * 4).toULong(), atIndex = 0u)

@@ -432,6 +432,7 @@ public class MetalVideoRenderer internal constructor(
                 extendedRangeHeadroom = extendedHeadroom,
                 measureTarget = guard?.target,
                 upscaler = Anime4kNetwork.of(quality.value.animationUpscaler),
+                sphere = sphereUniformsFor(frame, width, height),
             )
             guard?.submitted(commands, AppleHostClock.nanos())
             shownFlashFactor.value = factor
@@ -535,6 +536,7 @@ public class MetalVideoRenderer internal constructor(
                 convertsStandardGamut = !tagsStandardRangeLayer,
                 extendedRangeHeadroom = extendedHeadroom,
                 upscaler = Anime4kNetwork.of(quality.value.animationUpscaler),
+                sphere = sphereUniformsFor(meta, width, height),
             )
             shownFlashFactor.value = factor
         } catch (failure: Throwable) {
@@ -609,6 +611,33 @@ public class MetalVideoRenderer internal constructor(
         // The old paused-picture limit is gone: the retained picture re-encodes now.
         requestRedraw()
     }
+
+    /** The view into a 360 degree picture while one is projected, or null to draw flat (#586). */
+    private val sphereLook = atomic<SphereLook?>(null)
+
+    /** The whole sphere and a tile of it, which the shader draws a view into (#586). */
+    @OptIn(io.github.yuroyami.kiteplayer.KitePlayerInternalApi::class)
+    override fun projects(kind: io.github.yuroyami.kiteplayer.ProjectionKind): Boolean =
+        io.github.yuroyami.kiteplayer.spi.SphericalLens.draws(kind)
+
+    /**
+     * Draws the view into a 360 degree picture while [view] is projected, over the whole layer, as
+     * the Compose canvas path does: the scale mode and the framing do not apply, because the view's
+     * field of view is its zoom. A change redraws the retained picture, so a paused player turns too.
+     */
+    @OptIn(io.github.yuroyami.kiteplayer.KitePlayerInternalApi::class)
+    override fun setProjection(
+        projection: io.github.yuroyami.kiteplayer.VideoProjection?,
+        view: io.github.yuroyami.kiteplayer.SphericalView,
+    ) {
+        val drawn = projection
+            ?.takeIf { view.projected && io.github.yuroyami.kiteplayer.spi.SphericalLens.draws(it.kind) }
+            ?.let { SphereLook(it, view) }
+        if (sphereLook.getAndSet(drawn) != drawn) requestRedraw()
+    }
+
+    private fun sphereUniformsFor(frame: VideoFrame, width: Int, height: Int): FloatArray? =
+        sphereLook.value?.let { packSphereUniforms(it, frame, width, height) }
 
     override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
         adjustUniforms.value = packAdjustUniforms(adjustments)

@@ -135,7 +135,7 @@ KitePlayerVideo(
             player.setSphericalView(view)
         }
     },
-    // The native views of Android and iOS draw a 360 degree video flat; see "Which renderers draw the view".
+    // The native view of Android draws a 360 degree video flat; see "Which renderers draw the view".
     path = KiteRenderPath.ComposeCanvas,
 )
 ```
@@ -268,8 +268,14 @@ oracle each renderer's tests compare the drawn view against.
     picture at its own size, up to 4096 pixels on its longer side, instead of one fitted to the
     viewport.
   - On the web, in its WebGL pass (#125), as a second fragment program beside the flat one.
-- **Not yet, in #586**: the Metal renderer on iOS and macOS, and Android's platform view, where
-  MediaCodec writes straight to the Surface and no shader of the player's sees the picture.
+- **The Metal renderer** on iOS and macOS (#586), in its picture shader. Each pixel of the layer
+  reads the picture where `SphericalLens` says, over the whole layer, so the scale mode, the framing,
+  linear-light scaling and the animation upscaler do not apply while a view is drawn. Tone mapping,
+  the picture controls, the flash guard and the subtitles do. The seam of a whole sphere is read
+  with the edge texel clamped, so a blend across it takes one side only. Checked on a Mac against
+  `SphericalLens`, pixel by pixel, in `MetalSphereViewTest`.
+- **Not yet, in #586**: Android's platform view, where MediaCodec writes straight to the Surface
+  and no shader of the player's sees the picture.
 - **The AWT canvas of the desktop's native view** (#587), which has no shader, on the processor: a
   map of where each pixel of the view reads the picture is built at each turn, exactly on a grid of
   every fourth pixel and blended in between except where the seam or a pole runs, and each picture
@@ -283,9 +289,10 @@ oracle each renderer's tests compare the drawn view against.
   2D canvas.
 
 `KitePlayerVideo` draws through `KiteVideo` when it runs `KiteRenderPath.ComposeCanvas`, which it
-always does on the web. Its default on Android and iOS is the native view, which draws a 360 degree
-video flat until #586 is done, so an application that plays one asks for
-`KiteRenderPath.ComposeCanvas` there. The desktop JVM's native view draws the view.
+always does on the web. Its default on Android is the native view, which draws a 360 degree video
+flat until the Android half of #586 is done, so an application that plays one there asks for
+`KiteRenderPath.ComposeCanvas`. The native view of iOS draws the view while it uses the Metal
+renderer, and the desktop JVM's native view draws it too.
 
 ## Tests
 
@@ -345,7 +352,7 @@ seen to pass.
 
 Each of these is a later issue if it is wanted:
 
-- **The Metal renderer and Android's platform view**, which #586 follows.
+- **Android's platform view**, which #586 follows.
 - **The desktop's native view**, the AWT canvas, which has no shader to draw a view with and which
   #587 follows.
 - **Cube maps**, fisheye and the other projections, which `ProjectionKind` already names.

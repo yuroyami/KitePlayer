@@ -411,6 +411,81 @@ class KitePlayerWorkerBrowserTest {
     }
 
     /**
+     * A stream whose segments are byte ranges of one file is read with range requests in the worker,
+     * and seeks (#546). `hls/fmp4.m3u8` names every segment as a range of `hls/fmp4.m4s`, 609 KiB.
+     * The file is smaller than the reader's window of 1 MiB, so this does not show a read past the
+     * first window.
+     */
+    @Test
+    fun aByteRangeStreamIsReadByRangeInTheWorker() = runTest(timeout = 3.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n")
+        if (setup == null) {
+            println("skipped: the worker player runs only in the browser half, where karma serves the worker")
+            return@runTest
+        }
+        val (workerUrl, codecUrl, media) = setup
+        val probe = probeOf(media)
+        withContext(Dispatchers.Default) {
+            fetchText("$probe/reset").await<JsString>()
+            val player = KitePlayerWorker.start(pageCanvas(320, 180), workerUrl, codecUrl)
+            try {
+                player.setViewport(320, 180, 1f)
+                player.open(MediaItem("$media/hls/fmp4.m3u8"))
+                val opened = withTimeout(30.seconds) { player.state.first { it.duration != null } }
+                assertTrue(opened.seekable, "the stream can seek")
+                player.play()
+                withTimeout(60.seconds) { player.progress.first { it.position >= 1.seconds } }
+                val late = assertNotNull(opened.duration) - 3.seconds
+                player.seek(late)
+                withTimeout(60.seconds) { player.progress.first { it.position >= late + 1.seconds } }
+                assertNull(player.state.value.error, "the stream plays on after the seek")
+            } finally {
+                player.closeAndAwait()
+            }
+            val reads = asked(probe).requests.filter { it.clip == "hls/fmp4.m4s" }
+            assertTrue(reads.isNotEmpty(), "the segments were never read")
+            assertTrue(reads.all { it.range.startsWith("bytes=") }, "a read took the whole file: $reads")
+            println("WORKER byte-range reads: ${reads.size}, ${reads.map { it.range }.distinct()}")
+        }
+    }
+
+    /**
+     * An HLS master with a WebVTT subtitle set opens in the worker, and the set's file is read once
+     * its track is chosen (#546). The web codec module had no WebVTT reader, and FFmpeg's HLS reader
+     * then failed the whole open on the subtitle playlist. The test server serves the master, the
+     * set's playlist and its file under `/kite-probe/`.
+     */
+    @Test
+    fun anHlsStreamWithAWebVttSetOpensInTheWorker() = runTest(timeout = 3.minutes) {
+        val setup = karmaWorkerConfig()?.split("\n")
+        if (setup == null) {
+            println("skipped: the worker player runs only in the browser half, where karma serves the worker")
+            return@runTest
+        }
+        val (workerUrl, codecUrl, media) = setup
+        val probe = probeOf(media)
+        withContext(Dispatchers.Default) {
+            fetchText("$probe/reset").await<JsString>()
+            val player = KitePlayerWorker.start(pageCanvas(320, 180), workerUrl, codecUrl)
+            try {
+                player.setViewport(320, 180, 1f)
+                player.open(MediaItem("$probe/vtt.m3u8"))
+                val opened = withTimeout(30.seconds) { player.state.first { it.duration != null } }
+                val subtitle = opened.tracks.all.firstOrNull { it.kind == TrackKind.Subtitle }
+                assertNotNull(subtitle, "the subtitle set is not listed: ${opened.tracks.all.map { it.kind }}")
+                assertEquals("en", subtitle.language, "the set's language")
+                assertEquals(TrackChange.Applied(TrackKind.Subtitle, subtitle.id), player.selectTrack(TrackKind.Subtitle, subtitle.id))
+                player.play()
+                withTimeout(60.seconds) { player.progress.first { it.position >= 6.seconds } }
+                assertNull(player.state.value.error, "the stream plays on with its subtitles")
+            } finally {
+                player.closeAndAwait()
+            }
+            assertTrue(asked(probe).requests.any { it.clip == "subs.vtt" }, "the set's WebVTT file was never read")
+        }
+    }
+
+    /**
      * A live HLS playlist plays in the worker past what it listed at the open (#546). The test
      * server lists two segments of `hls/ts-0` at first and one more every two seconds, and ends the
      * playlist after the sixth, so the last four are read only if the worker loads the playlist

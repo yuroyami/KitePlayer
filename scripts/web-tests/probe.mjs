@@ -1,6 +1,7 @@
 // The test server of the kiteplayer-web-worker browser tests, beside the clips under /testmedia/.
 // It keeps the requests for clips, and serves live HLS and DASH manifests that grow with time, a
-// manifest of several DASH periods, a redirect, and a playlist of signed segments that expire.
+// manifest of several DASH periods, a redirect, a playlist of signed segments that expire, and an
+// HLS master with a WebVTT subtitle set.
 // KitePlayerWorkerBrowserTest reads it under /kite-probe/.
 
 /** Returns a handler that answers a request and returns true, or returns false to let the files answer. */
@@ -119,6 +120,25 @@ export function probeHandler() {
       response.writeHead(302, { Location: "/testmedia/hls/" + file });
       response.end();
       return true;
+    }
+    // A master with a WebVTT subtitle set beside the 320x180 variant of hls/ts (#546).
+    if (name === "vtt.m3u8") {
+      return send("application/vnd.apple.mpegurl", [
+        "#EXTM3U",
+        '#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="English",LANGUAGE="en",DEFAULT=NO,AUTOSELECT=NO,URI="/kite-probe/subs.m3u8"',
+        '#EXT-X-STREAM-INF:BANDWIDTH=300000,RESOLUTION=320x180,SUBTITLES="subs"',
+        "/testmedia/hls/ts-0.m3u8",
+      ].join("\n") + "\n");
+    }
+    if (name === "subs.m3u8") {
+      return send("application/vnd.apple.mpegurl", [
+        "#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-TARGETDURATION:12", "#EXT-X-PLAYLIST-TYPE:VOD",
+        "#EXTINF:12.000000,", "/kite-probe/subs.vtt", "#EXT-X-ENDLIST",
+      ].join("\n") + "\n");
+    }
+    if (name === "subs.vtt") {
+      keep(name);
+      return send("text/vtt", "WEBVTT\n\n00:00:00.500 --> 00:00:05.000\nThe first line\n\n00:00:05.000 --> 00:00:11.000\nThe second line\n");
     }
     if (name.startsWith("moved/")) {
       keep(name);

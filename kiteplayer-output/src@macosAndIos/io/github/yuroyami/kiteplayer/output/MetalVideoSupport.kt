@@ -160,7 +160,7 @@ struct QualityUniforms {
 };
 
 struct ToneUniforms {
-    int   mode;         // 0 off (bit-exact SDR path), 1 PQ, 2 HLG
+    int   mode;         // 0 off (bit-exact SDR path), 1 PQ, 2 HLG, 3 standard range BT.2020 to BT.709
     float srcPeak;      // source peak in nits; the EETF's source anchor
     int   gamut2020;    // 1 converts BT.2020 primaries to BT.709 in linear light
     float dstPeak;      // the brightest the output shows, in nits: 203 for SDR, 203 times the headroom beyond
@@ -361,6 +361,15 @@ static float kp_eetf_nits(float nits, float srcPeak, float dstPeak) {
     return kp_pq_decode1(e2 * srcPq) * 10000.0;
 }
 
+// BT.2020 -> BT.709 primaries in linear light (columns of the standard matrix).
+static inline float3 kp_bt2020_to_709(float3 light) {
+    const float3x3 to709 = float3x3(
+        float3(1.6605, -0.1246, -0.0182),
+        float3(-0.5876, 1.1329, -0.1006),
+        float3(-0.0728, -0.0083, 1.1187));
+    return to709 * light;
+}
+
 // Applies the HDR law to one gamma-domain RGB sample. Returns SDR gamma 2.2 RGB, or with linearOut
 // linear light in BT.709 primaries with 1.0 at reference white, where a colour outside BT.709 stays
 // as a negative component and a highlight goes above 1.0 up to the destination peak.
@@ -378,12 +387,7 @@ static float3 kp_tone_map(float3 rgb, constant ToneUniforms &tone, bool linearOu
         nits = scene * pow(max(ys, 1e-6), 0.2) * 1000.0;
     }
     if (tone.gamut2020 != 0) {
-        // BT.2020 -> BT.709 primaries in linear light (columns of the standard matrix).
-        const float3x3 to709 = float3x3(
-            float3(1.6605, -0.1246, -0.0182),
-            float3(-0.5876, 1.1329, -0.1006),
-            float3(-0.0728, -0.0083, 1.1187));
-        nits = to709 * nits;
+        nits = kp_bt2020_to_709(nits);
         if (!linearOut) nits = max(nits, 0.0);
     }
     float luma = dot(max(nits, 0.0), float3(0.2126, 0.7152, 0.0722));
@@ -475,7 +479,12 @@ fragment float4 kp_picture(
      * picture is decoded to it. Highlights above 1.0 and colours outside BT.709 survive every step
      * below, and only black is a floor. */
     bool extended = (q.flags & 16) != 0;
-    if (tone.mode != 0) {
+    if (tone.mode == 3) {
+        /* Standard range BT.2020 on a layer the system does not colour match (#732): only the
+         * primaries change. The same curve decodes and encodes, so a grey keeps its value. */
+        float3 light = kp_bt2020_to_709(kp_to_light(rgb));
+        rgb = extended ? max(light, 0.0) : kp_from_light(clamp(light, 0.0, 1.0));
+    } else if (tone.mode != 0) {
         rgb = kp_tone_map(rgb, tone, extended);
     } else if (extended) {
         rgb = kp_to_light(rgb);
@@ -574,6 +583,11 @@ internal val DISABLED_ADJUST_UNIFORMS: FloatArray = FloatArray(15)
 /** ToneUniforms with mode=0: the SDR path skips tone mapping entirely, bit-exact. */
 internal val DISABLED_TONE_UNIFORMS: FloatArray = FloatArray(4)
 
+/** ToneUniforms with mode=3: standard range BT.2020 primaries converted to BT.709, no tone map. */
+internal val STANDARD_GAMUT_TONE_UNIFORMS: FloatArray = floatArrayOf(
+    Float.fromBits(3), 0f, Float.fromBits(1), SDR_WHITE_NITS,
+)
+
 /**
  * QualityUniforms for [quality], targeting a write of [targetBits] bits per channel.
  *
@@ -655,13 +669,20 @@ internal fun packToneUniforms(
     dstPeakNits: Float = SDR_WHITE_NITS,
     /** The content's peak from its HDR metadata; null assumes the 1000 nits of a common PQ master. */
     srcPeakNits: Float? = null,
+    /**
+     * True converts standard range BT.2020 primaries to BT.709 in the shader (#732), for a layer
+     * that the system shows as sRGB with no colour matching: iOS, where [tagsStandardRangeLayer]
+     * is false. A tagged layer or pixel buffer leaves the conversion to the system.
+     */
+    convertsStandardGamut: Boolean = false,
 ): FloatArray {
+    val bt2020 = colorSpace.primaries == io.github.yuroyami.kiteplayer.spi.ColorPrimaries.Bt2020
     val mode = when (colorSpace.transfer) {
         io.github.yuroyami.kiteplayer.spi.ColorTransfer.Pq -> 1
         io.github.yuroyami.kiteplayer.spi.ColorTransfer.Hlg -> 2
-        else -> return DISABLED_TONE_UNIFORMS
+        else -> return if (convertsStandardGamut && bt2020) STANDARD_GAMUT_TONE_UNIFORMS else DISABLED_TONE_UNIFORMS
     }
-    val gamut = if (colorSpace.primaries == io.github.yuroyami.kiteplayer.spi.ColorPrimaries.Bt2020) 1 else 0
+    val gamut = if (bt2020) 1 else 0
     return floatArrayOf(
         Float.fromBits(mode),
         // HLG keeps its nominal 1000 nits: its system gamma, not a grade, decides its light.

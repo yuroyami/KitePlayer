@@ -153,6 +153,11 @@ internal class MetalFrameComposer(
          */
         toneMapped: Boolean = false,
         /**
+         * True, with [toneMapped], also converts standard range BT.2020 primaries to BT.709 (#732).
+         * The Metal renderer sets it where its layer gets no colour matching, which is iOS.
+         */
+        convertsStandardGamut: Boolean = false,
+        /**
          * The render-quality passes as [packQualityUniforms] packs them. The default is DISABLED,
          * so the offscreen reader and the colour instrument keep comparing an untouched picture.
          */
@@ -184,7 +189,7 @@ internal class MetalFrameComposer(
         pictureColor = frame.colorSpace
         val dstPeak = SDR_WHITE_NITS * (extendedRangeHeadroom?.coerceAtLeast(1f) ?: 1f)
         val toneUniforms = if (toneMapped) {
-            packToneUniforms(frame.colorSpace, dstPeak, frame.toneMapPeakNits)
+            packToneUniforms(frame.colorSpace, dstPeak, frame.toneMapPeakNits, convertsStandardGamut)
         } else {
             DISABLED_TONE_UNIFORMS
         }
@@ -209,7 +214,7 @@ internal class MetalFrameComposer(
                 // The guard counts standard range light, whatever the target's own range is.
                 val measureTone = when {
                     extendedRangeHeadroom == null -> toneUniforms
-                    toneMapped -> packToneUniforms(frame.colorSpace, SDR_WHITE_NITS, frame.toneMapPeakNits)
+                    toneMapped -> packToneUniforms(frame.colorSpace, SDR_WHITE_NITS, frame.toneMapPeakNits, convertsStandardGamut)
                     else -> DISABLED_TONE_UNIFORMS
                 }
                 encodeMeasurePass(commands, inputs, measureTone, measureTarget)

@@ -425,6 +425,8 @@ public class MetalVideoRenderer internal constructor(
                 adjustUniforms = dimAdjustUniforms(adjustUniforms.value, factor, linearLight = extendedHeadroom != null),
                 qualityUniforms = qualityUniformsFor(frame),
                 toneMapped = true,
+                // An untagged layer gets no colour matching, so the shader changes the primaries (#732).
+                convertsStandardGamut = !tagsStandardRangeLayer,
                 extendedRangeHeadroom = extendedHeadroom,
                 measureTarget = guard?.target,
                 upscaler = Anime4kNetwork.of(quality.value.animationUpscaler),
@@ -523,6 +525,8 @@ public class MetalVideoRenderer internal constructor(
                 adjustUniforms = dimAdjustUniforms(adjustUniforms.value, factor, linearLight = extendedHeadroom != null),
                 qualityUniforms = qualityUniformsFor(meta),
                 toneMapped = true,
+                // An untagged layer gets no colour matching, so the shader changes the primaries (#732).
+                convertsStandardGamut = !tagsStandardRangeLayer,
                 extendedRangeHeadroom = extendedHeadroom,
                 upscaler = Anime4kNetwork.of(quality.value.animationUpscaler),
             )

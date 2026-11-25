@@ -43,7 +43,7 @@ otherwise, and shows no HDR and no 360 degree view unless it says it does.
 | `AndroidSurfaceVideoRenderer` | `kiteplayer-output` | `android` | only without a MediaCodec target | when the screen and the stream allow | no |
 | `UIKitVideoRenderer` | `kiteplayer-output` | `ios` | yes | no | no |
 | `AwtCanvasVideoRenderer` | `kiteplayer-output` | `jvm` | no | no | yes |
-| `MetalVideoRenderer` | `kiteplayer-output` | `macosAndIos` | yes | when the screen and the stream allow | no |
+| `MetalVideoRenderer` | `kiteplayer-output` | `macosAndIos` | yes | when the screen and the stream allow | yes |
 | `SampleBufferVideoRenderer` | `kiteplayer-output` | `macosAndIos` | no | no | no |
 | `AppKitVideoRenderer` | `kiteplayer-output` | `macosArm64` | yes | no | no |
 | `WebCanvasVideoRenderer` | `kiteplayer-output` | `wasmJs` | no | no | no |

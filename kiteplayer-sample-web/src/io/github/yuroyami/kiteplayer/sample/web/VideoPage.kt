@@ -161,7 +161,7 @@ private external fun installUploadTimer()
 private external fun uploadReport(): String
 
 /** The codec module the page publishes, or null when it has not after five seconds. */
-private suspend fun awaitCodecModule(): kotlin.js.JsAny? {
+internal suspend fun awaitCodecModule(): kotlin.js.JsAny? {
     var waited = 0
     while (waited < 5_000) {
         loadedCodecModule()?.let { return it }

@@ -25,4 +25,7 @@ interface WebAssetSet {
 
     /** `testmedia/sync1080p30.mp4` as `clip.mp4`. `scripts/testmedia.sh` makes the source file. */
     val clip: Boolean get() = false
+
+    /** `kiteplayer-sample-shared/media/bad-cat.mp3` as `song.mp3`, for the visualiser page. */
+    val song: Boolean get() = false
 }

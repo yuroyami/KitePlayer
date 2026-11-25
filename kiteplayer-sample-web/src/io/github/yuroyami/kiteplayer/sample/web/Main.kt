@@ -33,7 +33,7 @@ import org.jetbrains.skia.Surface
  * from planar YUV to pixels on the glass. Nothing here decodes; a synthetic frame is honest for
  * this measurement because the conversion cost does not depend on pixel values.
  *
- * Without `?probe` the page is the player, [VideoPage].
+ * Without `?probe` the page is the player, [VideoPage], or with `?viz` the visualiser, [VizPage].
  */
 private const val WIDTH = 1920
 private const val HEIGHT = 1080
@@ -147,7 +147,13 @@ private suspend fun measureFrames(count: Int, perFrame: (Int) -> Unit): DoubleAr
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
-    ComposeViewport { if (pageAsks("probe")) Probe() else VideoPage() }
+    ComposeViewport {
+        when {
+            pageAsks("probe") -> Probe()
+            pageAsks("viz") -> VizPage()
+            else -> VideoPage()
+        }
+    }
 }
 
 @OptIn(ExperimentalComposeUiApi::class)

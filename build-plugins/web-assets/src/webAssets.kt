@@ -41,7 +41,7 @@ fun prepareWebAssets(
 ) {
     marker.toFile().mkdirs()
     val set = if (forTests) settings.tests else settings.page
-    if (!set.codec && !set.libass && !set.clip) return
+    if (!set.codec && !set.libass && !set.clip && !set.song) return
     val root = File(repoRoot)
     val target = File(moduleDir).resolve(directory).also { it.mkdirs() }
     val cache = cacheDir.toFile().also { it.mkdirs() }
@@ -58,6 +58,7 @@ fun prepareWebAssets(
         }
     }
     if (set.clip) copyClip(root, target)
+    if (set.song) copyIfNewer(root.resolve("kiteplayer-sample-shared/media/bad-cat.mp3"), target.resolve("song.mp3"))
 }
 
 /** The KiteFFmpeg version of `libs.versions.toml`, the one the modules compile against. */
@@ -144,8 +145,12 @@ private fun linkLibass(root: File, cache: File, target: File) {
 private fun copyClip(root: File, target: File) {
     val clip = root.resolve("testmedia/sync1080p30.mp4")
     if (!clip.isFile) throw BuildFailure("No $clip. Run ./scripts/testmedia.sh once to make the test clips.")
-    val copy = target.resolve("clip.mp4")
-    if (copy.length() != clip.length() || copy.lastModified() < clip.lastModified()) clip.copyTo(copy, overwrite = true)
+    copyIfNewer(clip, target.resolve("clip.mp4"))
+}
+
+private fun copyIfNewer(source: File, copy: File) {
+    if (!source.isFile) throw BuildFailure("No $source.")
+    if (copy.length() != source.length() || copy.lastModified() < source.lastModified()) source.copyTo(copy, overwrite = true)
 }
 
 /** Keeps the file date when the bytes are the same, so the toolchain sees no change. */

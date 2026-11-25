@@ -47,7 +47,7 @@ settings:
     # The same release mode as library.module-template.yaml.
     mavenCentral:
       enabled: true
-      publishingMode: manual
+      publishingMode: auto
 
 plugins:
   publication-check:

@@ -105,7 +105,8 @@ Each line is something that bit someone. Delete a line when it stops being true.
   Publishing from the maintainer's machine is `./kotlin publish mavenCentral`, with the
   credentials in the `KOTLIN_TOOLCHAIN_MAVEN_CENTRAL_USERNAME`, `KOTLIN_TOOLCHAIN_MAVEN_CENTRAL_PASSWORD`,
   `KOTLIN_TOOLCHAIN_SIGNING_KEY` and `KOTLIN_TOOLCHAIN_SIGNING_KEY_PASSPHRASE` environment
-  variables, and runs no tests.
+  variables, and runs no tests. It uses the committed `publishingMode: auto`, so each deployment
+  goes live once it validates.
 
 - A published module needs at least one source file in its common `src/` folder. A target with no source makes
   no klib, and its publication then fails with `FileNotFoundException` naming the missing klib.

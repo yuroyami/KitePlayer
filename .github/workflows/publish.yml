@@ -6,15 +6,14 @@
 # KOTLIN_TOOLCHAIN_* environment variables listed below:
 #   ./kotlin publish mavenCentral
 #
-# By default the run releases what it uploads: the release input is on, so the upload job switches
-# publishingMode to auto and every deployment goes live on Maven Central once the portal has
-# validated it, with no Publish click (#998). The upload comes last, after the tests, the
-# attestation and the check that this runner built the attested bytes, so everything that can stop
-# a release has already passed when it starts. Central is immutable and a version cannot be
-# withdrawn, so a run that should stop at the portal for a look first sets the release input off;
-# its deployments then wait there, validated, for a Publish click on each one. The committed
-# publishingMode in library.module-template.yaml stays manual, so a publish from the maintainer's
-# machine still waits on the portal.
+# By default the run releases what it uploads: publishingMode is auto in library.module-template.yaml,
+# so every deployment goes live on Maven Central once the portal has validated it, with no Publish
+# click (#998). The upload comes last, after the tests, the attestation and the check that this
+# runner built the attested bytes, so everything that can stop a release has already passed when it
+# starts. Central is immutable and a version cannot be withdrawn, so a run that should stop at the
+# portal for a look first sets the release input off. The upload job then switches publishingMode to
+# manual in its own checkout, and the deployments wait there, validated, for a Publish click on each
+# one. A publish from the maintainer's machine uses the committed auto and goes live too.
 #
 # THE ONE STEP THAT IS NOT ATOMIC is the release itself: the upload makes one deployment per
 # module, and each is released on its own once it validates. A deployment that fails validation is
@@ -271,13 +270,15 @@ jobs:
           path: ${{ runner.temp }}/attested
 
       # Before anything builds, so that every publication of this job reads the same settings.
-      # Only in this runner's checkout: the committed default stays manual, for a publish from the
-      # maintainer's machine. The release input is on unless a run turns it off.
-      - name: Release the deployment on the portal
-        if: inputs.release
+      # Only in this runner's checkout: the committed default stays auto. The release input is on
+      # unless a run turns it off.
+      - name: Keep the deployment on the portal
+        if: ${{ !inputs.release }}
         run: |
-          sed -i '' 's/publishingMode: manual/publishingMode: auto/' \
-            library.module-template.yaml kiteplayer-libass-android-natives/module.yaml
+          files="library.module-template.yaml kiteplayer-libass-android-natives/module.yaml"
+          # shellcheck disable=SC2086
+          sed -i '' 's/publishingMode: auto/publishingMode: manual/' $files
+          for f in $files; do grep -q 'publishingMode: manual' "$f"; done
 
       - name: This build gives the attested files
         env:

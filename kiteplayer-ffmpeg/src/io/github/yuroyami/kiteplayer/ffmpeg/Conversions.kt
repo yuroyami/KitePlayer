@@ -123,15 +123,15 @@ internal fun ColorInfo.toPlayerColorSpace(): ColorSpaceInfo = ColorSpaceInfo(
     transferSpecified = transferSpecified,
 )
 
+/** Whether this route's frames stay in GPU memory until a renderer reads their planes (#846). */
+internal fun io.github.yuroyami.kiteplayer.HwdecKind.downloadsLazily(): Boolean =
+    this == io.github.yuroyami.kiteplayer.HwdecKind.VideoToolbox || this == io.github.yuroyami.kiteplayer.HwdecKind.D3d11va
+
 /**
  * Whether this backend reads a frame of this kind through a downloaded copy in main memory, which
  * every renderer that reads planes can then draw. VideoToolbox and Direct3D 11 frames download
  * through FFmpeg; the other kinds have no download path here and need their own renderer.
  */
-/** Whether this route's frames stay in GPU memory until a renderer reads their planes (#846). */
-internal fun io.github.yuroyami.kiteplayer.HwdecKind.downloadsLazily(): Boolean =
-    this == io.github.yuroyami.kiteplayer.HwdecKind.VideoToolbox || this == io.github.yuroyami.kiteplayer.HwdecKind.D3d11va
-
 internal fun HwSurfaceKind.downloadsToMemory(): Boolean =
     this == HwSurfaceKind.CoreVideoPixelBuffer || this == HwSurfaceKind.D3d11Texture
 
